@@ -1,0 +1,341 @@
+/* ==========================================================================
+   HR System Performance Optimizations
+   Critical CSS and performance enhancements
+   ========================================================================== */
+
+/* Critical above-the-fold styles */
+.critical-styles {
+  /* Navbar and header styles that need to load immediately */
+  --jetlouge-primary: #1e3a8a;
+  --jetlouge-secondary: #3b82f6;
+  --jetlouge-accent: #fbbf24;
+  --jetlouge-light: #dbeafe;
+}
+
+/* Optimize font loading */
+@font-face {
+  font-family: 'Segoe UI Optimized';
+  src: local('Segoe UI'), local('system-ui'), local('-apple-system');
+  font-display: swap;
+}
+
+/* Reduce layout shift */
+.layout-stable {
+  contain: layout style paint;
+}
+
+/* GPU acceleration for animations */
+.gpu-accelerated {
+  transform: translateZ(0);
+  will-change: transform, opacity;
+}
+
+/* Optimize images */
+.optimized-image {
+  object-fit: cover;
+  object-position: center;
+}
+
+/* Reduce paint complexity */
+.simple-shadows {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  filter: none;
+}
+
+/* Optimize animations */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Efficient transitions */
+.efficient-transition {
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Optimize table rendering */
+.table-optimized {
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.table-optimized th,
+.table-optimized td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Lazy loading placeholders */
+.lazy-placeholder {
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: loading-shimmer 1.5s infinite;
+}
+
+@keyframes loading-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* Optimize modal rendering */
+.modal-optimized .modal-backdrop {
+  backdrop-filter: blur(2px);
+  background-color: rgba(0, 0, 0, 0.3);
+}
+
+/* Reduce reflow/repaint */
+.no-reflow {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* Optimize scroll performance */
+.smooth-scroll {
+  scroll-behavior: smooth;
+  overflow-anchor: auto;
+}
+
+/* Critical resource hints - implemented via HTML link tags */
+
+/* Optimize form rendering */
+.form-optimized input,
+.form-optimized select,
+.form-optimized textarea {
+  contain: layout style;
+  isolation: isolate;
+}
+
+/* Efficient grid layouts */
+.grid-optimized {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1rem;
+  contain: layout;
+}
+
+/* Optimize card rendering */
+.card-optimized {
+  contain: layout style paint;
+  isolation: isolate;
+  transform: translateZ(0);
+}
+
+/* Reduce composite layers */
+.composite-optimized {
+  position: relative;
+  z-index: auto;
+  isolation: auto;
+}
+
+/* Memory-efficient animations */
+.memory-efficient {
+  animation-fill-mode: both;
+  animation-play-state: paused;
+}
+
+.memory-efficient.animate {
+  animation-play-state: running;
+}
+
+/* Optimize background patterns */
+.pattern-optimized {
+  background-image: 
+    radial-gradient(circle at 25% 25%, rgba(30, 58, 138, 0.02) 0%, transparent 50%),
+    radial-gradient(circle at 75% 75%, rgba(59, 130, 246, 0.02) 0%, transparent 50%);
+  background-size: 100px 100px;
+  background-position: 0 0, 50px 50px;
+}
+
+/* Efficient text rendering */
+.text-optimized {
+  text-rendering: optimizeSpeed;
+  font-smooth: auto;
+  -webkit-font-smoothing: auto;
+  -moz-osx-font-smoothing: auto;
+}
+
+/* Optimize button interactions */
+.button-optimized {
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* Reduce paint on scroll */
+.scroll-optimized {
+  backface-visibility: hidden;
+  perspective: 1000px;
+  transform: translateZ(0);
+}
+
+/* Efficient flexbox */
+.flex-optimized {
+  display: flex;
+  contain: layout;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Optimize icon rendering */
+.icon-optimized {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  vertical-align: -0.125em;
+  fill: currentColor;
+}
+
+/* Critical loading states */
+.loading-critical {
+  min-height: 200px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(90deg, #f8fafc 25%, #f1f5f9 50%, #f8fafc 75%);
+  background-size: 200% 100%;
+  animation: loading-shimmer 1.5s infinite;
+}
+
+/* Optimize print styles */
+@media print {
+  .no-print { display: none !important; }
+  .print-optimized { 
+    background: white !important;
+    color: black !important;
+    box-shadow: none !important;
+  }
+  
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+
+/* Dark mode optimizations */
+@media (prefers-color-scheme: dark) {
+  .dark-optimized {
+    color-scheme: dark;
+    background-color: #0f172a;
+    color: #f1f5f9;
+  }
+  
+  .dark-optimized .card {
+    background: #1e293b;
+    border-color: #334155;
+  }
+}
+
+/* High contrast mode */
+@media (prefers-contrast: high) {
+  .high-contrast {
+    border: 2px solid currentColor;
+    background: white;
+    color: black;
+  }
+}
+
+/* Reduced data mode */
+@media (prefers-reduced-data: reduce) {
+  .data-saver {
+    background-image: none;
+    box-shadow: none;
+    animation: none;
+    transition: none;
+  }
+}
+
+/* Container queries for responsive components */
+@container (min-width: 300px) {
+  .container-responsive {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* Optimize focus management */
+.focus-optimized:focus-visible {
+  outline: 2px solid var(--jetlouge-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Efficient visibility toggles */
+.visibility-optimized {
+  visibility: hidden;
+  opacity: 0;
+  transform: scale(0.95);
+  transition: all 0.2s ease;
+}
+
+.visibility-optimized.visible {
+  visibility: visible;
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* Memory cleanup utilities */
+.cleanup-after-animation {
+  animation-fill-mode: forwards;
+}
+
+.cleanup-after-animation.animation-complete {
+  animation: none;
+  will-change: auto;
+  transform: none;
+}
+
+/* Critical viewport styles */
+@media (max-width: 768px) {
+  .mobile-critical {
+    font-size: 14px;
+    line-height: 1.4;
+    padding: 0.5rem;
+  }
+  
+  .mobile-critical .card {
+    margin-bottom: 1rem;
+    border-radius: 8px;
+  }
+  
+  .mobile-critical .btn {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/* Performance monitoring helpers */
+.perf-mark::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 2px;
+  height: 100%;
+  background: lime;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.perf-mark.measured::before {
+  opacity: 1;
+  animation: perf-flash 0.5s ease;
+}
+
+@keyframes perf-flash {
+  0%, 100% { opacity: 0; }
+  50% { opacity: 1; }
+}

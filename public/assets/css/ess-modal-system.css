@@ -1,0 +1,455 @@
+/**
+ * Complete ESS Modal System CSS
+ * Provides fully functional modal styling for Employee Self-Service modules
+ */
+
+/* Modal Base Styles */
+.working-modal {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    z-index: 2000 !important;
+    background: rgba(0, 0, 0, 0.5) !important;
+    display: none !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 20px !important;
+}
+
+.working-modal.show {
+    display: flex !important;
+}
+
+/* Modal Backdrop */
+.working-modal-backdrop {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    cursor: pointer;
+}
+
+/* Modal Dialog */
+.working-modal-dialog {
+    position: relative;
+    z-index: 2001;
+    width: 100%;
+    max-width: 600px;
+    max-height: 90vh;
+    margin: 0 auto;
+    overflow-y: auto;
+}
+
+.working-modal-dialog.modal-sm {
+    max-width: 400px;
+}
+
+.working-modal-dialog.modal-lg {
+    max-width: 800px;
+}
+
+.working-modal-dialog.modal-xl {
+    max-width: 1140px;
+}
+
+/* Modal Content */
+.working-modal-content {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    border: none;
+    overflow: hidden;
+    animation: modalSlideIn 0.3s ease-out;
+}
+
+/* Modal Header */
+.working-modal-header {
+    padding: 1.5rem 2rem;
+    border-bottom: 1px solid #e9ecef;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+    border-radius: 12px 12px 0 0;
+}
+
+.working-modal-title {
+    margin: 0;
+    font-size: 1.4rem;
+    font-weight: 600;
+    color: #212529;
+    display: flex;
+    align-items: center;
+}
+
+.working-modal-title i {
+    margin-right: 0.5rem;
+    color: #1e3a8a;
+}
+
+/* Modal Close Button */
+.working-modal-close {
+    background: none;
+    border: none;
+    font-size: 1.8rem;
+    cursor: pointer;
+    padding: 0;
+    margin-left: auto;
+    color: #6c757d;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    transition: all 0.2s ease;
+}
+
+.working-modal-close:hover {
+    background: rgba(220, 53, 69, 0.1);
+    color: #dc3545;
+    transform: scale(1.1);
+}
+
+/* Modal Body */
+.working-modal-body {
+    padding: 2rem;
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+.working-modal-body::-webkit-scrollbar {
+    width: 8px;
+}
+
+.working-modal-body::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+.working-modal-body::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 4px;
+}
+
+.working-modal-body::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+}
+
+/* Modal Footer */
+.working-modal-footer {
+    padding: 1.5rem 2rem;
+    border-top: 1px solid #e9ecef;
+    display: flex;
+    justify-content: flex-end;
+    gap: 1rem;
+    background: #f8f9fa;
+    border-radius: 0 0 12px 12px;
+}
+
+/* Form Elements in Modal */
+.working-modal input,
+.working-modal select,
+.working-modal textarea,
+.working-modal button {
+    pointer-events: auto !important;
+    position: relative !important;
+    z-index: auto !important;
+}
+
+.working-modal .form-control,
+.working-modal .form-select {
+    pointer-events: auto !important;
+    background-color: white !important;
+    border: 2px solid #e9ecef !important;
+    border-radius: 8px !important;
+    padding: 0.75rem 1rem !important;
+    font-size: 1rem !important;
+    line-height: 1.5 !important;
+    color: #212529 !important;
+    transition: all 0.2s ease !important;
+}
+
+.working-modal .form-control:focus,
+.working-modal .form-select:focus {
+    border-color: #1e3a8a !important;
+    outline: 0 !important;
+    box-shadow: 0 0 0 0.25rem rgba(30, 58, 138, 0.15) !important;
+    background-color: white !important;
+}
+
+.working-modal .form-control.is-invalid {
+    border-color: #dc3545 !important;
+    box-shadow: 0 0 0 0.25rem rgba(220, 53, 69, 0.15) !important;
+}
+
+.working-modal .form-control.is-valid {
+    border-color: #198754 !important;
+    box-shadow: 0 0 0 0.25rem rgba(25, 135, 84, 0.15) !important;
+}
+
+/* Form Labels */
+.working-modal .form-label {
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 0.5rem;
+}
+
+.working-modal .form-label.required::after {
+    content: " *";
+    color: #dc3545;
+}
+
+/* Buttons in Modal */
+.working-modal .btn {
+    pointer-events: auto !important;
+    cursor: pointer !important;
+    border-radius: 8px !important;
+    padding: 0.75rem 1.5rem !important;
+    font-size: 1rem !important;
+    font-weight: 600 !important;
+    line-height: 1.5 !important;
+    text-align: center !important;
+    text-decoration: none !important;
+    vertical-align: middle !important;
+    border: 2px solid transparent !important;
+    transition: all 0.2s ease !important;
+    min-width: 120px !important;
+}
+
+.working-modal .btn-primary {
+    color: #fff !important;
+    background: linear-gradient(135deg, #1e3a8a, #3b82f6) !important;
+    border-color: #1e3a8a !important;
+}
+
+.working-modal .btn-primary:hover {
+    background: linear-gradient(135deg, #1e40af, #2563eb) !important;
+    border-color: #1e40af !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 4px 12px rgba(30, 58, 138, 0.3) !important;
+}
+
+.working-modal .btn-secondary {
+    color: #6c757d !important;
+    background-color: white !important;
+    border-color: #6c757d !important;
+}
+
+.working-modal .btn-secondary:hover {
+    background-color: #6c757d !important;
+    color: white !important;
+    transform: translateY(-1px) !important;
+}
+
+.working-modal .btn-success {
+    color: #fff !important;
+    background: linear-gradient(135deg, #198754, #20c997) !important;
+    border-color: #198754 !important;
+}
+
+.working-modal .btn-danger {
+    color: #fff !important;
+    background: linear-gradient(135deg, #dc3545, #e74c3c) !important;
+    border-color: #dc3545 !important;
+}
+
+/* Checkbox and Radio Styling */
+.working-modal .form-check-input {
+    pointer-events: auto !important;
+    cursor: pointer !important;
+    width: 1.2em !important;
+    height: 1.2em !important;
+    border: 2px solid #dee2e6 !important;
+}
+
+.working-modal .form-check-input:checked {
+    background-color: #1e3a8a !important;
+    border-color: #1e3a8a !important;
+}
+
+.working-modal .form-check-label {
+    cursor: pointer !important;
+    font-weight: 500;
+}
+
+/* File Input Styling */
+.working-modal input[type="file"] {
+    padding: 0.5rem !important;
+    border: 2px dashed #dee2e6 !important;
+    border-radius: 8px !important;
+    background-color: #f8f9fa !important;
+    transition: all 0.2s ease !important;
+}
+
+.working-modal input[type="file"]:hover {
+    border-color: #1e3a8a !important;
+    background-color: rgba(30, 58, 138, 0.05) !important;
+}
+
+/* Alert Styling in Modals */
+.working-modal .alert {
+    margin-bottom: 1.5rem !important;
+    padding: 1rem 1.25rem !important;
+    border: none !important;
+    border-radius: 8px !important;
+    font-weight: 500 !important;
+}
+
+.working-modal .alert-success {
+    background-color: rgba(25, 135, 84, 0.1) !important;
+    color: #0f5132 !important;
+}
+
+.working-modal .alert-danger {
+    background-color: rgba(220, 53, 69, 0.1) !important;
+    color: #842029 !important;
+}
+
+.working-modal .alert-warning {
+    background-color: rgba(255, 193, 7, 0.1) !important;
+    color: #664d03 !important;
+}
+
+.working-modal .alert-info {
+    background-color: rgba(13, 202, 240, 0.1) !important;
+    color: #055160 !important;
+}
+
+/* Table Styling in Modals */
+.working-modal .table {
+    margin-bottom: 0 !important;
+}
+
+.working-modal .table th,
+.working-modal .table td {
+    padding: 0.75rem !important;
+    border-top: 1px solid #dee2e6 !important;
+    vertical-align: middle !important;
+}
+
+.working-modal .table th {
+    background-color: #f8f9fa !important;
+    font-weight: 600 !important;
+    color: #495057 !important;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .working-modal-dialog {
+        width: 95%;
+        margin: 1rem;
+        max-height: 95vh;
+    }
+    
+    .working-modal-header,
+    .working-modal-body,
+    .working-modal-footer {
+        padding: 1rem;
+    }
+    
+    .working-modal-title {
+        font-size: 1.2rem;
+    }
+    
+    .working-modal-footer {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    
+    .working-modal .btn {
+        width: 100% !important;
+        margin-bottom: 0.5rem !important;
+    }
+}
+
+@media (max-width: 576px) {
+    .working-modal {
+        padding: 10px !important;
+    }
+    
+    .working-modal-dialog {
+        width: 100%;
+        margin: 0.5rem;
+    }
+}
+
+/* Animation */
+@keyframes modalSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-50px) scale(0.9);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.working-modal {
+    animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* Force visibility and interaction */
+.working-modal * {
+    pointer-events: auto !important;
+}
+
+.working-modal .working-modal-backdrop {
+    pointer-events: auto !important;
+}
+
+/* Override any conflicting styles */
+body.modal-open {
+    overflow: hidden !important;
+    padding-right: 0 !important;
+}
+
+.modal-backdrop {
+    display: none !important;
+}
+
+/* Loading State */
+.working-modal .btn:disabled {
+    opacity: 0.7 !important;
+    cursor: not-allowed !important;
+    transform: none !important;
+}
+
+.working-modal .btn .spinner-border {
+    width: 1rem;
+    height: 1rem;
+    margin-right: 0.5rem;
+}
+
+/* Form Text and Help */
+.working-modal .form-text {
+    font-size: 0.875rem;
+    color: #6c757d;
+    margin-top: 0.25rem;
+}
+
+.working-modal .invalid-feedback {
+    display: block;
+    width: 100%;
+    margin-top: 0.25rem;
+    font-size: 0.875rem;
+    color: #dc3545;
+}
+
+.working-modal .valid-feedback {
+    display: block;
+    width: 100%;
+    margin-top: 0.25rem;
+    font-size: 0.875rem;
+    color: #198754;
+}

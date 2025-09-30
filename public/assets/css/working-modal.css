@@ -1,0 +1,179 @@
+/* Working Modal System - Based on leave_management.blade.php */
+.working-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    padding: 20px;
+}
+
+.working-modal-backdrop {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: transparent;
+}
+
+.working-modal-dialog {
+    position: relative;
+    max-width: 600px;
+    width: 100%;
+    max-height: 90vh;
+    overflow-y: auto;
+    z-index: 10000;
+}
+
+.working-modal-content {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+    overflow: hidden;
+}
+
+.working-modal-header {
+    padding: 20px;
+    border-bottom: 1px solid #e9ecef;
+    display: flex;
+    justify-content: between;
+    align-items: center;
+    background: #f8f9fa;
+}
+
+.working-modal-title {
+    margin: 0;
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #333;
+    flex: 1;
+}
+
+.working-modal-close {
+    background: none;
+    border: none;
+    font-size: 24px;
+    color: #6c757d;
+    cursor: pointer;
+    padding: 0;
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.working-modal-close:hover {
+    background: #e9ecef;
+    color: #495057;
+}
+
+.working-modal-body {
+    padding: 20px;
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+.working-modal-footer {
+    padding: 20px;
+    border-top: 1px solid #e9ecef;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    background: #f8f9fa;
+}
+
+/* Form styling within modals */
+.working-modal .form-control,
+.working-modal .form-select {
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    padding: 8px 12px;
+    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.working-modal .form-control:focus,
+.working-modal .form-select:focus {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+}
+
+.working-modal .form-label {
+    font-weight: 500;
+    color: #495057;
+    margin-bottom: 8px;
+}
+
+.working-modal .btn {
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+/* Animation */
+.working-modal[style*="flex"] {
+    animation: modalFadeIn 0.3s ease-out;
+}
+
+.working-modal[style*="flex"] .working-modal-content {
+    animation: modalSlideIn 0.3s ease-out;
+}
+
+@keyframes modalFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes modalSlideIn {
+    from { 
+        opacity: 0;
+        transform: translateY(-50px) scale(0.95);
+    }
+    to { 
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .working-modal-dialog {
+        max-width: 95%;
+        margin: 10px;
+    }
+    
+    .working-modal-header,
+    .working-modal-body,
+    .working-modal-footer {
+        padding: 15px;
+    }
+    
+    .working-modal-body {
+        max-height: 50vh;
+    }
+}
+
+/* Override any conflicting Bootstrap modal styles */
+.working-modal * {
+    box-sizing: border-box;
+}
+
+.working-modal .modal-backdrop {
+    display: none !important;
+}
+
+/* Ensure working modals are always interactive */
+.working-modal,
+.working-modal * {
+    pointer-events: auto !important;
+    user-select: auto !important;
+}

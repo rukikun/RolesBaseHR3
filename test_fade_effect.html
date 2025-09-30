@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Fade Effect</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .shift-item {
+            background-color: #e3f2fd;
+            border-left: 3px solid #2196f3;
+            font-size: 10px;
+            transition: all 0.2s ease;
+            margin-bottom: 5px;
+            padding: 5px;
+            border-radius: 3px;
+            position: relative;
+        }
+
+        .shift-item:hover {
+            background-color: #bbdefb !important;
+            transform: translateY(-1px);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .shift-item:hover .shift-actions {
+            display: block !important;
+        }
+
+        .shift-actions {
+            position: absolute;
+            top: 2px;
+            right: 2px;
+            display: none;
+        }
+
+        .shift-actions button {
+            padding: 1px 4px;
+            font-size: 8px;
+            line-height: 1;
+            border-radius: 2px;
+            transition: all 0.2s ease;
+        }
+
+        .shift-actions button:hover {
+            transform: scale(1.1);
+        }
+
+        /* Fade out animation for deleted shifts */
+        .shift-item.deleting {
+            opacity: 0.5;
+            transform: scale(0.95);
+            transition: all 0.5s ease-out;
+        }
+
+        .shift-item.fade-out {
+            opacity: 0;
+            transform: scale(0.8) translateY(-10px);
+            transition: all 0.6s ease-out;
+        }
+
+        /* Loading state for delete button */
+        .btn-deleting {
+            opacity: 0.7;
+            pointer-events: none;
+        }
+
+        .btn-deleting .fas {
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-4">
+        <h3>Test Fade Effect for Shift Deletion</h3>
+        <p>Hover over shifts to see action buttons, then click delete to see the fade effect.</p>
+        
+        <div class="row">
+            <div class="col-md-4">
+                <div class="shift-item" data-shift-id="1">
+                    <div>
+                        <div class="fw-bold text-primary">JD</div>
+                        <div class="text-muted" style="font-size: 9px;">09:00-17:00</div>
+                        <div class="text-muted" style="font-size: 8px;">Morning Shift</div>
+                    </div>
+                    <div class="shift-actions">
+                        <button type="button" class="btn btn-sm btn-outline-primary" title="Edit Shift">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-danger delete-shift-btn" 
+                                onclick="testFadeDelete(this)" title="Delete Shift" style="margin-left: 2px;">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-4">
+                <div class="shift-item" data-shift-id="2">
+                    <div>
+                        <div class="fw-bold text-primary">JS</div>
+                        <div class="text-muted" style="font-size: 9px;">14:00-22:00</div>
+                        <div class="text-muted" style="font-size: 8px;">Afternoon Shift</div>
+                    </div>
+                    <div class="shift-actions">
+                        <button type="button" class="btn btn-sm btn-outline-primary" title="Edit Shift">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-danger delete-shift-btn" 
+                                onclick="testFadeDelete(this)" title="Delete Shift" style="margin-left: 2px;">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-4">
+                <div class="shift-item" data-shift-id="3">
+                    <div>
+                        <div class="fw-bold text-primary">MJ</div>
+                        <div class="text-muted" style="font-size: 9px;">22:00-06:00</div>
+                        <div class="text-muted" style="font-size: 8px;">Night Shift</div>
+                    </div>
+                    <div class="shift-actions">
+                        <button type="button" class="btn btn-sm btn-outline-primary" title="Edit Shift">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-danger delete-shift-btn" 
+                                onclick="testFadeDelete(this)" title="Delete Shift" style="margin-left: 2px;">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="mt-4">
+            <button class="btn btn-primary" onclick="location.reload()">Reset Test</button>
+        </div>
+    </div>
+
+    <script>
+        function testFadeDelete(button) {
+            if (confirm('Test fade effect? This will simulate deletion.')) {
+                const shiftItem = button.closest('.shift-item');
+                
+                if (shiftItem) {
+                    // Add deleting class for visual feedback
+                    shiftItem.classList.add('deleting');
+                    button.classList.add('btn-deleting');
+                    
+                    // Change button icon to spinner
+                    const icon = button.querySelector('.fas');
+                    if (icon) {
+                        icon.className = 'fas fa-spinner fa-spin';
+                    }
+                    
+                    // Add fade out effect after a short delay
+                    setTimeout(() => {
+                        shiftItem.classList.add('fade-out');
+                    }, 300);
+                    
+                    // Remove element after animation completes
+                    setTimeout(() => {
+                        shiftItem.style.display = 'none';
+                        alert('Fade effect complete! In the real app, this would redirect to show success message.');
+                    }, 900);
+                }
+            }
+        }
+    </script>
+</body>
+</html>

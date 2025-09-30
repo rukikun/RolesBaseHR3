@@ -1,0 +1,130 @@
+/* NUCLEAR OPTION - FORCE EVERYTHING TO BE INTERACTIVE */
+
+/* COMPLETELY DISABLE ALL MODAL FUNCTIONALITY */
+.modal, .modal-backdrop, .backdrop, [class*="backdrop"], .overlay, [class*="overlay"] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  position: static !important;
+  z-index: -9999 !important;
+}
+
+/* FORCE BODY TO BE COMPLETELY INTERACTIVE */
+html, body {
+  overflow: visible !important;
+  overflow-x: auto !important;
+  overflow-y: auto !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  position: static !important;
+  pointer-events: auto !important;
+  z-index: auto !important;
+}
+
+body.modal-open {
+  overflow: visible !important;
+  overflow-x: auto !important;
+  overflow-y: auto !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  position: static !important;
+  pointer-events: auto !important;
+}
+
+/* NUCLEAR OPTION - FORCE EVERYTHING TO BE CLICKABLE */
+*, *::before, *::after {
+  pointer-events: auto !important;
+  position: relative !important;
+  z-index: auto !important;
+}
+
+/* REMOVE ANY BLOCKING OVERLAYS */
+div[style*="position: fixed"],
+div[style*="position: absolute"],
+div[style*="z-index"] {
+  pointer-events: auto !important;
+}
+
+/* FORCE SPECIFIC ELEMENTS TO BE INTERACTIVE */
+.btn, .nav-link, a, button, input, select, textarea, .form-control, .form-select, 
+.table, .card, .ess-card, .stats-card, .badge, .alert, .dropdown, .modal-content {
+  pointer-events: auto !important;
+  position: relative !important;
+  z-index: 1 !important;
+}
+
+/* Fix z-index issues */
+.modal {
+  z-index: 1050 !important;
+}
+
+/* Working modal specific fixes */
+.working-modal {
+  z-index: 1055 !important;
+}
+
+/* Alert positioning fix */
+.alert {
+  position: relative !important;
+  z-index: 1 !important;
+}
+
+/* Ensure buttons remain clickable */
+.btn, .form-control, .form-select, .nav-link, a, button, input, select, textarea {
+  position: relative !important;
+  z-index: 1 !important;
+  pointer-events: auto !important;
+}
+
+/* Fix for stuck modal states */
+.modal.show {
+  display: block !important;
+}
+
+.modal:not(.show) {
+  display: none !important;
+}
+
+/* Emergency cleanup styles */
+.force-interactive {
+  pointer-events: auto !important;
+  z-index: 9999 !important;
+}
+
+/* Remove any invisible overlays */
+*[style*="position: fixed"][style*="top: 0"][style*="left: 0"][style*="width: 100%"][style*="height: 100%"] {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+/* Remove any overlay elements */
+.overlay, .modal-backdrop, .backdrop, [class*="backdrop"] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* Force main content to be interactive */
+#main-content, .container, .ess-card, .table-responsive, .btn-group {
+  pointer-events: auto !important;
+  position: relative !important;
+  z-index: 1 !important;
+}
+
+/* Force sidebar to be interactive */
+#sidebar, .nav, .nav-item, .nav-link {
+  pointer-events: auto !important;
+  position: relative !important;
+  z-index: 1 !important;
+}
+
+/* Remove any blocking elements */
+div[style*="position: absolute"][style*="top: 0"][style*="left: 0"],
+div[style*="position: fixed"][style*="top: 0"][style*="left: 0"] {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
