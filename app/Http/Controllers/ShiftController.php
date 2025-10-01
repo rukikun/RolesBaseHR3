@@ -1032,6 +1032,4 @@ class ShiftController extends Controller
             ], 500);
         }
     }
-
-
 }
