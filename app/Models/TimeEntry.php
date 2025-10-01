@@ -18,8 +18,12 @@ class TimeEntry extends Model
         'clock_out_time',
         'hours_worked',
         'overtime_hours',
+        'break_duration',
+        'description',
+        'notes',
         'status',
-        'notes'
+        'approved_by',
+        'approved_at'
     ];
 
     protected $casts = [

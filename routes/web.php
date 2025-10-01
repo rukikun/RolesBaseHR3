@@ -467,6 +467,117 @@ Route::get('/test-recent-entries', function() {
     ];
 })->name('test.recent.entries');
 
+// Temporary route to populate timesheet data
+Route::get('/populate-timesheets', function() {
+    try {
+        $count = DB::table('time_entries')->count();
+        if ($count > 0) {
+            return "Timesheet data already exists. Count: {$count}";
+        }
+        
+        $timesheetData = [
+            [
+                'employee_id' => 1,
+                'work_date' => '2024-10-01',
+                'clock_in_time' => '09:00:00',
+                'clock_out_time' => '17:30:00',
+                'hours_worked' => 8.0,
+                'overtime_hours' => 0.5,
+                'status' => 'pending'
+            ],
+            [
+                'employee_id' => 1,
+                'work_date' => '2024-09-30',
+                'clock_in_time' => '08:45:00',
+                'clock_out_time' => '17:15:00',
+                'hours_worked' => 8.0,
+                'overtime_hours' => 0.5,
+                'status' => 'approved'
+            ],
+            [
+                'employee_id' => 2,
+                'work_date' => '2024-10-01',
+                'clock_in_time' => '08:30:00',
+                'clock_out_time' => '17:00:00',
+                'hours_worked' => 8.0,
+                'overtime_hours' => 0.5,
+                'status' => 'approved'
+            ],
+            [
+                'employee_id' => 2,
+                'work_date' => '2024-09-30',
+                'clock_in_time' => '09:00:00',
+                'clock_out_time' => '17:30:00',
+                'hours_worked' => 8.0,
+                'overtime_hours' => 0.5,
+                'status' => 'pending'
+            ],
+            [
+                'employee_id' => 3,
+                'work_date' => '2024-10-01',
+                'clock_in_time' => '09:30:00',
+                'clock_out_time' => '18:15:00',
+                'hours_worked' => 8.0,
+                'overtime_hours' => 0.75,
+                'status' => 'pending'
+            ],
+            [
+                'employee_id' => 3,
+                'work_date' => '2024-09-30',
+                'clock_in_time' => '09:00:00',
+                'clock_out_time' => '17:00:00',
+                'hours_worked' => 8.0,
+                'overtime_hours' => 0.0,
+                'status' => 'rejected'
+            ],
+            [
+                'employee_id' => 4,
+                'work_date' => '2024-10-01',
+                'clock_in_time' => '08:45:00',
+                'clock_out_time' => '17:15:00',
+                'hours_worked' => 8.0,
+                'overtime_hours' => 0.5,
+                'status' => 'approved'
+            ],
+            [
+                'employee_id' => 4,
+                'work_date' => '2024-09-30',
+                'clock_in_time' => '09:15:00',
+                'clock_out_time' => '18:00:00',
+                'hours_worked' => 8.0,
+                'overtime_hours' => 0.75,
+                'status' => 'pending'
+            ],
+            [
+                'employee_id' => 5,
+                'work_date' => '2024-10-01',
+                'clock_in_time' => '09:00:00',
+                'clock_out_time' => '17:30:00',
+                'hours_worked' => 8.0,
+                'overtime_hours' => 0.5,
+                'status' => 'pending'
+            ],
+            [
+                'employee_id' => 5,
+                'work_date' => '2024-09-30',
+                'clock_in_time' => '08:30:00',
+                'clock_out_time' => '17:00:00',
+                'hours_worked' => 8.0,
+                'overtime_hours' => 0.5,
+                'status' => 'approved'
+            ]
+        ];
+
+        DB::table('time_entries')->insert($timesheetData);
+        $newCount = DB::table('time_entries')->count();
+        
+        return "Successfully populated timesheet data! Total entries: {$newCount}";
+        
+    } catch (Exception $e) {
+        return "Error: " . $e->getMessage();
+    }
+})->name('populate.timesheets');
+
 // Admin Profile Management Routes (Super Admin and Admin access)
 Route::middleware(['auth'])->prefix('admin/profile')->name('admin.profile.')->group(function () {
     // Profile management
