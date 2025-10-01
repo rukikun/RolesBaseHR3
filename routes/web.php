@@ -578,6 +578,317 @@ Route::get('/populate-timesheets', function() {
     }
 })->name('populate.timesheets');
 
+// Temporary route to populate attendance data
+Route::get('/populate-attendance', function() {
+    try {
+        $count = DB::table('attendances')->count();
+        if ($count > 0) {
+            return "Attendance data already exists. Count: {$count}";
+        }
+        
+        // Get employees
+        $employees = DB::table('employees')->limit(5)->get();
+        
+        if ($employees->isEmpty()) {
+            return "No employees found. Please ensure employees exist first.";
+        }
+        
+        $attendanceData = [];
+        $dates = [
+            '2024-10-01',
+            '2024-09-30', 
+            '2024-09-29',
+            '2024-09-28',
+            '2024-09-27'
+        ];
+        
+        foreach ($employees as $employee) {
+            foreach ($dates as $date) {
+                $clockIn = Carbon::parse($date . ' ' . sprintf('%02d:%02d:00', rand(8, 9), rand(0, 59)));
+                $clockOut = $clockIn->copy()->addHours(8)->addMinutes(rand(0, 60));
+                $totalHours = $clockOut->diffInHours($clockIn, true);
+                $overtimeHours = max(0, $totalHours - 8);
+                
+                $attendanceData[] = [
+                    'employee_id' => $employee->id,
+                    'date' => $date,
+                    'clock_in_time' => $clockIn,
+                    'clock_out_time' => $clockOut,
+                    'total_hours' => round($totalHours, 2),
+                    'overtime_hours' => round($overtimeHours, 2),
+                    'status' => 'clocked_out',
+                    'location' => 'ESS Portal',
+                    'ip_address' => '127.0.0.1',
+                    'created_at' => now(),
+                    'updated_at' => now()
+                ];
+            }
+        }
+        
+        DB::table('attendances')->insert($attendanceData);
+        $newCount = DB::table('attendances')->count();
+        
+        return "Successfully populated attendance data! Total entries: {$newCount}";
+        
+    } catch (Exception $e) {
+        return "Error: " . $e->getMessage();
+    }
+})->name('populate.attendance');
+
+// Combined route to populate both timesheet and attendance data
+Route::get('/populate-all-data', function() {
+    try {
+        $results = [];
+        
+        // Check existing data
+        $timesheetCount = DB::table('time_entries')->count();
+        $attendanceCount = DB::table('attendances')->count();
+        
+        $results[] = "Current data - Timesheets: {$timesheetCount}, Attendances: {$attendanceCount}";
+        
+        // Get employees
+        $employees = DB::table('employees')->limit(5)->get();
+        
+        if ($employees->isEmpty()) {
+            return "No employees found. Please ensure employees exist first.";
+        }
+        
+        $dates = [
+            '2024-10-01',
+            '2024-09-30', 
+            '2024-09-29',
+            '2024-09-28',
+            '2024-09-27'
+        ];
+        
+        $timesheetData = [];
+        $attendanceData = [];
+        
+        foreach ($employees as $employee) {
+            foreach ($dates as $date) {
+                // Generate realistic times
+                $clockInHour = rand(8, 9);
+                $clockInMinute = rand(0, 59);
+                $clockInTime = sprintf('%02d:%02d:00', $clockInHour, $clockInMinute);
+                
+                $clockInDateTime = Carbon::parse($date . ' ' . $clockInTime);
+                $clockOutDateTime = $clockInDateTime->copy()->addHours(8)->addMinutes(rand(0, 60));
+                
+                $totalHours = $clockOutDateTime->diffInHours($clockInDateTime, true);
+                $regularHours = min(8, $totalHours);
+                $overtimeHours = max(0, $totalHours - 8);
+                
+                // Create timesheet entry
+                if ($timesheetCount == 0) {
+                    $timesheetData[] = [
+                        'employee_id' => $employee->id,
+                        'work_date' => $date,
+                        'clock_in_time' => $clockInTime,
+                        'clock_out_time' => $clockOutDateTime->format('H:i:s'),
+                        'hours_worked' => round($regularHours, 2),
+                        'overtime_hours' => round($overtimeHours, 2),
+                        'break_duration' => 1.0,
+                        'description' => 'Regular work day',
+                        'status' => rand(0, 1) ? 'approved' : 'pending',
+                        'created_at' => now(),
+                        'updated_at' => now()
+                    ];
+                }
+                
+                // Create attendance entry
+                if ($attendanceCount == 0) {
+                    $attendanceData[] = [
+                        'employee_id' => $employee->id,
+                        'date' => $date,
+                        'clock_in_time' => $clockInDateTime,
+                        'clock_out_time' => $clockOutDateTime,
+                        'total_hours' => round($totalHours, 2),
+                        'overtime_hours' => round($overtimeHours, 2),
+                        'status' => 'clocked_out',
+                        'location' => 'ESS Portal',
+                        'ip_address' => '127.0.0.1',
+                        'created_at' => now(),
+                        'updated_at' => now()
+                    ];
+                }
+            }
+        }
+        
+        // Insert data
+        if (!empty($timesheetData)) {
+            DB::table('time_entries')->insert($timesheetData);
+            $results[] = "Inserted " . count($timesheetData) . " timesheet entries";
+        }
+        
+        if (!empty($attendanceData)) {
+            DB::table('attendances')->insert($attendanceData);
+            $results[] = "Inserted " . count($attendanceData) . " attendance entries";
+        }
+        
+        // Final counts
+        $finalTimesheetCount = DB::table('time_entries')->count();
+        $finalAttendanceCount = DB::table('attendances')->count();
+        
+        $results[] = "Final data - Timesheets: {$finalTimesheetCount}, Attendances: {$finalAttendanceCount}";
+        
+        return implode('<br>', $results);
+        
+    } catch (Exception $e) {
+        return "Error: " . $e->getMessage();
+    }
+})->name('populate.all.data');
+
+// Debug route to test attendance creation
+Route::get('/test-attendance', function() {
+    try {
+        // Test creating attendance record directly
+        $employee = DB::table('employees')->first();
+        
+        if (!$employee) {
+            return "No employees found";
+        }
+        
+        $today = Carbon::today();
+        $clockInTime = Carbon::now('Asia/Manila');
+        
+        // Try using Attendance model
+        $attendance = new App\Models\Attendance();
+        $attendance->employee_id = $employee->id;
+        $attendance->date = $today;
+        $attendance->clock_in_time = $clockInTime;
+        $attendance->status = 'present';
+        $attendance->location = 'ESS Portal';
+        $attendance->ip_address = '127.0.0.1';
+        
+        $attendance->save();
+        
+        return "Attendance created successfully! ID: " . $attendance->id;
+        
+    } catch (Exception $e) {
+        return "Error: " . $e->getMessage() . "<br>Line: " . $e->getLine() . "<br>File: " . $e->getFile();
+    }
+})->name('test.attendance');
+
+// Debug route to check table structure
+Route::get('/check-table-structure', function() {
+    try {
+        $results = [];
+        
+        // Check if tables exist
+        $tables = ['employees', 'attendances', 'time_entries'];
+        foreach ($tables as $table) {
+            try {
+                $count = DB::table($table)->count();
+                $results[] = "Table '{$table}': {$count} records";
+            } catch (Exception $e) {
+                $results[] = "Table '{$table}': ERROR - " . $e->getMessage();
+            }
+        }
+        
+        // Check attendances table structure
+        try {
+            $columns = DB::select("DESCRIBE attendances");
+            $results[] = "<br><strong>Attendances table structure:</strong>";
+            foreach ($columns as $column) {
+                $results[] = "- {$column->Field}: {$column->Type} " . 
+                           ($column->Null === 'NO' ? 'NOT NULL' : 'NULL') . 
+                           ($column->Key ? " ({$column->Key})" : '') .
+                           ($column->Default ? " DEFAULT {$column->Default}" : '') .
+                           ($column->Extra ? " {$column->Extra}" : '');
+            }
+        } catch (Exception $e) {
+            $results[] = "Error checking table structure: " . $e->getMessage();
+        }
+        
+        return implode('<br>', $results);
+        
+    } catch (Exception $e) {
+        return "Error: " . $e->getMessage();
+    }
+})->name('check.table.structure');
+
+// Simple fix route to populate data after fixing ID columns
+Route::get('/fix-and-populate', function() {
+    try {
+        $results = [];
+        
+        // Fix both table ID columns
+        try {
+            DB::statement('ALTER TABLE attendances MODIFY id BIGINT UNSIGNED AUTO_INCREMENT');
+            $results[] = "✅ Fixed attendances ID column";
+        } catch (Exception $e) {
+            $results[] = "⚠️ Attendances ID: " . $e->getMessage();
+        }
+        
+        try {
+            DB::statement('ALTER TABLE time_entries MODIFY id BIGINT UNSIGNED AUTO_INCREMENT');
+            $results[] = "✅ Fixed time_entries ID column";
+        } catch (Exception $e) {
+            $results[] = "⚠️ Time entries ID: " . $e->getMessage();
+        }
+        
+        // Create sample data
+        $employees = DB::table('employees')->limit(3)->get();
+        
+        if ($employees->isEmpty()) {
+            $results[] = "❌ No employees found";
+            return implode('<br>', $results);
+        }
+        
+        $attendanceCount = 0;
+        $timesheetCount = 0;
+        
+        foreach ($employees as $employee) {
+            // Create attendance for today
+            try {
+                DB::table('attendances')->insert([
+                    'employee_id' => $employee->id,
+                    'date' => Carbon::today(),
+                    'clock_in_time' => Carbon::now()->subHours(2),
+                    'clock_out_time' => Carbon::now(),
+                    'total_hours' => 8.0,
+                    'overtime_hours' => 0.0,
+                    'status' => 'clocked_out',
+                    'location' => 'ESS Portal',
+                    'ip_address' => '127.0.0.1',
+                    'created_at' => now(),
+                    'updated_at' => now()
+                ]);
+                $attendanceCount++;
+            } catch (Exception $e) {
+                $results[] = "⚠️ Attendance for employee {$employee->id}: " . $e->getMessage();
+            }
+            
+            // Create timesheet entry
+            try {
+                DB::table('time_entries')->insert([
+                    'employee_id' => $employee->id,
+                    'work_date' => Carbon::today(),
+                    'clock_in_time' => '09:00:00',
+                    'clock_out_time' => '17:00:00',
+                    'hours_worked' => 8.0,
+                    'overtime_hours' => 0.0,
+                    'status' => 'pending',
+                    'created_at' => now(),
+                    'updated_at' => now()
+                ]);
+                $timesheetCount++;
+            } catch (Exception $e) {
+                $results[] = "⚠️ Timesheet for employee {$employee->id}: " . $e->getMessage();
+            }
+        }
+        
+        $results[] = "✅ Created {$attendanceCount} attendance records";
+        $results[] = "✅ Created {$timesheetCount} timesheet records";
+        $results[] = "<br><strong>🎉 System should now work! Try clock-in/out functionality.</strong>";
+        
+        return implode('<br>', $results);
+        
+    } catch (Exception $e) {
+        return "Error: " . $e->getMessage();
+    }
+})->name('fix.and.populate');
+
 // Admin Profile Management Routes (Super Admin and Admin access)
 Route::middleware(['auth'])->prefix('admin/profile')->name('admin.profile.')->group(function () {
     // Profile management

@@ -8,6 +8,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
 use Carbon\Carbon;
+use App\Models\Attendance;
+use App\Models\TimeEntry;
 
 class EmployeeESSController extends Controller
 {
@@ -2018,9 +2020,8 @@ class EmployeeESSController extends Controller
             $employee = Auth::guard('employee')->user();
             $today = Carbon::today();
             
-            // Check if employee already has attendance record for today
-            $existingAttendance = DB::table('attendances')
-                ->where('employee_id', $employee->id)
+            // Check if employee already has attendance record for today using model
+            $existingAttendance = Attendance::where('employee_id', $employee->id)
                 ->whereDate('date', $today)
                 ->first();
             
@@ -2034,60 +2035,80 @@ class EmployeeESSController extends Controller
             $clockInTime = Carbon::now('Asia/Manila');
             
             // Determine if employee is late (assuming 9:00 AM is standard start time)
-            $standardStartTime = Carbon::today()->setTime(9, 0, 0);
+            $standardStartTime = Carbon::today('Asia/Manila')->setTime(9, 0, 0);
             $status = $clockInTime->gt($standardStartTime) ? 'late' : 'present';
 
             if ($existingAttendance) {
-                // Update existing record
-                DB::table('attendances')
-                    ->where('id', $existingAttendance->id)
-                    ->update([
+                // Update existing record using model
+                $existingAttendance->update([
+                    'clock_in_time' => $clockInTime,
+                    'status' => $status,
+                    'location' => 'ESS Portal',
+                    'ip_address' => $request->ip(),
+                ]);
+                $attendanceId = $existingAttendance->id;
+            } else {
+                // Create new attendance record using model with fallback
+                try {
+                    $attendance = Attendance::create([
+                        'employee_id' => $employee->id,
+                        'date' => $today,
+                        'clock_in_time' => $clockInTime,
+                        'status' => $status,
+                        'location' => 'ESS Portal',
+                        'ip_address' => $request->ip(),
+                    ]);
+                    $attendanceId = $attendance->id;
+                } catch (\Exception $modelError) {
+                    // Fallback to raw DB insert if model fails
+                    \Log::warning('Attendance model creation failed, using raw DB insert: ' . $modelError->getMessage());
+                    
+                    $attendanceId = DB::table('attendances')->insertGetId([
+                        'employee_id' => $employee->id,
+                        'date' => $today->format('Y-m-d'),
                         'clock_in_time' => $clockInTime->format('Y-m-d H:i:s'),
                         'status' => $status,
                         'location' => 'ESS Portal',
                         'ip_address' => $request->ip(),
+                        'created_at' => now(),
                         'updated_at' => now()
                     ]);
-                $attendanceId = $existingAttendance->id;
-            } else {
-                // Create new attendance record
-                $attendanceId = DB::table('attendances')->insertGetId([
-                    'employee_id' => $employee->id,
-                    'date' => $today,
-                    'clock_in_time' => $clockInTime->format('Y-m-d H:i:s'),
-                    'status' => $status,
-                    'location' => 'ESS Portal',
-                    'ip_address' => $request->ip(),
-                    'created_at' => now(),
-                    'updated_at' => now()
-                ]);
+                }
             }
 
-            // Also create/update time entry for timesheet management
-            $existingTimeEntry = DB::table('time_entries')
-                ->where('employee_id', $employee->id)
+            // Also create/update time entry for timesheet management using model
+            $existingTimeEntry = TimeEntry::where('employee_id', $employee->id)
                 ->whereDate('work_date', $today)
                 ->first();
 
             if ($existingTimeEntry) {
                 // Update existing time entry
-                DB::table('time_entries')
-                    ->where('id', $existingTimeEntry->id)
-                    ->update([
-                        'clock_in_time' => $clockInTime->format('H:i:s'),
-                        'status' => 'pending',
-                        'updated_at' => now()
-                    ]);
-            } else {
-                // Create new time entry
-                DB::table('time_entries')->insert([
-                    'employee_id' => $employee->id,
-                    'work_date' => $today,
+                $existingTimeEntry->update([
                     'clock_in_time' => $clockInTime->format('H:i:s'),
                     'status' => 'pending',
-                    'created_at' => now(),
-                    'updated_at' => now()
                 ]);
+            } else {
+                // Create new time entry with fallback
+                try {
+                    TimeEntry::create([
+                        'employee_id' => $employee->id,
+                        'work_date' => $today,
+                        'clock_in_time' => $clockInTime->format('H:i:s'),
+                        'status' => 'pending',
+                    ]);
+                } catch (\Exception $timeEntryError) {
+                    // Fallback to raw DB insert if model fails
+                    \Log::warning('TimeEntry model creation failed, using raw DB insert: ' . $timeEntryError->getMessage());
+                    
+                    DB::table('time_entries')->insert([
+                        'employee_id' => $employee->id,
+                        'work_date' => $today->format('Y-m-d'),
+                        'clock_in_time' => $clockInTime->format('H:i:s'),
+                        'status' => 'pending',
+                        'created_at' => now(),
+                        'updated_at' => now()
+                    ]);
+                }
             }
 
             return response()->json([
@@ -2124,9 +2145,8 @@ class EmployeeESSController extends Controller
                 'date' => $today->toDateString()
             ]);
             
-            // Get today's attendance record
-            $attendance = DB::table('attendances')
-                ->where('employee_id', $employee->id)
+            // Get today's attendance record using model
+            $attendance = Attendance::where('employee_id', $employee->id)
                 ->whereDate('date', $today)
                 ->first();
                 
@@ -2158,33 +2178,26 @@ class EmployeeESSController extends Controller
             $totalHours = round($totalMinutes / 60, 2);
             $overtimeHours = $totalHours > 8 ? $totalHours - 8 : 0;
             
-            // Update attendance record
-            DB::table('attendances')
-                ->where('id', $attendance->id)
-                ->update([
-                    'clock_out_time' => $clockOutTime->format('Y-m-d H:i:s'),
-                    'total_hours' => $totalHours,
-                    'overtime_hours' => $overtimeHours,
-                    'status' => 'clocked_out',
-                    'updated_at' => now()
-                ]);
+            // Update attendance record using model
+            $attendance->update([
+                'clock_out_time' => $clockOutTime,
+                'total_hours' => $totalHours,
+                'overtime_hours' => $overtimeHours,
+                'status' => 'clocked_out',
+            ]);
 
-            // Update time entry record
-            $timeEntry = DB::table('time_entries')
-                ->where('employee_id', $employee->id)
+            // Update time entry record using model
+            $timeEntry = TimeEntry::where('employee_id', $employee->id)
                 ->whereDate('work_date', $today)
                 ->first();
 
             if ($timeEntry) {
-                DB::table('time_entries')
-                    ->where('id', $timeEntry->id)
-                    ->update([
-                        'clock_out_time' => $clockOutTime->format('H:i:s'),
-                        'hours_worked' => min(8, $totalHours), // Regular hours capped at 8
-                        'overtime_hours' => $overtimeHours,
-                        'status' => 'pending',
-                        'updated_at' => now()
-                    ]);
+                $timeEntry->update([
+                    'clock_out_time' => $clockOutTime->format('H:i:s'),
+                    'hours_worked' => min(8, $totalHours), // Regular hours capped at 8
+                    'overtime_hours' => $overtimeHours,
+                    'status' => 'pending',
+                ]);
             }
 
             return response()->json([
@@ -2265,36 +2278,15 @@ class EmployeeESSController extends Controller
         try {
             $employee = Auth::guard('employee')->user();
             
-            $attendances = DB::table('attendances')
-                ->where('employee_id', $employee->id)
+            $attendances = Attendance::where('employee_id', $employee->id)
                 ->orderBy('date', 'desc')
                 ->limit(10)
                 ->get()
                 ->map(function ($attendance) {
-                    // Parse the datetime strings properly and format to 12-hour format
-                    $clockInFormatted = '--';
-                    $clockOutFormatted = '--';
-                    
-                    if ($attendance->clock_in_time) {
-                        try {
-                            $clockInFormatted = Carbon::parse($attendance->clock_in_time)->format('h:i A');
-                        } catch (\Exception $e) {
-                            $clockInFormatted = '--';
-                        }
-                    }
-                    
-                    if ($attendance->clock_out_time) {
-                        try {
-                            $clockOutFormatted = Carbon::parse($attendance->clock_out_time)->format('h:i A');
-                        } catch (\Exception $e) {
-                            $clockOutFormatted = '--';
-                        }
-                    }
-                    
                     return [
-                        'date' => Carbon::parse($attendance->date)->format('M d, Y'),
-                        'clock_in' => $clockInFormatted,
-                        'clock_out' => $clockOutFormatted,
+                        'date' => $attendance->date->format('M d, Y'),
+                        'clock_in' => $attendance->formatted_clock_in ?? '--',
+                        'clock_out' => $attendance->formatted_clock_out ?? '--',
                         'hours' => $attendance->total_hours ? number_format($attendance->total_hours, 2) : '0.00',
                         'status' => $attendance->status
                     ];

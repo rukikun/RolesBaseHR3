@@ -124,8 +124,8 @@
   <div class="card-header">
     <ul class="nav nav-tabs card-header-tabs" id="modulesTabs" role="tablist">
       <li class="nav-item" role="presentation">
-        <button class="nav-link active" id="attendance-tab" data-bs-toggle="tab" data-bs-target="#attendance" type="button" role="tab" aria-controls="attendance" aria-selected="true">
-          <i class="fas fa-user-clock me-2"></i>Attendance Logs
+        <button class="nav-link active" id="timesheets-tab" data-bs-toggle="tab" data-bs-target="#timesheets" type="button" role="tab" aria-controls="timesheets" aria-selected="true">
+          <i class="fas fa-clock me-2"></i>Timesheets
         </button>
       </li>
       <li class="nav-item" role="presentation">
@@ -143,20 +143,23 @@
           <i class="fas fa-receipt me-2"></i>Claims
         </button>
       </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="attendance-tab" data-bs-toggle="tab" data-bs-target="#attendance" type="button" role="tab" aria-controls="attendance" aria-selected="false">
+          <i class="fas fa-user-clock me-2"></i>Attendance Logs
+        </button>
+      </li>
     </ul>
   </div>
   <div class="card-body">
     <div class="tab-content" id="modulesTabContent">
       <!-- Timesheets Tab -->
-      <div class="tab-pane fade" id="timesheets" role="tabpanel" style="display: none;">
+      <div class="tab-pane fade show active" id="timesheets" role="tabpanel">
         <div class="d-flex justify-content-between align-items-center mb-3">
           <h5 class="mb-0">
             <i class="fas fa-list me-2"></i>Timesheets Management
           </h5>
           <div class="d-flex gap-2">
-            <button class="btn btn-success" onclick="syncAttendanceToTimesheets()" title="Import attendance logs as timesheet entries">
-              <i class="fas fa-sync me-2"></i>Sync Attendance
-            </button>
+            
             <button class="btn btn-primary" onclick="openWorkingModal('timesheet-modal')">
               <i class="fas fa-plus me-2"></i>Add Timesheet
             </button>
@@ -458,7 +461,7 @@
       </div>
       
       <!-- Attendance Logs Tab -->
-      <div class="tab-pane fade show active" id="attendance" role="tabpanel">
+      <div class="tab-pane fade" id="attendance" role="tabpanel">
         <div class="d-flex justify-content-between align-items-center mb-3">
           <h5 class="mb-0">
             <i class="fas fa-user-clock me-2"></i>Employee Attendance Logs
