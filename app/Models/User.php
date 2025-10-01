@@ -27,7 +27,8 @@ class User extends Authenticatable
         'username',
         'role',
         'last_login',
-        'is_active'
+        'is_active',
+        'profile_picture'
     ];
 
     /**
@@ -59,5 +60,73 @@ class User extends Authenticatable
     public function employee()
     {
         return $this->belongsTo(Employee::class);
+    }
+
+    // Role-based helper methods
+    public function isSuperAdmin()
+    {
+        return $this->role === 'super_admin';
+    }
+
+    public function isAdmin()
+    {
+        return in_array($this->role, ['super_admin', 'admin']);
+    }
+
+    public function isHRManager()
+    {
+        return $this->role === 'hr_manager';
+    }
+
+    public function isHRScheduler()
+    {
+        return $this->role === 'hr_scheduler';
+    }
+
+    public function isAttendanceAdmin()
+    {
+        return $this->role === 'attendance_admin';
+    }
+
+    public function hasRole($role)
+    {
+        if (is_array($role)) {
+            return in_array($this->role, $role);
+        }
+        return $this->role === $role;
+    }
+
+    public function canManageUsers()
+    {
+        return in_array($this->role, ['super_admin', 'admin']);
+    }
+
+    public function canAccessModule($module)
+    {
+        $permissions = [
+            'super_admin' => ['all'],
+            'admin' => ['employees', 'timesheets', 'shifts', 'leave', 'claims', 'reports'],
+            'hr_manager' => ['employees', 'leave', 'claims', 'reports'],
+            'hr_scheduler' => ['shifts', 'timesheets', 'schedules'],
+            'attendance_admin' => ['timesheets', 'attendance', 'leave']
+        ];
+
+        $userPermissions = $permissions[$this->role] ?? [];
+        
+        return in_array('all', $userPermissions) || in_array($module, $userPermissions);
+    }
+
+    // Get role display name
+    public function getRoleDisplayName()
+    {
+        $roles = [
+            'super_admin' => 'Super Administrator',
+            'admin' => 'Administrator',
+            'hr_manager' => 'HR Manager',
+            'hr_scheduler' => 'HR Scheduler',
+            'attendance_admin' => 'Attendance & Leave Admin'
+        ];
+
+        return $roles[$this->role] ?? ucfirst(str_replace('_', ' ', $this->role));
     }
 }

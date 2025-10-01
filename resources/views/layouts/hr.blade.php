@@ -31,44 +31,51 @@
       </a>
       <div class="d-flex align-items-center gap-3">
         <!-- HR System Settings Dropdown -->
+        <!-- Jetlouge Neat Profile Dropdown -->
         <div class="dropdown">
-          <button class="btn btn-outline-light dropdown-toggle d-flex align-items-center" type="button" id="hrSettingsDropdown" data-bs-toggle="dropdown" aria-expanded="false">
-            <i class="fas fa-cog me-2"></i>
-            <span>Settings</span>
+          <button class="btn btn-outline-light d-flex align-items-center px-2 py-1" type="button" id="profileDropdown" data-bs-toggle="dropdown" aria-expanded="false" style="border-radius: 24px;">
+            <span class="rounded-circle d-flex align-items-center justify-content-center me-2" style="width:36px;height:36px;font-size:18px;background:var(--jetlouge-primary);color:#fff;font-weight:bold;box-shadow:0 2px 8px rgba(0,0,0,0.10);">
+              {{ strtoupper(substr(Auth::user()->name ?? 'A', 0, 1)) }}
+            </span>
+            <span class="fw-semibold d-none d-md-inline">{{ Auth::user()->name ?? 'Admin' }}</span>
+            <i class="fas fa-chevron-down ms-2"></i>
           </button>
-          <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="hrSettingsDropdown">
-            <li>
-              <h6 class="dropdown-header">
-                <i class="fas fa-user me-2"></i>{{ Auth::check() ? Auth::user()->name : 'Admin' }}
-              </h6>
-            </li>
-            <li><hr class="dropdown-divider"></li>
-            <li>
-              <a class="dropdown-item" href="#" id="system-settings-link">
-                <i class="fas fa-cogs me-2"></i>System Settings
+          <div class="dropdown-menu dropdown-menu-end p-0" aria-labelledby="profileDropdown" style="min-width:300px;max-width:340px;box-shadow:0 6px 32px rgba(0,80,160,0.10);border-radius:16px;overflow:hidden;border:1px solid #e3e8f0;">
+            <div class="px-4 pt-4 pb-2 text-center" style="background: #fff; border-radius: 16px 16px 0 0;">
+              <span class="rounded-circle d-flex align-items-center justify-content-center mb-2 mx-auto" style="width:56px;height:56px;font-size:28px;background:var(--jetlouge-primary);color:#fff;font-weight:bold;box-shadow:0 2px 8px rgba(0,0,0,0.10);">
+                {{ strtoupper(substr(Auth::user()->name ?? 'A', 0, 1)) }}
+              </span>
+              <div class="fw-bold fs-5" style="color:#222;">{{ Auth::user()->name ?? 'Admin' }}</div>
+              <div class="small text-muted mb-2">{{ Auth::user()->email ?? '' }}</div>
+            </div>
+            <hr class="my-0" style="border:0;border-top:1px solid #f0f2fa;">
+            <div class="list-group list-group-flush bg-white py-2" style="border-radius: 0 0 16px 16px;">
+              <a href="{{ route('admin.profile.index') }}" class="list-group-item list-group-item-action border-0 py-2 d-flex align-items-center">
+                <i class="fas fa-user-circle me-3" style="color:#6f42c1;font-size:1.25rem;"></i> <span class="fw-medium">My Profile</span>
               </a>
-            </li>
-            <li>
-              <a class="dropdown-item" href="#" id="hr-preferences-link">
-                <i class="fas fa-sliders-h me-2"></i>HR Preferences
+              <a href="{{ route('admin.profile.change-password') }}" class="list-group-item list-group-item-action border-0 py-2 d-flex align-items-center">
+                <i class="fas fa-key me-3" style="color:#f0b429;font-size:1.25rem;"></i> <span class="fw-medium">Change Password</span>
               </a>
-            </li>
-            <li>
-              <a class="dropdown-item" href="#" id="notifications-settings-link">
-                <i class="fas fa-bell me-2"></i>Notifications
-              </a>
-            </li>
-            <li><hr class="dropdown-divider"></li>
-            <li>
+              @if(Auth::user()->isSuperAdmin())
+                <a href="{{ route('admin.profile.manage-admins') }}" class="list-group-item list-group-item-action border-0 py-2 d-flex align-items-center">
+                  <i class="fas fa-users-cog me-3" style="color:#1f7aec;font-size:1.25rem;"></i> <span class="fw-medium">Manage Admins</span>
+                </a>
+              @endif
               <form method="POST" action="{{ route('logout') }}" class="d-inline">
                 @csrf
-                <button type="submit" class="dropdown-item text-danger" onclick="return confirm('Are you sure you want to logout?')">
-                  <i class="fas fa-sign-out-alt me-2"></i>Log Out
+                <button type="submit" class="list-group-item list-group-item-action border-0 py-2 d-flex align-items-center text-danger" style="background:none;">
+                  <i class="fas fa-sign-out-alt me-3" style="color:#e74c3c;font-size:1.25rem;"></i> <span class="fw-medium">Logout</span>
                 </button>
               </form>
-            </li>
-          </ul>
+            </div>
+          </div>
         </div>
+        <style>
+          .dropdown-menu { box-shadow: 0 6px 32px rgba(0,80,160,0.10) !important; border-radius: 16px !important; border:1px solid #e3e8f0; }
+          .list-group-item { background: #fff; font-size: 1rem; transition: background .12s; }
+          .list-group-item:active, .list-group-item:hover { background: #f5f7fa !important; }
+          .fw-medium { font-weight: 500; }
+        </style>
         <button class="sidebar-toggle mobile-toggle" id="menu-btn" title="Open Menu">
           <i class="bi bi-list fs-5"></i>
         </button>

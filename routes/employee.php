@@ -65,8 +65,32 @@ Route::prefix('employee')->group(function () {
         Route::get('/timesheet/{id}/view', [EmployeeESSController::class, 'viewTimesheet'])->name('employee.timesheet.view');
         Route::get('/timesheet/{id}/edit', [EmployeeESSController::class, 'editTimesheet'])->name('employee.timesheet.edit');
         
+        // ESS Clock-in/Clock-out Routes
+        Route::post('/clock-in', [EmployeeESSController::class, 'clockIn'])->name('employee.clock.in');
+        Route::post('/clock-out', [EmployeeESSController::class, 'clockOut'])->name('employee.clock.out');
+        Route::get('/clock-status', [EmployeeESSController::class, 'getClockStatus'])->name('employee.clock.status');
+        Route::get('/attendance-log', [EmployeeESSController::class, 'getAttendanceLog'])->name('employee.attendance.log');
+        
+        // Debug route for testing
+        Route::get('/debug-attendance', function() {
+            $employee = Auth::guard('employee')->user();
+            $today = Carbon\Carbon::today();
+            
+            $attendance = DB::table('attendances')
+                ->where('employee_id', $employee->id)
+                ->whereDate('date', $today)
+                ->first();
+                
+            return response()->json([
+                'employee_id' => $employee->id,
+                'today' => $today->toDateString(),
+                'attendance' => $attendance,
+                'can_clock_out' => $attendance && $attendance->clock_in_time && !$attendance->clock_out_time
+            ]);
+        });
+        
         // Quick actions
-        Route::post('/attendance/log', [EmployeeESSController::class, 'logAttendance'])->name('employee.attendance.log');
+        Route::post('/attendance/log', [EmployeeESSController::class, 'logAttendance'])->name('employee.attendance.log.submit');
         Route::post('/leave-application', [EmployeeESSController::class, 'submitLeaveApplication'])->name('employee.leave.application');
         Route::post('/request-form', [EmployeeESSController::class, 'submitRequestForm'])->name('employee.request.form');
         

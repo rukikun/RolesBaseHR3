@@ -55,23 +55,54 @@ class ShiftRequestController extends Controller
     }
 
     /**
-     * Approve a shift request.
+     * Approve a shift request and automatically create shift assignment.
      */
     public function approve($id)
     {
         try {
             $shiftRequest = ShiftRequest::findOrFail($id);
+            
+            // Update shift request status
             $shiftRequest->update([
                 'status' => 'approved',
                 'approved_by' => auth()->id() ?? 1, // Default to admin if no auth
                 'approved_at' => now()
             ]);
 
-            return redirect()->back()->with('success', 'Shift request approved successfully!');
+            // Check if shift assignment already exists for this employee on this date
+            $existingShift = DB::table('shifts')
+                ->where('employee_id', $shiftRequest->employee_id)
+                ->where('shift_date', $shiftRequest->shift_date)
+                ->where('start_time', $shiftRequest->start_time)
+                ->first();
+
+            if (!$existingShift) {
+                // Automatically create shift assignment in calendar
+                $shiftAssignment = DB::table('shifts')->insert([
+                    'employee_id' => $shiftRequest->employee_id,
+                    'shift_type_id' => $shiftRequest->shift_type_id,
+                    'shift_date' => $shiftRequest->shift_date,
+                    'start_time' => $shiftRequest->start_time,
+                    'end_time' => $shiftRequest->end_time,
+                    'location' => $shiftRequest->location ?? 'Main Office',
+                    'notes' => $shiftRequest->notes ?? 'Auto-created from approved shift request',
+                    'status' => 'scheduled',
+                    'created_at' => now(),
+                    'updated_at' => now()
+                ]);
+
+                Log::info("Shift request {$id} approved and shift assignment created for employee {$shiftRequest->employee_id}");
+                $message = 'Shift request approved successfully! Shift has been automatically added to the schedule calendar.';
+            } else {
+                Log::info("Shift request {$id} approved but shift assignment already exists for employee {$shiftRequest->employee_id}");
+                $message = 'Shift request approved successfully! Note: A shift assignment for this time slot already exists.';
+            }
+
+            return redirect()->back()->with('success', $message);
 
         } catch (\Exception $e) {
             Log::error('Shift request approval failed: ' . $e->getMessage());
-            return redirect()->back()->with('error', 'Failed to approve shift request.');
+            return redirect()->back()->with('error', 'Failed to approve shift request: ' . $e->getMessage());
         }
     }
 

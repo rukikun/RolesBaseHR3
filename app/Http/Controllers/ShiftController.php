@@ -81,13 +81,23 @@ class ShiftController extends Controller
                 Log::info('Using static employee collection: ' . $employees->count() . ' employees');
             }
 
-            // Get shifts for current month using Eloquent
-            $currentDate = Carbon::now();
+            // Get current date and handle month parameter
+            $requestedMonth = request('month');
+            if ($requestedMonth && preg_match('/^\d{4}-\d{2}$/', $requestedMonth)) {
+                try {
+                    $currentDate = Carbon::createFromFormat('Y-m', $requestedMonth)->startOfMonth();
+                } catch (\Exception $e) {
+                    $currentDate = Carbon::now()->startOfMonth();
+                }
+            } else {
+                $currentDate = Carbon::now()->startOfMonth();
+            }
+            
             $shifts = collect();
             $calendarShifts = [];
             
             try {
-                // Get shifts with relationships for the current month
+                // Get shifts with relationships for the specified month
                 $shifts = Shift::with(['employee', 'shiftType'])
                     ->whereMonth('shift_date', $currentDate->month)
                     ->whereYear('shift_date', $currentDate->year)
@@ -684,4 +694,344 @@ class ShiftController extends Controller
                 ->with('error', 'Error rejecting shift request: ' . $e->getMessage());
         }
     }
+
+    /**
+     * Show shift details for admin
+     */
+    public function show($id)
+    {
+        try {
+            $shift = DB::table('shifts as s')
+                ->leftJoin('employees as e', 's.employee_id', '=', 'e.id')
+                ->leftJoin('shift_types as st', 's.shift_type_id', '=', 'st.id')
+                ->select(
+                    's.*',
+                    DB::raw("CONCAT(COALESCE(e.first_name, ''), ' ', COALESCE(e.last_name, '')) as employee_name"),
+                    'st.name as shift_type_name'
+                )
+                ->where('s.id', $id)
+                ->first();
+
+            if (!$shift) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Shift not found'
+                ], 404);
+            }
+
+            return response()->json([
+                'success' => true,
+                'shift' => $shift
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('Error in ShiftController@show: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to load shift: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get shift for editing
+     */
+    public function edit($id)
+    {
+        try {
+            $shift = DB::table('shifts as s')
+                ->leftJoin('employees as e', 's.employee_id', '=', 'e.id')
+                ->leftJoin('shift_types as st', 's.shift_type_id', '=', 'st.id')
+                ->select(
+                    's.*',
+                    DB::raw("CONCAT(COALESCE(e.first_name, ''), ' ', COALESCE(e.last_name, '')) as employee_name"),
+                    'st.name as shift_type_name'
+                )
+                ->where('s.id', $id)
+                ->first();
+
+            if (!$shift) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Shift not found'
+                ], 404);
+            }
+
+            return response()->json([
+                'success' => true,
+                'shift' => $shift
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('Error in ShiftController@edit: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to load shift: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Update shift
+     */
+    public function update(Request $request, $id)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'shift_date' => 'required|date',
+                'start_time' => 'required',
+                'end_time' => 'required',
+                'status' => 'required|in:scheduled,in_progress,completed,cancelled',
+                'location' => 'nullable|string|max:255',
+                'notes' => 'nullable|string|max:1000'
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            $shift = DB::table('shifts')->where('id', $id)->first();
+            
+            if (!$shift) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Shift not found'
+                ], 404);
+            }
+
+            $updateData = [
+                'shift_date' => $request->shift_date,
+                'start_time' => $request->start_time,
+                'end_time' => $request->end_time,
+                'status' => $request->status,
+                'location' => $request->location,
+                'notes' => $request->notes,
+                'updated_at' => now()
+            ];
+
+            DB::table('shifts')->where('id', $id)->update($updateData);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Shift updated successfully'
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('Error in ShiftController@update: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update shift: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Store new shift assignment
+     */
+    public function store(Request $request)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'employee_id' => 'required|integer',
+                'shift_date' => 'required|date',
+                'shift_type_id' => 'required|integer',
+                'start_time' => 'required',
+                'end_time' => 'required',
+                'location' => 'nullable|string|max:255',
+                'notes' => 'nullable|string|max:1000'
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            // Check if employee already has a shift on this date
+            $existingShift = DB::table('shifts')
+                ->where('employee_id', $request->employee_id)
+                ->where('shift_date', $request->shift_date)
+                ->first();
+
+            if ($existingShift) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Employee already has a shift assigned for this date'
+                ], 400);
+            }
+
+            $shiftId = DB::table('shifts')->insertGetId([
+                'employee_id' => $request->employee_id,
+                'shift_type_id' => $request->shift_type_id,
+                'shift_date' => $request->shift_date,
+                'start_time' => $request->start_time,
+                'end_time' => $request->end_time,
+                'location' => $request->location ?? 'Main Office',
+                'notes' => $request->notes,
+                'status' => 'scheduled',
+                'created_at' => now(),
+                'updated_at' => now()
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Shift assigned successfully',
+                'shift_id' => $shiftId
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('Error in ShiftController@store: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to assign shift: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Edit shift for web interface
+     */
+    public function editShiftWeb($id)
+    {
+        try {
+            $shift = DB::table('shifts as s')
+                ->leftJoin('employees as e', 's.employee_id', '=', 'e.id')
+                ->leftJoin('shift_types as st', 's.shift_type_id', '=', 'st.id')
+                ->select(
+                    's.*',
+                    DB::raw("CONCAT(COALESCE(e.first_name, ''), ' ', COALESCE(e.last_name, '')) as employee_name"),
+                    'st.name as shift_type_name'
+                )
+                ->where('s.id', $id)
+                ->first();
+
+            if (!$shift) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Shift not found'
+                ], 404);
+            }
+
+            return response()->json([
+                'success' => true,
+                'shift' => $shift
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('Error in ShiftController@editShiftWeb: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to load shift: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Update shift for web interface
+     */
+    public function updateShiftWeb(Request $request, $id)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'shift_date' => 'required|date',
+                'start_time' => 'required',
+                'end_time' => 'required',
+                'status' => 'required|in:scheduled,in_progress,completed,cancelled',
+                'location' => 'nullable|string|max:255',
+                'notes' => 'nullable|string|max:1000'
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            $updated = DB::table('shifts')
+                ->where('id', $id)
+                ->update([
+                    'shift_date' => $request->shift_date,
+                    'start_time' => $request->start_time,
+                    'end_time' => $request->end_time,
+                    'status' => $request->status,
+                    'location' => $request->location,
+                    'notes' => $request->notes,
+                    'updated_at' => now()
+                ]);
+
+            if ($updated) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Shift updated successfully'
+                ]);
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to update shift'
+                ], 500);
+            }
+
+        } catch (\Exception $e) {
+            \Log::error('Error in ShiftController@updateShiftWeb: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update shift: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * View shift for web interface
+     */
+    public function viewShiftWeb($id)
+    {
+        try {
+            $shift = DB::table('shifts as s')
+                ->leftJoin('employees as e', 's.employee_id', '=', 'e.id')
+                ->leftJoin('shift_types as st', 's.shift_type_id', '=', 'st.id')
+                ->select(
+                    's.*',
+                    DB::raw("CONCAT(COALESCE(e.first_name, ''), ' ', COALESCE(e.last_name, '')) as employee_name"),
+                    'st.name as shift_type_name'
+                )
+                ->where('s.id', $id)
+                ->first();
+
+            if (!$shift) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Shift not found'
+                ], 404);
+            }
+
+            return response()->json([
+                'success' => true,
+                'shift' => $shift
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('Error in ShiftController@viewShiftWeb: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to load shift: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+
 }

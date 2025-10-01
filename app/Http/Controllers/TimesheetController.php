@@ -138,6 +138,22 @@ class TimesheetController extends Controller
                 $claims = collect([]);
             }
             
+            // Get attendance records with employee data
+            try {
+                $attendances = DB::table('attendances as a')
+                    ->leftJoin('employees as e', 'a.employee_id', '=', 'e.id')
+                    ->select(
+                        'a.*',
+                        DB::raw("CONCAT(COALESCE(e.first_name, ''), ' ', COALESCE(e.last_name, '')) as employee_name")
+                    )
+                    ->orderBy('a.date', 'desc')
+                    ->orderBy('a.clock_in_time', 'desc')
+                    ->limit(100) // Limit to recent records for performance
+                    ->get();
+            } catch (\Exception $e) {
+                $attendances = collect([]);
+            }
+            
             // Calculate timesheet statistics
             $timesheetStats = [
                 'total_timesheets' => $timesheets->count(),
@@ -154,7 +170,7 @@ class TimesheetController extends Controller
                 'departments' => $employees->pluck('department')->unique()->count()
             ];
             
-            return view('timesheet_management', compact('employees', 'timesheets', 'shifts', 'leaveRequests', 'claims', 'leaveTypes', 'claimTypes', 'employeeStats', 'timesheetStats'));
+            return view('timesheet_management', compact('employees', 'timesheets', 'shifts', 'leaveRequests', 'claims', 'attendances', 'leaveTypes', 'claimTypes', 'employeeStats', 'timesheetStats'));
         } catch (\Exception $e) {
             // If there's a database error, return empty arrays
             $employees = collect([]);
@@ -162,6 +178,7 @@ class TimesheetController extends Controller
             $shifts = collect([]);
             $leaveRequests = collect([]);
             $claims = collect([]);
+            $attendances = collect([]);
             $leaveTypes = collect([]);
             $claimTypes = collect([]);
             $employeeStats = [
@@ -180,7 +197,7 @@ class TimesheetController extends Controller
             // Log the actual error for debugging (but don't show to user)
             \Log::info('Timesheet management initializing: ' . $e->getMessage());
             
-            return view('timesheet_management', compact('employees', 'timesheets', 'shifts', 'leaveRequests', 'claims', 'leaveTypes', 'claimTypes', 'employeeStats', 'timesheetStats'));
+            return view('timesheet_management', compact('employees', 'timesheets', 'shifts', 'leaveRequests', 'claims', 'attendances', 'leaveTypes', 'claimTypes', 'employeeStats', 'timesheetStats'));
         }
     }
     

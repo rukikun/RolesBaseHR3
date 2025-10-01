@@ -15,12 +15,49 @@
         <p class="text-muted mb-0">Welcome back, {{ Auth::check() ? Auth::user()->name : 'Admin' }}! Here's what's happening with your HR system today.</p>
       </div>
     </div>
-    <nav aria-label="breadcrumb">
-      <ol class="breadcrumb mb-0">
-        <li class="breadcrumb-item"><a href="{{ route('dashboard') }}" class="text-decoration-none">Home</a></li>
-        <li class="breadcrumb-item active" aria-current="page">Admin Dashboard</li>
-      </ol>
-    </nav>
+    <div class="d-flex align-items-center">
+      <!-- Profile Dropdown -->
+      <div class="dropdown me-3">
+        <button class="btn btn-outline-primary dropdown-toggle" type="button" id="profileDropdown" data-bs-toggle="dropdown">
+          @if(Auth::user()->profile_picture)
+            <img src="{{ Storage::url(Auth::user()->profile_picture) }}" alt="Profile" class="rounded-circle me-2" width="24" height="24" style="object-fit: cover;">
+          @else
+            <i class="fas fa-user-circle me-2"></i>
+          @endif
+          {{ Auth::user()->name }}
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end">
+          <li><a class="dropdown-item" href="{{ route('admin.profile.index') }}">
+            <i class="fas fa-user me-2"></i>My Profile
+          </a></li>
+          <li><a class="dropdown-item" href="{{ route('admin.profile.change-password') }}">
+            <i class="fas fa-key me-2"></i>Change Password
+          </a></li>
+          @if(Auth::user()->isSuperAdmin())
+            <li><hr class="dropdown-divider"></li>
+            <li><a class="dropdown-item" href="{{ route('admin.profile.manage-admins') }}">
+              <i class="fas fa-users-cog me-2"></i>Manage Admins
+            </a></li>
+          @endif
+          <li><hr class="dropdown-divider"></li>
+          <li>
+            <form action="{{ route('logout') }}" method="POST" class="d-inline">
+              @csrf
+              <button type="submit" class="dropdown-item text-danger">
+                <i class="fas fa-sign-out-alt me-2"></i>Logout
+              </button>
+            </form>
+          </li>
+        </ul>
+      </div>
+      
+      <nav aria-label="breadcrumb">
+        <ol class="breadcrumb mb-0">
+          <li class="breadcrumb-item"><a href="{{ route('dashboard') }}" class="text-decoration-none">Home</a></li>
+          <li class="breadcrumb-item active" aria-current="page">Admin Dashboard</li>
+        </ol>
+      </nav>
+    </div>
   </div>
 </div>
 

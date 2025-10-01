@@ -1065,4 +1065,133 @@ class LeaveController extends Controller
     // Removed duplicate methods to fix redeclaration errors
 
     // Additional methods removed to prevent redeclaration errors
+
+    /**
+     * Show leave request details for admin API
+     */
+    public function showAdmin($id)
+    {
+        try {
+            $request = DB::table('leave_requests as lr')
+                ->leftJoin('employees as e', 'lr.employee_id', '=', 'e.id')
+                ->leftJoin('leave_types as lt', 'lr.leave_type_id', '=', 'lt.id')
+                ->leftJoin('employees as approver', 'lr.approved_by', '=', 'approver.id')
+                ->select(
+                    'lr.*',
+                    DB::raw("CONCAT(COALESCE(e.first_name, ''), ' ', COALESCE(e.last_name, '')) as employee_name"),
+                    'lt.name as leave_type_name',
+                    DB::raw("CONCAT(COALESCE(approver.first_name, ''), ' ', COALESCE(approver.last_name, '')) as approved_by_name")
+                )
+                ->where('lr.id', $id)
+                ->first();
+
+            if (!$request) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Leave request not found'
+                ], 404);
+            }
+
+            return response()->json([
+                'success' => true,
+                'request' => $request
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('Error in LeaveController@showAdmin: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to load leave request: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Approve leave request via API
+     */
+    public function approveAdmin($id)
+    {
+        try {
+            $request = DB::table('leave_requests')->where('id', $id)->first();
+            
+            if (!$request) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Leave request not found'
+                ], 404);
+            }
+
+            if ($request->status !== 'pending') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Leave request has already been processed'
+                ], 400);
+            }
+
+            DB::table('leave_requests')->where('id', $id)->update([
+                'status' => 'approved',
+                'approved_by' => 1, // Default admin ID - you might want to get this from Auth
+                'approved_at' => now(),
+                'updated_at' => now()
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Leave request approved successfully'
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('Error in LeaveController@approveAdmin: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to approve leave request: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Reject leave request via API
+     */
+    public function rejectAdmin($id)
+    {
+        try {
+            $request = DB::table('leave_requests')->where('id', $id)->first();
+            
+            if (!$request) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Leave request not found'
+                ], 404);
+            }
+
+            if ($request->status !== 'pending') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Leave request has already been processed'
+                ], 400);
+            }
+
+            DB::table('leave_requests')->where('id', $id)->update([
+                'status' => 'rejected',
+                'approved_by' => 1, // Default admin ID - you might want to get this from Auth
+                'approved_at' => now(),
+                'updated_at' => now()
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Leave request rejected successfully'
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('Error in LeaveController@rejectAdmin: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to reject leave request: ' . $e->getMessage()
+            ], 500);
+        }
+    }
 }

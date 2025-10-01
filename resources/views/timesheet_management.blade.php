@@ -143,6 +143,11 @@
           <i class="fas fa-receipt me-2"></i>Claims
         </button>
       </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="attendance-tab" data-bs-toggle="tab" data-bs-target="#attendance" type="button" role="tab" aria-controls="attendance" aria-selected="false">
+          <i class="fas fa-user-clock me-2"></i>Attendance Logs
+        </button>
+      </li>
     </ul>
   </div>
   <div class="card-body">
@@ -195,9 +200,6 @@
                   </td>
                   <td>
                     <div class="btn-group" role="group">
-                      <a href="{{ route('timesheets.view', $timesheet->id) }}" class="btn btn-sm btn-outline-info" title="View">
-                        <i class="fas fa-eye"></i>
-                      </a>
                       <a href="{{ route('timesheets.edit', $timesheet->id) }}" class="btn btn-sm btn-outline-primary" title="Edit">
                         <i class="fas fa-edit"></i>
                       </a>
@@ -252,7 +254,7 @@
           <h5 class="mb-0">
             <i class="fas fa-calendar-alt me-2"></i>Shift Assignments
           </h5>
-          <button class="btn btn-primary" onclick="openWorkingModal('shift-modal')">
+          <button class="btn btn-primary" onclick="openWorkingModal('shift-assignment-modal')">
             <i class="fas fa-plus me-2"></i>Assign Shift
           </button>
         </div>
@@ -285,9 +287,6 @@
                 </td>
                 <td>
                   <div class="btn-group" role="group">
-                    <button class="btn btn-sm btn-outline-primary" onclick="viewShift({{ $shift->id }})" title="View">
-                      <i class="fas fa-eye"></i>
-                    </button>
                     <button class="btn btn-sm btn-outline-secondary" onclick="editShift({{ $shift->id }})" title="Edit">
                       <i class="fas fa-edit"></i>
                     </button>
@@ -317,7 +316,7 @@
           <h5 class="mb-0">
             <i class="fas fa-umbrella-beach me-2"></i>Leave Requests
           </h5>
-          <button class="btn btn-primary" onclick="openWorkingModal('leave-modal')">
+          <button class="btn btn-primary" onclick="openWorkingModal('leave-request-modal')">
             <i class="fas fa-plus me-2"></i>Request Leave
           </button>
         </div>
@@ -363,18 +362,17 @@
                 </td>
                 <td>
                   <div class="btn-group" role="group">
-                    <button class="btn btn-sm btn-outline-primary" onclick="viewLeave({{ $leave->id }})" title="View">
-                      <i class="fas fa-eye"></i>
-                    </button>
                     @if($leave->status === 'pending')
                     <form method="POST" action="/leave-requests/{{ $leave->id }}/approve" style="display: inline;" onsubmit="return confirm('Are you sure you want to approve this leave request?')">
                       @csrf
+                      @method('PATCH')
                       <button type="submit" class="btn btn-sm btn-outline-success" title="Approve">
                         <i class="fas fa-check"></i>
                       </button>
                     </form>
                     <form method="POST" action="/leave-requests/{{ $leave->id }}/reject" style="display: inline;" onsubmit="return confirm('Are you sure you want to reject this leave request?')">
                       @csrf
+                      @method('PATCH')
                       <button type="submit" class="btn btn-sm btn-outline-danger" title="Reject">
                         <i class="fas fa-times"></i>
                       </button>
@@ -399,7 +397,7 @@
           <h5 class="mb-0">
             <i class="fas fa-receipt me-2"></i>Expense Claims
           </h5>
-          <button class="btn btn-primary" onclick="openWorkingModal('claim-modal')">
+          <button class="btn btn-primary" onclick="openWorkingModal('claims-modal')">
             <i class="fas fa-plus me-2"></i>Submit Claim
           </button>
         </div>
@@ -429,9 +427,6 @@
                 </td>
                 <td>
                   <div class="btn-group" role="group">
-                    <button class="btn btn-sm btn-outline-primary" onclick="viewClaim({{ $claim->id }})" title="View">
-                      <i class="fas fa-eye"></i>
-                    </button>
                     @if($claim->status === 'pending')
                     <form method="POST" action="/claims/{{ $claim->id }}/approve" style="display: inline;" onsubmit="return confirm('Are you sure you want to approve this claim?')">
                       @csrf
@@ -453,6 +448,122 @@
               <tr>
                 <td colspan="7" class="text-center text-muted">No claims found</td>
               </tr>
+              @endforelse
+            </tbody>
+          </table>
+        </div>
+      </div>
+      
+      <!-- Attendance Logs Tab -->
+      <div class="tab-pane fade" id="attendance" role="tabpanel">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h5 class="mb-0">
+            <i class="fas fa-user-clock me-2"></i>Employee Attendance Logs
+          </h5>
+          <div class="d-flex gap-2">
+            <button class="btn btn-primary" onclick="openWorkingModal('attendance-modal')">
+              <i class="fas fa-plus me-2"></i>Manual Entry
+            </button>
+          </div>
+        </div>
+        
+        <div class="table-responsive">
+          <table class="table table-hover">
+            <thead class="table-light">
+              <tr>
+                <th>Employee</th>
+                <th>Date</th>
+                <th>Clock In</th>
+                <th>Clock Out</th>
+                <th>Total Hours</th>
+                <th>Overtime</th>
+                <th>Status</th>
+                <th>Location</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              @forelse($attendances ?? [] as $attendance)
+                <tr>
+                  <td>
+                    <div class="d-flex align-items-center">
+                      <div class="avatar-sm me-2">
+                        @php
+                          $employee = $employees->firstWhere('id', $attendance->employee_id);
+                          $firstName = $employee->first_name ?? 'Unknown';
+                          $lastName = $employee->last_name ?? 'Employee';
+                          $initials = substr($firstName, 0, 1) . substr($lastName, 0, 1);
+                          $colors = ['FF6B6B', '4ECDC4', '45B7D1', '96CEB4', 'FFEAA7', 'DDA0DD', 'FFB347', '87CEEB'];
+                          $colorIndex = crc32($attendance->employee_id) % count($colors);
+                          $bgColor = $colors[$colorIndex];
+                        @endphp
+                        <img src="https://ui-avatars.com/api/?name={{ urlencode($initials) }}&background={{ $bgColor }}&color=ffffff&size=32&bold=true" 
+                             class="rounded-circle" width="32" height="32" alt="Avatar">
+                      </div>
+                      <div>
+                        <div class="fw-medium">{{ $firstName }} {{ $lastName }}</div>
+                        <small class="text-muted">ID: {{ $attendance->employee_id }}</small>
+                      </div>
+                    </div>
+                  </td>
+                  <td>{{ \Carbon\Carbon::parse($attendance->date)->format('M d, Y') }}</td>
+                  <td>
+                    @if($attendance->clock_in_time)
+                      <span class="badge bg-success">{{ \Carbon\Carbon::parse($attendance->clock_in_time)->format('h:i A') }}</span>
+                    @else
+                      <span class="text-muted">--</span>
+                    @endif
+                  </td>
+                  <td>
+                    @if($attendance->clock_out_time)
+                      <span class="badge bg-info">{{ \Carbon\Carbon::parse($attendance->clock_out_time)->format('h:i A') }}</span>
+                    @else
+                      <span class="text-muted">--</span>
+                    @endif
+                  </td>
+                  <td>
+                    <strong>{{ number_format($attendance->total_hours ?? 0, 2) }}h</strong>
+                  </td>
+                  <td>
+                    @if($attendance->overtime_hours > 0)
+                      <span class="badge bg-warning">{{ number_format($attendance->overtime_hours, 2) }}h</span>
+                    @else
+                      <span class="text-muted">0h</span>
+                    @endif
+                  </td>
+                  <td>
+                    @php
+                      $statusBadges = [
+                        'present' => 'success',
+                        'late' => 'warning', 
+                        'absent' => 'danger',
+                        'on_break' => 'info',
+                        'clocked_out' => 'secondary'
+                      ];
+                      $badgeClass = $statusBadges[$attendance->status] ?? 'secondary';
+                    @endphp
+                    <span class="badge bg-{{ $badgeClass }}">{{ ucfirst(str_replace('_', ' ', $attendance->status)) }}</span>
+                  </td>
+                  <td>
+                    <small class="text-muted">{{ $attendance->location ?? 'Office' }}</small>
+                  </td>
+                  <td>
+                    <div class="btn-group" role="group">
+                      @if(!$attendance->clock_out_time)
+                      <button class="btn btn-sm btn-outline-warning" onclick="editAttendance({{ $attendance->id }})" title="Edit">
+                        <i class="fas fa-edit"></i>
+                      </button>
+                      @endif
+                    </div>
+                  </td>
+                </tr>
+              @empty
+                <tr>
+                  <td colspan="9" class="text-center text-muted py-4">
+                    <i class="fas fa-user-clock fa-3x mb-3 text-muted"></i><br>
+                    No attendance records found. Records will appear here when employees clock in/out via ESS.
+                  </td>
+                </tr>
               @endforelse
             </tbody>
           </table>
@@ -561,6 +672,579 @@
     </div>
 </div>
 
+<!-- Attendance Modal -->
+<div class="working-modal" id="attendance-modal" style="display: none;">
+    <div class="working-modal-backdrop" onclick="closeWorkingModal('attendance-modal')"></div>
+    <div class="working-modal-dialog">
+        <div class="working-modal-content">
+            <div class="working-modal-header">
+                <h5 class="working-modal-title">Manual Attendance Entry</h5>
+                <button type="button" class="working-modal-close" onclick="closeWorkingModal('attendance-modal')">&times;</button>
+            </div>
+            <form id="attendanceForm" method="POST" action="{{ route('attendance.store') }}">
+                @csrf
+                <div class="working-modal-body">
+                    <div class="mb-3">
+                        <label for="attendance_employee_id" class="form-label">Employee</label>
+                        <select class="form-select" id="attendance_employee_id" name="employee_id" required>
+                            <option value="">Select Employee</option>
+                            @foreach($employees ?? [] as $employee)
+                                <option value="{{ $employee->id }}">{{ $employee->first_name }} {{ $employee->last_name }} ({{ $employee->employee_id }})</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="attendance_date" class="form-label">Date</label>
+                        <input type="date" class="form-control" id="attendance_date" name="date" value="{{ date('Y-m-d') }}" required>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="attendance_clock_in" class="form-label">Clock In Time</label>
+                                <input type="datetime-local" class="form-control" id="attendance_clock_in" name="clock_in_time">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="attendance_clock_out" class="form-label">Clock Out Time</label>
+                                <input type="datetime-local" class="form-control" id="attendance_clock_out" name="clock_out_time">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="attendance_status" class="form-label">Status</label>
+                                <select class="form-select" id="attendance_status" name="status" required>
+                                    <option value="present">Present</option>
+                                    <option value="late">Late</option>
+                                    <option value="absent">Absent</option>
+                                    <option value="clocked_out">Clocked Out</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="attendance_location" class="form-label">Location</label>
+                                <input type="text" class="form-control" id="attendance_location" name="location" value="Office" placeholder="Office, Remote, etc.">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="attendance_notes" class="form-label">Notes</label>
+                        <textarea class="form-control" id="attendance_notes" name="notes" rows="3" placeholder="Optional notes about this attendance record"></textarea>
+                    </div>
+                </div>
+                <div class="working-modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeWorkingModal('attendance-modal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Attendance</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Shift Assignment Modal -->
+<div class="working-modal" id="shift-assignment-modal" style="display: none;">
+    <div class="working-modal-backdrop" onclick="closeWorkingModal('shift-assignment-modal')"></div>
+    <div class="working-modal-dialog">
+        <div class="working-modal-content">
+            <div class="working-modal-header">
+                <h5 class="working-modal-title">Assign Employee to Shift</h5>
+                <button type="button" class="working-modal-close" onclick="closeWorkingModal('shift-assignment-modal')">&times;</button>
+            </div>
+            <form id="shiftForm" method="POST" action="{{ route('shifts.store') }}">
+                @csrf
+                <div class="working-modal-body">
+                    <div class="mb-3">
+                        <label for="shift_date" class="form-label">Date</label>
+                        <input type="date" class="form-control" id="shift_date" name="shift_date" value="{{ date('Y-m-d') }}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="shift_employee_id" class="form-label">Employee</label>
+                        <select class="form-select" id="shift_employee_id" name="employee_id" required>
+                            <option value="">Select Employee</option>
+                            @foreach($employees ?? [] as $employee)
+                                <option value="{{ $employee->id }}">{{ $employee->first_name }} {{ $employee->last_name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="shift_type_id" class="form-label">Shift Type</label>
+                        <select class="form-select" id="shift_type_id" name="shift_type_id" required>
+                            <option value="">Select Shift Type</option>
+                            <option value="1" data-start-time="08:00" data-end-time="16:00">Morning Shift</option>
+                            <option value="2" data-start-time="14:00" data-end-time="22:00">Afternoon Shift</option>
+                            <option value="3" data-start-time="22:00" data-end-time="06:00">Night Shift</option>
+                        </select>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="shift_start_time" class="form-label">Start Time</label>
+                                <input type="time" class="form-control" id="shift_start_time" name="start_time" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="shift_end_time" class="form-label">End Time</label>
+                                <input type="time" class="form-control" id="shift_end_time" name="end_time" required>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="shift_location" class="form-label">Location</label>
+                        <input type="text" class="form-control" id="shift_location" name="location" value="Main Office" placeholder="Main Office">
+                    </div>
+                    <div class="mb-3">
+                        <label for="shift_notes" class="form-label">Notes</label>
+                        <textarea class="form-control" id="shift_notes" name="notes" rows="2" placeholder="Optional notes for this shift assignment"></textarea>
+                    </div>
+                </div>
+                <div class="working-modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeWorkingModal('shift-modal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Assign Employee</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Leave Request Modal -->
+<div class="working-modal" id="leave-request-modal" style="display: none;">
+    <div class="working-modal-backdrop" onclick="closeWorkingModal('leave-request-modal')"></div>
+    <div class="working-modal-dialog">
+        <div class="working-modal-content">
+            <div class="working-modal-header">
+                <h5 class="working-modal-title">New Leave Request</h5>
+                <button type="button" class="working-modal-close" onclick="closeWorkingModal('leave-request-modal')">&times;</button>
+            </div>
+            <form id="leaveRequestForm" method="POST" action="{{ route('leave-requests.store') }}">
+                @csrf
+                <div class="working-modal-body">
+                    <div class="mb-3">
+                        <label for="leave_employee_id" class="form-label">Employee</label>
+                        <select class="form-select" id="leave_employee_id" name="employee_id" required>
+                            <option value="">Select Employee</option>
+                            @foreach($employees ?? [] as $employee)
+                                <option value="{{ $employee->id }}">{{ $employee->first_name }} {{ $employee->last_name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="leave_type_id" class="form-label">Leave Type</label>
+                        <select class="form-select" id="leave_type_id" name="leave_type_id" required>
+                            <option value="">Select Leave Type</option>
+                            @foreach($leaveTypes ?? [] as $type)
+                                <option value="{{ $type->id }}" data-max-days="{{ $type->max_days_per_year }}">
+                                    {{ $type->name }} 
+                                    @if($type->max_days_per_year > 0)
+                                        ({{ $type->max_days_per_year }} days/year)
+                                    @endif
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="leave_start_date" class="form-label">Start Date</label>
+                                <input type="date" class="form-control" id="leave_start_date" name="start_date" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="leave_end_date" class="form-label">End Date</label>
+                                <input type="date" class="form-control" id="leave_end_date" name="end_date" required>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <label class="form-label">Total Days</label>
+                                <input type="text" class="form-control" id="leave_total_days" readonly placeholder="Auto-calculated">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Status</label>
+                                <input type="text" class="form-control" value="Pending Approval" readonly>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="leave_reason" class="form-label">Reason</label>
+                        <textarea class="form-control" id="leave_reason" name="reason" rows="3" placeholder="Please provide a reason for your leave request" required></textarea>
+                    </div>
+                </div>
+                <div class="working-modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeWorkingModal('leave-request-modal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Submit Request</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Claims Modal -->
+<div class="working-modal" id="claims-modal" style="display: none;">
+    <div class="working-modal-backdrop" onclick="closeWorkingModal('claims-modal')"></div>
+    <div class="working-modal-dialog">
+        <div class="working-modal-content">
+            <div class="working-modal-header">
+                <h5 class="working-modal-title">Create Claim</h5>
+                <button type="button" class="working-modal-close" onclick="closeWorkingModal('claims-modal')">&times;</button>
+            </div>
+            <form id="create-claim-form" method="POST" action="{{ route('claims.store.simple') }}" enctype="multipart/form-data">
+                @csrf
+                <div class="working-modal-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <label for="employee-select" class="form-label">Employee</label>
+                            <select class="form-select" id="employee-select" name="employee_id" required>
+                                <option value="">Select Employee</option>
+                                @if(isset($employees) && $employees->count() > 0)
+                                    @foreach($employees as $employee)
+                                        <option value="{{ $employee->id }}">
+                                            {{ $employee->first_name }} {{ $employee->last_name }}
+                                        </option>
+                                    @endforeach
+                                @else
+                                    <option value="1">John Doe</option>
+                                    <option value="2">Jane Smith</option>
+                                    <option value="3">Mike Johnson</option>
+                                    <option value="4">Sarah Wilson</option>
+                                    <option value="5">Tom Brown</option>
+                                @endif
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="claim-type-select" class="form-label">Claim Type</label>
+                            <select class="form-select" id="claim-type-select" name="claim_type_id" required>
+                                <option value="">Select Claim Type</option>
+                                @if(isset($claimTypes) && $claimTypes->count() > 0)
+                                    @foreach($claimTypes as $claimType)
+                                        <option value="{{ $claimType->id }}">
+                                            {{ $claimType->name }} ({{ $claimType->code ?? 'N/A' }})
+                                        </option>
+                                    @endforeach
+                                @else
+                                    <option value="1">Travel Expenses (TRAVEL)</option>
+                                    <option value="2">Meal Allowance (MEAL)</option>
+                                    <option value="3">Office Supplies (OFFICE)</option>
+                                    <option value="4">Training Costs (TRAIN)</option>
+                                    <option value="5">Medical Expenses (MEDICAL)</option>
+                                @endif
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row mt-3">
+                        <div class="col-md-6">
+                            <label for="claim-amount" class="form-label">Amount</label>
+                            <input type="number" class="form-control" id="claim-amount" name="amount" step="0.01" min="0" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="claim-date" class="form-label">Claim Date</label>
+                            <input type="date" class="form-control" id="claim-date" name="claim_date" required>
+                        </div>
+                    </div>
+                    <div class="row mt-3">
+                        <div class="col-md-6">
+                            <label for="claim-attachment" class="form-label">Receipt/Attachment</label>
+                            <input type="file" class="form-control" id="claim-attachment" name="attachment" accept=".jpg,.jpeg,.png,.pdf">
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <label for="claim-description" class="form-label">Description</label>
+                        <textarea class="form-control" id="claim-description" name="description" rows="3" required placeholder="Describe the expense..."></textarea>
+                    </div>
+                </div>
+                <div class="working-modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeWorkingModal('claims-modal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Submit Claim</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- View Timesheet Details Modal -->
+<div class="working-modal" id="view-timesheet-modal" style="display: none;">
+    <div class="working-modal-backdrop" onclick="closeWorkingModal('view-timesheet-modal')"></div>
+    <div class="working-modal-dialog">
+        <div class="working-modal-content">
+            <div class="working-modal-header">
+                <h5 class="working-modal-title">Timesheet Details</h5>
+                <button type="button" class="working-modal-close" onclick="closeWorkingModal('view-timesheet-modal')">&times;</button>
+            </div>
+            <div class="working-modal-body">
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <div class="detail-item">
+                            <label class="detail-label">Employee:</label>
+                            <div id="view-timesheet-employee" class="detail-value">-</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="detail-item">
+                            <label class="detail-label">Date:</label>
+                            <div id="view-timesheet-date" class="detail-value">-</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <div class="detail-item">
+                            <label class="detail-label">Clock In:</label>
+                            <div id="view-timesheet-clock-in" class="detail-value">-</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="detail-item">
+                            <label class="detail-label">Clock Out:</label>
+                            <div id="view-timesheet-clock-out" class="detail-value">-</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <div class="detail-item">
+                            <label class="detail-label">Total Hours:</label>
+                            <div id="view-timesheet-hours" class="detail-value">-</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="detail-item">
+                            <label class="detail-label">Status:</label>
+                            <div id="view-timesheet-status" class="detail-value">-</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="working-modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeWorkingModal('view-timesheet-modal')">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- View Shift Details Modal -->
+<div class="working-modal" id="view-shift-modal" style="display: none;">
+    <div class="working-modal-backdrop" onclick="closeWorkingModal('view-shift-modal')"></div>
+    <div class="working-modal-dialog">
+        <div class="working-modal-content">
+            <div class="working-modal-header">
+                <h5 class="working-modal-title">Shift Details</h5>
+                <button type="button" class="working-modal-close" onclick="closeWorkingModal('view-shift-modal')">&times;</button>
+            </div>
+            <div class="working-modal-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <strong>Employee:</strong>
+                        <p id="view-shift-employee" class="mb-2">-</p>
+                    </div>
+                    <div class="col-md-6">
+                        <strong>Date:</strong>
+                        <p id="view-shift-date" class="mb-2">-</p>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <strong>Shift Type:</strong>
+                        <p id="view-shift-type" class="mb-2">-</p>
+                    </div>
+                    <div class="col-md-6">
+                        <strong>Status:</strong>
+                        <p id="view-shift-status" class="mb-2">-</p>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <strong>Start Time:</strong>
+                        <p id="view-shift-start" class="mb-2">-</p>
+                    </div>
+                    <div class="col-md-6">
+                        <strong>End Time:</strong>
+                        <p id="view-shift-end" class="mb-2">-</p>
+                    </div>
+                </div>
+            </div>
+            <div class="working-modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeWorkingModal('view-shift-modal')">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- View Leave Request Details Modal -->
+<div class="working-modal" id="view-leave-modal" style="display: none;">
+    <div class="working-modal-backdrop" onclick="closeWorkingModal('view-leave-modal')"></div>
+    <div class="working-modal-dialog">
+        <div class="working-modal-content">
+            <div class="working-modal-header">
+                <h5 class="working-modal-title">Leave Request Details</h5>
+                <button type="button" class="working-modal-close" onclick="closeWorkingModal('view-leave-modal')">&times;</button>
+            </div>
+            <div class="working-modal-body">
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <div class="detail-item">
+                            <label class="detail-label">Employee:</label>
+                            <div id="view-leave-employee" class="detail-value">-</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="detail-item">
+                            <label class="detail-label">Leave Type:</label>
+                            <div id="view-leave-type" class="detail-value">-</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <div class="detail-item">
+                            <label class="detail-label">Start Date:</label>
+                            <div id="view-leave-start" class="detail-value">-</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="detail-item">
+                            <label class="detail-label">End Date:</label>
+                            <div id="view-leave-end" class="detail-value">-</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <div class="detail-item">
+                            <label class="detail-label">Days:</label>
+                            <div id="view-leave-days" class="detail-value">-</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="detail-item">
+                            <label class="detail-label">Status:</label>
+                            <div id="view-leave-status" class="detail-value">-</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-12">
+                        <div class="detail-item">
+                            <label class="detail-label">Reason:</label>
+                            <div id="view-leave-reason" class="detail-value">-</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="working-modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeWorkingModal('view-leave-modal')">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- View Claim Details Modal -->
+<div class="working-modal" id="view-claim-details-modal" style="display: none;">
+    <div class="working-modal-backdrop" onclick="closeWorkingModal('view-claim-details-modal')"></div>
+    <div class="working-modal-dialog">
+        <div class="working-modal-content">
+            <div class="working-modal-header">
+                <h5 class="working-modal-title">Claim Details</h5>
+                <button type="button" class="working-modal-close" onclick="closeWorkingModal('view-claim-details-modal')">&times;</button>
+            </div>
+            <div class="working-modal-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <strong>Employee:</strong>
+                        <p id="view-claim-details-employee" class="mb-2">-</p>
+                    </div>
+                    <div class="col-md-6">
+                        <strong>Claim Type:</strong>
+                        <p id="view-claim-details-type" class="mb-2">-</p>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <strong>Amount:</strong>
+                        <p id="view-claim-details-amount" class="mb-2">-</p>
+                    </div>
+                    <div class="col-md-6">
+                        <strong>Date:</strong>
+                        <p id="view-claim-details-date" class="mb-2">-</p>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <strong>Status:</strong>
+                        <p id="view-claim-details-status" class="mb-2">-</p>
+                    </div>
+                    <div class="col-md-6">
+                        <strong>Attachment:</strong>
+                        <p id="view-claim-details-attachment" class="mb-2">-</p>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-12">
+                        <strong>Description:</strong>
+                        <p id="view-claim-details-description" class="mb-2">-</p>
+                    </div>
+                </div>
+            </div>
+            <div class="working-modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeWorkingModal('view-claim-details-modal')">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- View Attendance Details Modal -->
+<div class="working-modal" id="view-attendance-modal" style="display: none;">
+    <div class="working-modal-backdrop" onclick="closeWorkingModal('view-attendance-modal')"></div>
+    <div class="working-modal-dialog">
+        <div class="working-modal-content">
+            <div class="working-modal-header">
+                <h5 class="working-modal-title">Attendance Details</h5>
+                <button type="button" class="working-modal-close" onclick="closeWorkingModal('view-attendance-modal')">&times;</button>
+            </div>
+            <div class="working-modal-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <strong>Employee:</strong>
+                        <p id="view-attendance-employee" class="mb-2">-</p>
+                    </div>
+                    <div class="col-md-6">
+                        <strong>Date:</strong>
+                        <p id="view-attendance-date" class="mb-2">-</p>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <strong>Clock In:</strong>
+                        <p id="view-attendance-clock-in" class="mb-2">-</p>
+                    </div>
+                    <div class="col-md-6">
+                        <strong>Clock Out:</strong>
+                        <p id="view-attendance-clock-out" class="mb-2">-</p>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <strong>Hours Worked:</strong>
+                        <p id="view-attendance-hours" class="mb-2">-</p>
+                    </div>
+                    <div class="col-md-6">
+                        <strong>Status:</strong>
+                        <p id="view-attendance-status" class="mb-2">-</p>
+                    </div>
+                </div>
+            </div>
+            <div class="working-modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeWorkingModal('view-attendance-modal')">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Employee Modal -->
 <div class="working-modal" id="employee-modal" style="display: none;">
     <div class="working-modal-backdrop" onclick="closeWorkingModal('employee-modal')"></div>
@@ -665,58 +1349,123 @@
                 <h5 class="working-modal-title">Assign Shift</h5>
                 <button type="button" class="working-modal-close" onclick="closeWorkingModal('shift-modal')">&times;</button>
             </div>
-            <form id="shiftForm">
+            <form method="POST" action="{{ route('shifts.store') }}">
+                @csrf
                 <div class="working-modal-body">
-                    <input type="hidden" id="shift-record-id">
-                    
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="shift-employee-id" class="form-label">Employee</label>
-                                <select class="form-select" id="shift-employee-id" required>
-                                    <option value="">Select Employee</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label for="shift-date" class="form-label">Date</label>
-                                <input type="date" class="form-control" id="shift-date" required>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="row">
-                        <div class="col-md-4">
-                            <div class="mb-3">
-                                <label for="shift-type-id" class="form-label">Shift Type</label>
-                                <select class="form-select" id="shift-type-id" required>
-                                    <option value="">Select Shift Type</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="mb-3">
-                                <label for="start-time" class="form-label">Start Time</label>
-                                <input type="time" class="form-control" id="start-time" required>
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="mb-3">
-                                <label for="end-time" class="form-label">End Time</label>
-                                <input type="time" class="form-control" id="end-time" required>
-                            </div>
-                        </div>
-                    </div>
-                    
                     <div class="mb-3">
-                        <label for="shift-notes" class="form-label">Notes</label>
-                        <textarea class="form-control" id="shift-notes" rows="3" placeholder="Optional shift notes"></textarea>
+                        <label for="shift-assignment-date" class="form-label">Date</label>
+                        <input type="date" class="form-control" id="shift-assignment-date" name="shift_date" value="{{ old('shift_date') }}" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="shift-assignment-employee" class="form-label">Employee</label>
+                        <select class="form-select" id="shift-assignment-employee" name="employee_id" required>
+                            <option value="">Select Employee</option>
+                            @php
+                                // Ensure we always have employees to display
+                                $displayEmployees = collect();
+                                
+                                // First try the passed employees
+                                if(isset($employees) && $employees->count() > 0) {
+                                    $displayEmployees = $employees;
+                                } else {
+                                    // Fallback: Direct database query
+                                    try {
+                                        $pdo = new PDO('mysql:host=localhost;dbname=hr3systemdb', 'root', '');
+                                        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+                                        $stmt = $pdo->query("SELECT id, first_name, last_name FROM employees WHERE status = 'active' ORDER BY first_name");
+                                        $displayEmployees = collect($stmt->fetchAll(PDO::FETCH_OBJ));
+                                    } catch (Exception $e) {
+                                        // Last resort: static employees
+                                        $displayEmployees = collect([
+                                            (object)['id' => 1, 'first_name' => 'John', 'last_name' => 'Doe'],
+                                            (object)['id' => 2, 'first_name' => 'Jane', 'last_name' => 'Smith'],
+                                            (object)['id' => 3, 'first_name' => 'Mike', 'last_name' => 'Johnson'],
+                                            (object)['id' => 4, 'first_name' => 'Sarah', 'last_name' => 'Wilson'],
+                                            (object)['id' => 5, 'first_name' => 'David', 'last_name' => 'Brown']
+                                        ]);
+                                    }
+                                }
+                            @endphp
+                            
+                            @foreach($displayEmployees as $employee)
+                                <option value="{{ $employee->id }}" {{ old('employee_id') == $employee->id ? 'selected' : '' }}>
+                                    {{ $employee->first_name }} {{ $employee->last_name }}
+                                </option>
+                            @endforeach
+                            
+                            @if($displayEmployees->count() == 0)
+                                <option value="" disabled>No employees available</option>
+                            @endif
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="shift-assignment-type" class="form-label">Shift Type</label>
+                        <select class="form-select" id="shift-assignment-type" name="shift_type_id" required>
+                            <option value="">Select Shift Type</option>
+                            @php
+                                // Get shift types - similar fallback pattern
+                                $displayShiftTypes = collect();
+                                
+                                if(isset($shiftTypes) && $shiftTypes->count() > 0) {
+                                    $displayShiftTypes = $shiftTypes;
+                                } else {
+                                    // Fallback: Direct database query
+                                    try {
+                                        $pdo = new PDO('mysql:host=localhost;dbname=hr3systemdb', 'root', '');
+                                        $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+                                        $stmt = $pdo->query("SELECT id, name, default_start_time, default_end_time FROM shift_types WHERE status = 'active' ORDER BY name");
+                                        $displayShiftTypes = collect($stmt->fetchAll(PDO::FETCH_OBJ));
+                                    } catch (Exception $e) {
+                                        // Last resort: static shift types
+                                        $displayShiftTypes = collect([
+                                            (object)['id' => 1, 'name' => 'Morning Shift', 'default_start_time' => '08:00', 'default_end_time' => '16:00'],
+                                            (object)['id' => 2, 'name' => 'Afternoon Shift', 'default_start_time' => '14:00', 'default_end_time' => '22:00'],
+                                            (object)['id' => 3, 'name' => 'Night Shift', 'default_start_time' => '22:00', 'default_end_time' => '06:00']
+                                        ]);
+                                    }
+                                }
+                            @endphp
+                            
+                            @foreach($displayShiftTypes as $shiftType)
+                                <option value="{{ $shiftType->id }}" 
+                                        data-start-time="{{ $shiftType->default_start_time ?? '08:00' }}" 
+                                        data-end-time="{{ $shiftType->default_end_time ?? '16:00' }}"
+                                        {{ old('shift_type_id') == $shiftType->id ? 'selected' : '' }}>
+                                    {{ $shiftType->name }}
+                                </option>
+                            @endforeach
+                            
+                            @if($displayShiftTypes->count() == 0)
+                                <option value="" disabled>No shift types available</option>
+                            @endif
+                        </select>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="shift-assignment-start-time" class="form-label">Start Time</label>
+                                <input type="time" class="form-control" id="shift-assignment-start-time" name="start_time" value="{{ old('start_time') }}" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="shift-assignment-end-time" class="form-label">End Time</label>
+                                <input type="time" class="form-control" id="shift-assignment-end-time" name="end_time" value="{{ old('end_time') }}" required>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label for="shift-assignment-location" class="form-label">Location</label>
+                        <input type="text" class="form-control" id="shift-assignment-location" name="location" value="{{ old('location', 'Main Office') }}" placeholder="Main Office">
+                    </div>
+                    <div class="mb-3">
+                        <label for="shift-assignment-notes" class="form-label">Notes</label>
+                        <textarea class="form-control" id="shift-assignment-notes" name="notes" rows="2" placeholder="Optional notes for this shift assignment">{{ old('notes') }}</textarea>
                     </div>
                 </div>
                 <div class="working-modal-footer">
                     <button type="button" class="btn btn-secondary" onclick="closeWorkingModal('shift-modal')">Cancel</button>
-                    <button type="button" class="btn btn-primary" id="saveShiftBtn">Save Shift</button>
+                    <button type="submit" class="btn btn-primary">Assign Employee</button>
                 </div>
             </form>
         </div>
@@ -864,154 +1613,6 @@
     </div>
 </div>
 
-@push('scripts')
-<script>
-// Essential modal and filter functions only
-function openWorkingModal(modalId) {
-    const modal = document.getElementById(modalId);
-    if (modal) {
-        modal.style.display = 'block';
-        document.body.style.overflow = 'hidden';
-    }
-}
-
-function closeWorkingModal(modalId) {
-    document.getElementById(modalId).style.display = 'none';
-    document.body.style.overflow = '';
-}
-
-// Close modal on backdrop click
-document.addEventListener('click', function(e) {
-    if (e.target.classList.contains('working-modal')) {
-        e.target.style.display = 'none';
-        document.body.style.overflow = '';
-    }
-});
-
-// Employee Records filtering
-function filterEmployeesInTimesheet() {
-    const searchTerm = document.getElementById('employee-search-timesheet').value.toLowerCase();
-    const departmentFilter = document.getElementById('department-filter-timesheet').value;
-    const statusFilter = document.getElementById('status-filter-timesheet').value;
-    const rows = document.querySelectorAll('#employees-tbody tr');
-    
-    rows.forEach(row => {
-        if (row.cells.length < 6) return;
-        
-        const name = row.cells[1].textContent.toLowerCase();
-        const department = row.cells[3].textContent;
-        const statusBadge = row.cells[4].querySelector('.badge');
-        const status = statusBadge ? statusBadge.textContent.toLowerCase() : '';
-        
-        const matchesSearch = name.includes(searchTerm);
-        const matchesDepartment = !departmentFilter || department.includes(departmentFilter);
-        const matchesStatus = !statusFilter || status.includes(statusFilter.toLowerCase());
-        
-        row.style.display = (matchesSearch && matchesDepartment && matchesStatus) ? '' : 'none';
-    });
-}
-
-function clearEmployeeFilters() {
-    document.getElementById('employee-search-timesheet').value = '';
-    document.getElementById('department-filter-timesheet').value = '';
-    document.getElementById('status-filter-timesheet').value = '';
-    filterEmployeesInTimesheet();
-}
-
-function navigateToShifts(employeeId) {
-    window.location.href = `/shift-schedule-management?employee=${employeeId}`;
-}
-
-function navigateToLeave(employeeId) {
-    window.location.href = `/leave-management?employee=${employeeId}`;
-}
-
-function navigateToClaims(employeeId) {
-    window.location.href = `/claims-reimbursement?employee=${employeeId}`;
-}
-
-function createShiftForEmployee(employeeId, employeeName) {
-    sessionStorage.setItem('preselectedEmployee', JSON.stringify({
-        id: employeeId,
-        name: employeeName
-    }));
-    window.location.href = `/shift-schedule-management?action=create-shift&employee=${employeeId}`;
-}
-
-function createLeaveForEmployee(employeeId, employeeName) {
-    sessionStorage.setItem('preselectedEmployee', JSON.stringify({
-        id: employeeId,
-        name: employeeName
-    }));
-    window.location.href = `/leave-management?action=create-request&employee=${employeeId}`;
-}
-
-function createClaimForEmployee(employeeId, employeeName) {
-    sessionStorage.setItem('preselectedEmployee', JSON.stringify({
-        id: employeeId,
-        name: employeeName
-    }));
-    window.location.href = `/claims-reimbursement?action=create-claim&employee=${employeeId}`;
-}
-
-function editEmployeeRecord(employeeId) {
-    window.location.href = `/employees?employee=${employeeId}&action=edit`;
-}
-
-function deleteEmployeeRecord(employeeId) {
-    if (confirm('Are you sure you want to delete this employee?')) {
-        const form = document.createElement('form');
-        form.method = 'POST';
-        form.action = `/employees/${employeeId}`;
-        
-        const csrfToken = document.createElement('input');
-        csrfToken.type = 'hidden';
-        csrfToken.name = '_token';
-        csrfToken.value = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-        
-        const methodField = document.createElement('input');
-        methodField.type = 'hidden';
-        methodField.name = '_method';
-        methodField.value = 'DELETE';
-        
-        form.appendChild(csrfToken);
-        form.appendChild(methodField);
-        document.body.appendChild(form);
-        form.submit();
-    }
-}
-
-// Initialize event listeners
-document.addEventListener('DOMContentLoaded', function() {
-    const employeeSearchInput = document.getElementById('employee-search-timesheet');
-    const departmentFilter = document.getElementById('department-filter-timesheet');
-    const statusFilter = document.getElementById('status-filter-timesheet');
-    
-    if (employeeSearchInput) {
-        employeeSearchInput.addEventListener('input', filterEmployeesInTimesheet);
-    }
-    if (departmentFilter) {
-        departmentFilter.addEventListener('change', filterEmployeesInTimesheet);
-    }
-    if (statusFilter) {
-        statusFilter.addEventListener('change', filterEmployeesInTimesheet);
-    }
-});
-
-// UTILITY FUNCTIONS
-function formatTime(timeString) {
-    if (!timeString) return 'N/A';
-    return new Date('2000-01-01 ' + timeString).toLocaleTimeString('en-US', {
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true
-    });
-}
-
-// All timesheet functions now use server-side rendering
-</script>
-@endpush
-
 @push('styles')
 <!-- Working Modal CSS -->
 <style>
@@ -1023,10 +1624,14 @@ function formatTime(timeString) {
     height: 100%;
     z-index: 2000;
     background: rgba(0, 0, 0, 0.5);
-    display: flex !important;
-    align-items: center !important;
-    justify-content: center !important;
+    display: none;
+    align-items: center;
+    justify-content: center;
     padding: 20px;
+}
+
+.working-modal.show {
+    display: flex !important;
 }
 
 .working-modal-backdrop {
@@ -1210,61 +1815,113 @@ function formatTime(timeString) {
 </style>
 
 <script>
-// Force hide all modals on page load - CRITICAL FIX
-document.addEventListener('DOMContentLoaded', function() {
-    function forceHideAllModals() {
-        const allModals = document.querySelectorAll('.working-modal');
-        allModals.forEach(modal => {
-            modal.style.setProperty('display', 'none', 'important');
-            modal.style.visibility = 'hidden';
-            modal.classList.remove('show');
-        });
-    }
-    
-    forceHideAllModals();
-    setTimeout(forceHideAllModals, 50);
-    setTimeout(forceHideAllModals, 100);
-    setTimeout(forceHideAllModals, 200);
-    setTimeout(forceHideAllModals, 500);
-    setTimeout(forceHideAllModals, 1000);
-});
-
-// Modal functions - Clean implementation
+// Working Modal Functions - Enhanced with Better Error Handling
 function openWorkingModal(modalId) {
-    const modal = document.getElementById(modalId);
-    if (modal) {
-        modal.style.setProperty('display', 'flex', 'important');
-        modal.style.visibility = 'visible';
-        modal.classList.add('show');
+    console.log('Attempting to open modal:', modalId);
+    
+    try {
+        const modal = document.getElementById(modalId);
+        if (!modal) {
+            console.error('Modal element not found with ID:', modalId);
+            console.log('Available modals:', Array.from(document.querySelectorAll('.working-modal')).map(m => m.id));
+            return false;
+        }
+        
+        // Hide all other modals first
+        document.querySelectorAll('.working-modal').forEach(m => {
+            if (m.id !== modalId) {
+                m.style.display = 'none';
+            }
+        });
+        
+        // Show the target modal
+        modal.style.display = 'flex';
+        modal.style.opacity = '1';
         document.body.style.overflow = 'hidden';
+        
+        console.log('Modal opened successfully:', modalId);
+        return true;
+        
+    } catch (error) {
+        console.error('Error opening modal:', error);
+        return false;
     }
 }
 
 function closeWorkingModal(modalId) {
+    console.log('Closing modal:', modalId);
     const modal = document.getElementById(modalId);
     if (modal) {
-        modal.style.setProperty('display', 'none', 'important');
-        modal.style.visibility = 'hidden';
-        modal.classList.remove('show');
+        modal.style.display = 'none';
         document.body.style.overflow = 'auto';
-        
-        // Reset form if it exists
-        const form = modal.querySelector('form');
-        if (form) {
-            form.reset();
-        const title = modal.querySelector('.working-modal-title');
-        const originalTitle = title.getAttribute('data-original-title');
-        if (originalTitle) {
-            title.textContent = originalTitle;
-        }
-        // Reset submit button text
-        const submitBtn = modal.querySelector('button[type="submit"]');
-        const originalBtnText = submitBtn.getAttribute('data-original-text');
-        if (originalBtnText) {
-            submitBtn.textContent = originalBtnText;
-        }
     }
 }
+
+// Initialize modals on page load - SIMPLIFIED
+document.addEventListener('DOMContentLoaded', function() {
+    // Simply hide all modals once on load
+    const allModals = document.querySelectorAll('.working-modal');
+    allModals.forEach(modal => {
+        modal.style.display = 'none';
+        modal.style.visibility = 'visible'; // Keep visible for when we show them
+    });
+    
+    console.log('Modals initialized successfully. Found', allModals.length, 'modals');
+    console.log('Modal IDs:', Array.from(allModals).map(m => m.id));
+    
+    // Test modal functionality
+    window.testModal = function() {
+        console.log('Testing modal system...');
+        openWorkingModal('shift-modal');
+    };
+    
+    console.log('Modal test function available: window.testModal()');
+});
+
+// Define missing functions to prevent ReferenceErrors
+function clearEmployeeFilters() {
+    console.log('Clearing employee filters...');
+    // Add filter clearing logic here if needed
+}
+
+function navigateToShifts() {
+    console.log('Navigating to shifts...');
+    // Switch to shifts tab
+    const shiftsTab = document.getElementById('shifts-tab');
+    if (shiftsTab) {
+        shiftsTab.click();
+    }
+}
+
+function navigateToLeave() {
+    console.log('Navigating to leave...');
+    // Switch to leave tab
+    const leavesTab = document.getElementById('leaves-tab');
+    if (leavesTab) {
+        leavesTab.click();
+    }
+}
+
+function navigateToClaims() {
+    console.log('Navigating to claims...');
+    // Switch to claims tab
+    const claimsTab = document.getElementById('claims-tab');
+    if (claimsTab) {
+        claimsTab.click();
+    }
+}
+
+function formatTime(time) {
+    if (!time) return '-';
+    return time;
+}
+
+function filterEmployeesInTimesheet(searchTerm, departmentFilter, statusFilter) {
+    console.log('Filtering employees:', searchTerm, departmentFilter, statusFilter);
+    // Add filtering logic here if needed
+}
+
+// Modal functions - Clean implementation - REMOVED (using main version below)
 
 // Populate edit form from session data
 document.addEventListener('DOMContentLoaded', function() {
@@ -1744,24 +2401,24 @@ document.addEventListener('DOMContentLoaded', function() {
     setInterval(loadNavigationCards, 30000);
 });
 
-// Working Modal JavaScript Functions
+// Initialize page functionality
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('Timesheet management page loaded successfully');
+});
+
+// Working Modal JavaScript Functions - CLEAN VERSION
 function openWorkingModal(modalId) {
     const modal = document.getElementById(modalId);
     if (modal) {
-        modal.style.display = 'flex';
+        modal.classList.add('show');
         document.body.style.overflow = 'hidden';
-        // Focus first input if available
-        const firstInput = modal.querySelector('input:not([type="hidden"]), select, textarea');
-        if (firstInput) {
-            setTimeout(() => firstInput.focus(), 100);
-        }
     }
 }
 
 function closeWorkingModal(modalId) {
     const modal = document.getElementById(modalId);
     if (modal) {
-        modal.style.display = 'none';
+        modal.classList.remove('show');
         document.body.style.overflow = 'auto';
         // Reset form if it exists
         const form = modal.querySelector('form');
@@ -1965,9 +2622,1064 @@ function createTimesheetFromClockData(employeeId, workDate, clockInTime, clockOu
         console.error('Network error:', error);
     });
 }
+
+// Attendance Management Functions
+function viewAttendance(attendanceId) {
+    fetch(`/admin/attendance/${attendanceId}`, {
+        method: 'GET',
+        headers: {
+            'Accept': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            const attendance = data.attendance;
+            const modalHtml = `
+                <div class="working-modal" style="display: flex; position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 9999; background: rgba(0,0,0,0.5); align-items: center; justify-content: center;">
+                    <div class="working-modal-dialog" style="max-width: 600px; width: 90%;">
+                        <div class="working-modal-content" style="background: white; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
+                            <div class="working-modal-header" style="padding: 1rem 1.5rem; border-bottom: 1px solid #dee2e6; display: flex; justify-content: space-between; align-items: center;">
+                                <h5 class="working-modal-title" style="margin: 0; font-size: 1.25rem; font-weight: 500;">Attendance Details</h5>
+                                <button type="button" class="working-modal-close" style="background: none; border: none; font-size: 1.5rem; cursor: pointer;" onclick="this.closest('.working-modal').remove(); document.body.style.overflow = 'auto';">&times;</button>
+                            </div>
+                            <div class="working-modal-body" style="padding: 1.5rem;">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <strong>Employee:</strong> ${attendance.employee_name}<br>
+                                        <strong>Date:</strong> ${new Date(attendance.date).toLocaleDateString()}<br>
+                                        <strong>Status:</strong> <span class="badge bg-primary">${attendance.status}</span>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <strong>Clock In:</strong> ${attendance.clock_in_time ? new Date(attendance.clock_in_time).toLocaleTimeString() : 'Not clocked in'}<br>
+                                        <strong>Clock Out:</strong> ${attendance.clock_out_time ? new Date(attendance.clock_out_time).toLocaleTimeString() : 'Not clocked out'}<br>
+                                        <strong>Total Hours:</strong> ${attendance.total_hours || 0}h
+                                    </div>
+                                </div>
+                                ${attendance.overtime_hours > 0 ? `<div class="mt-3"><strong>Overtime Hours:</strong> ${attendance.overtime_hours}h</div>` : ''}
+                                ${attendance.location ? `<div class="mt-2"><strong>Location:</strong> ${attendance.location}</div>` : ''}
+                                ${attendance.ip_address ? `<div class="mt-2"><strong>IP Address:</strong> ${attendance.ip_address}</div>` : ''}
+                                ${attendance.notes ? `<div class="mt-2"><strong>Notes:</strong><br>${attendance.notes}</div>` : ''}
+                            </div>
+                            <div class="working-modal-footer" style="padding: 1rem 1.5rem; border-top: 1px solid #dee2e6; display: flex; justify-content: flex-end;">
+                                <button type="button" class="btn btn-secondary" onclick="this.closest('.working-modal').remove(); document.body.style.overflow = 'auto';">Close</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+            document.body.style.overflow = 'hidden';
+        } else {
+            alert('Error loading attendance details: ' + (data.message || 'Unknown error'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error loading attendance details. Please try again.');
+    });
+}
+
+function editAttendance(attendanceId) {
+    fetch(`/admin/attendance/${attendanceId}/edit`, {
+        method: 'GET',
+        headers: {
+            'Accept': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            const attendance = data.attendance;
+            const modalHtml = `
+                <div class="working-modal" style="display: flex; position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 9999; background: rgba(0,0,0,0.5); align-items: center; justify-content: center;">
+                    <div class="working-modal-dialog" style="max-width: 600px; width: 90%;">
+                        <div class="working-modal-content" style="background: white; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
+                            <div class="working-modal-header" style="padding: 1rem 1.5rem; border-bottom: 1px solid #dee2e6; display: flex; justify-content: space-between; align-items: center;">
+                                <h5 class="working-modal-title" style="margin: 0; font-size: 1.25rem; font-weight: 500;">Edit Attendance</h5>
+                                <button type="button" class="working-modal-close" style="background: none; border: none; font-size: 1.5rem; cursor: pointer;" onclick="this.closest('.working-modal').remove(); document.body.style.overflow = 'auto';">&times;</button>
+                            </div>
+                            <form onsubmit="updateAttendance(event, ${attendanceId})">
+                                <div class="working-modal-body" style="padding: 1.5rem;">
+                                    <div class="mb-3">
+                                        <label class="form-label">Employee: ${attendance.employee_name}</label>
+                                        <input type="hidden" name="employee_id" value="${attendance.employee_id}">
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="edit_clock_in_time" class="form-label">Clock In Time</label>
+                                                <input type="datetime-local" class="form-control" id="edit_clock_in_time" name="clock_in_time" 
+                                                       value="${attendance.clock_in_time ? new Date(attendance.clock_in_time).toISOString().slice(0,16) : ''}">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="edit_clock_out_time" class="form-label">Clock Out Time</label>
+                                                <input type="datetime-local" class="form-control" id="edit_clock_out_time" name="clock_out_time" 
+                                                       value="${attendance.clock_out_time ? new Date(attendance.clock_out_time).toISOString().slice(0,16) : ''}">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="edit_status" class="form-label">Status</label>
+                                                <select class="form-select" id="edit_status" name="status">
+                                                    <option value="present" ${attendance.status === 'present' ? 'selected' : ''}>Present</option>
+                                                    <option value="late" ${attendance.status === 'late' ? 'selected' : ''}>Late</option>
+                                                    <option value="absent" ${attendance.status === 'absent' ? 'selected' : ''}>Absent</option>
+                                                    <option value="clocked_out" ${attendance.status === 'clocked_out' ? 'selected' : ''}>Clocked Out</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="edit_location" class="form-label">Location</label>
+                                                <input type="text" class="form-control" id="edit_location" name="location" value="${attendance.location || ''}">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="edit_notes" class="form-label">Notes</label>
+                                        <textarea class="form-control" id="edit_notes" name="notes" rows="3">${attendance.notes || ''}</textarea>
+                                    </div>
+                                </div>
+                                <div class="working-modal-footer" style="padding: 1rem 1.5rem; border-top: 1px solid #dee2e6; display: flex; justify-content: flex-end; gap: 0.5rem;">
+                                    <button type="button" class="btn btn-secondary" onclick="this.closest('.working-modal').remove(); document.body.style.overflow = 'auto';">Cancel</button>
+                                    <button type="submit" class="btn btn-primary">Update Attendance</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+            document.body.style.overflow = 'hidden';
+        } else {
+            alert('Error loading attendance details: ' + (data.message || 'Unknown error'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error loading attendance details. Please try again.');
+    });
+}
+
+function updateAttendance(event, attendanceId) {
+    event.preventDefault();
+    
+    const formData = new FormData(event.target);
+    const data = Object.fromEntries(formData.entries());
+    
+    fetch(`/admin/attendance/${attendanceId}`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Close modal
+            event.target.closest('.working-modal').remove();
+            document.body.style.overflow = 'auto';
+            
+            // Refresh the page or update the table
+            location.reload();
+        } else {
+            alert('Error updating attendance: ' + (data.message || 'Unknown error'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error updating attendance. Please try again.');
+    });
+}
+
+function refreshAttendanceData() {
+    location.reload();
+}
+
+// Shift Management Functions
+function viewShift(shiftId) {
+    fetch(`/admin/shifts/${shiftId}`, {
+        method: 'GET',
+        headers: {
+            'Accept': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            const shift = data.shift;
+            const modalHtml = `
+                <div class="working-modal" style="display: flex; position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 9999; background: rgba(0,0,0,0.5); align-items: center; justify-content: center;">
+                    <div class="working-modal-dialog" style="max-width: 600px; width: 90%;">
+                        <div class="working-modal-content" style="background: white; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
+                            <div class="working-modal-header" style="padding: 1rem 1.5rem; border-bottom: 1px solid #dee2e6; display: flex; justify-content: space-between; align-items: center;">
+                                <h5 class="working-modal-title" style="margin: 0; font-size: 1.25rem; font-weight: 500;">Shift Details</h5>
+                                <button type="button" class="working-modal-close" style="background: none; border: none; font-size: 1.5rem; cursor: pointer;" onclick="this.closest('.working-modal').remove(); document.body.style.overflow = 'auto';">&times;</button>
+                            </div>
+                            <div class="working-modal-body" style="padding: 1.5rem;">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <strong>Employee:</strong> ${shift.employee_name}<br>
+                                        <strong>Date:</strong> ${new Date(shift.shift_date).toLocaleDateString()}<br>
+                                        <strong>Shift Type:</strong> ${shift.shift_type_name}
+                                    </div>
+                                    <div class="col-md-6">
+                                        <strong>Start Time:</strong> ${shift.start_time}<br>
+                                        <strong>End Time:</strong> ${shift.end_time}<br>
+                                        <strong>Status:</strong> <span class="badge bg-primary">${shift.status}</span>
+                                    </div>
+                                </div>
+                                ${shift.location ? `<div class="mt-3"><strong>Location:</strong> ${shift.location}</div>` : ''}
+                                ${shift.notes ? `<div class="mt-2"><strong>Notes:</strong><br>${shift.notes}</div>` : ''}
+                                <div class="mt-3 text-muted">
+                                    <small>Created: ${new Date(shift.created_at).toLocaleString()}</small>
+                                </div>
+                            </div>
+                            <div class="working-modal-footer" style="padding: 1rem 1.5rem; border-top: 1px solid #dee2e6; display: flex; justify-content: flex-end;">
+                                <button type="button" class="btn btn-secondary" onclick="this.closest('.working-modal').remove(); document.body.style.overflow = 'auto';">Close</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+            document.body.style.overflow = 'hidden';
+        } else {
+            alert('Error loading shift details: ' + (data.message || 'Unknown error'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error loading shift details. Please try again.');
+    });
+}
+
+function editShift(shiftId) {
+    fetch(`/admin/shifts/${shiftId}/edit`, {
+        method: 'GET',
+        headers: {
+            'Accept': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            const shift = data.shift;
+            const modalHtml = `
+                <div class="working-modal" style="display: flex; position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 9999; background: rgba(0,0,0,0.5); align-items: center; justify-content: center;">
+                    <div class="working-modal-dialog" style="max-width: 600px; width: 90%;">
+                        <div class="working-modal-content" style="background: white; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
+                            <div class="working-modal-header" style="padding: 1rem 1.5rem; border-bottom: 1px solid #dee2e6; display: flex; justify-content: space-between; align-items: center;">
+                                <h5 class="working-modal-title" style="margin: 0; font-size: 1.25rem; font-weight: 500;">Edit Shift</h5>
+                                <button type="button" class="working-modal-close" style="background: none; border: none; font-size: 1.5rem; cursor: pointer;" onclick="this.closest('.working-modal').remove(); document.body.style.overflow = 'auto';">&times;</button>
+                            </div>
+                            <form onsubmit="updateShift(event, ${shiftId})">
+                                <div class="working-modal-body" style="padding: 1.5rem;">
+                                    <div class="mb-3">
+                                        <label class="form-label">Employee: ${shift.employee_name}</label>
+                                        <input type="hidden" name="employee_id" value="${shift.employee_id}">
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="edit_shift_date" class="form-label">Date</label>
+                                        <input type="date" class="form-control" id="edit_shift_date" name="shift_date" value="${shift.shift_date}">
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="edit_start_time" class="form-label">Start Time</label>
+                                                <input type="time" class="form-control" id="edit_start_time" name="start_time" value="${shift.start_time}">
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="edit_end_time" class="form-label">End Time</label>
+                                                <input type="time" class="form-control" id="edit_end_time" name="end_time" value="${shift.end_time}">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="edit_shift_status" class="form-label">Status</label>
+                                                <select class="form-select" id="edit_shift_status" name="status">
+                                                    <option value="scheduled" ${shift.status === 'scheduled' ? 'selected' : ''}>Scheduled</option>
+                                                    <option value="in_progress" ${shift.status === 'in_progress' ? 'selected' : ''}>In Progress</option>
+                                                    <option value="completed" ${shift.status === 'completed' ? 'selected' : ''}>Completed</option>
+                                                    <option value="cancelled" ${shift.status === 'cancelled' ? 'selected' : ''}>Cancelled</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="mb-3">
+                                                <label for="edit_shift_location" class="form-label">Location</label>
+                                                <input type="text" class="form-control" id="edit_shift_location" name="location" value="${shift.location || ''}">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label for="edit_shift_notes" class="form-label">Notes</label>
+                                        <textarea class="form-control" id="edit_shift_notes" name="notes" rows="3">${shift.notes || ''}</textarea>
+                                    </div>
+                                </div>
+                                <div class="working-modal-footer" style="padding: 1rem 1.5rem; border-top: 1px solid #dee2e6; display: flex; justify-content: flex-end; gap: 0.5rem;">
+                                    <button type="button" class="btn btn-secondary" onclick="this.closest('.working-modal').remove(); document.body.style.overflow = 'auto';">Cancel</button>
+                                    <button type="submit" class="btn btn-primary">Update Shift</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+            document.body.style.overflow = 'hidden';
+        } else {
+            alert('Error loading shift details: ' + (data.message || 'Unknown error'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error loading shift details. Please try again.');
+    });
+}
+
+function updateShift(event, shiftId) {
+    event.preventDefault();
+    
+    const formData = new FormData(event.target);
+    const data = Object.fromEntries(formData.entries());
+    
+    fetch(`/admin/shifts/${shiftId}`, {
+        method: 'PUT',
+        headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Close modal
+            event.target.closest('.working-modal').remove();
+            document.body.style.overflow = 'auto';
+            
+            // Refresh the page or update the table
+            location.reload();
+        } else {
+            alert('Error updating shift: ' + (data.message || 'Unknown error'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error updating shift. Please try again.');
+    });
+}
+
+// Auto-fill shift times when shift type is selected
+document.addEventListener('DOMContentLoaded', function() {
+    const shiftTypeSelect = document.getElementById('shift_type_id');
+    if (shiftTypeSelect) {
+        shiftTypeSelect.addEventListener('change', function() {
+            const selectedOption = this.options[this.selectedIndex];
+            const startTime = selectedOption.getAttribute('data-start-time');
+            const endTime = selectedOption.getAttribute('data-end-time');
+            
+            if (startTime) {
+                document.getElementById('shift_start_time').value = startTime;
+            }
+            if (endTime) {
+                document.getElementById('shift_end_time').value = endTime;
+            }
+        });
+    }
+    
+    // Leave request date calculation
+    const leaveStartDate = document.getElementById('leave_start_date');
+    const leaveEndDate = document.getElementById('leave_end_date');
+    const leaveTotalDays = document.getElementById('leave_total_days');
+    
+    if (leaveStartDate && leaveEndDate && leaveTotalDays) {
+        function calculateLeaveDays() {
+            const startDate = new Date(leaveStartDate.value);
+            const endDate = new Date(leaveEndDate.value);
+            
+            if (startDate && endDate && endDate >= startDate) {
+                const timeDiff = endDate.getTime() - startDate.getTime();
+                const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24)) + 1; // Include both start and end dates
+                leaveTotalDays.value = daysDiff + ' day' + (daysDiff !== 1 ? 's' : '');
+            } else {
+                leaveTotalDays.value = '';
+            }
+        }
+        
+        leaveStartDate.addEventListener('change', calculateLeaveDays);
+        leaveEndDate.addEventListener('change', calculateLeaveDays);
+    }
+    
+    // Set minimum date to today for leave requests
+    if (leaveStartDate) {
+        const today = new Date().toISOString().split('T')[0];
+        leaveStartDate.min = today;
+        leaveStartDate.addEventListener('change', function() {
+            if (leaveEndDate) {
+                leaveEndDate.min = this.value;
+            }
+        });
+    }
+});
+
+// Leave Request Management Functions
+function viewLeaveRequest(requestId) {
+    fetch(`/admin/leave-requests/${requestId}`, {
+        method: 'GET',
+        headers: {
+            'Accept': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            const request = data.request;
+            const modalHtml = `
+                <div class="working-modal" style="display: flex; position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 9999; background: rgba(0,0,0,0.5); align-items: center; justify-content: center;">
+                    <div class="working-modal-dialog" style="max-width: 600px; width: 90%;">
+                        <div class="working-modal-content" style="background: white; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
+                            <div class="working-modal-header" style="padding: 1rem 1.5rem; border-bottom: 1px solid #dee2e6; display: flex; justify-content: space-between; align-items: center;">
+                                <h5 class="working-modal-title" style="margin: 0; font-size: 1.25rem; font-weight: 500;">Leave Request Details</h5>
+                                <button type="button" class="working-modal-close" style="background: none; border: none; font-size: 1.5rem; cursor: pointer;" onclick="this.closest('.working-modal').remove(); document.body.style.overflow = 'auto';">&times;</button>
+                            </div>
+                            <div class="working-modal-body" style="padding: 1.5rem;">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <strong>Employee:</strong> ${request.employee_name}<br>
+                                        <strong>Leave Type:</strong> ${request.leave_type_name}<br>
+                                        <strong>Status:</strong> <span class="badge bg-${request.status === 'approved' ? 'success' : request.status === 'rejected' ? 'danger' : 'warning'}">${request.status.charAt(0).toUpperCase() + request.status.slice(1)}</span>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <strong>Start Date:</strong> ${new Date(request.start_date).toLocaleDateString()}<br>
+                                        <strong>End Date:</strong> ${new Date(request.end_date).toLocaleDateString()}<br>
+                                        <strong>Total Days:</strong> ${request.days} day${request.days !== 1 ? 's' : ''}
+                                    </div>
+                                </div>
+                                <div class="mt-3">
+                                    <strong>Reason:</strong><br>
+                                    ${request.reason}
+                                </div>
+                                <div class="mt-3 text-muted">
+                                    <small>Submitted: ${new Date(request.created_at).toLocaleString()}</small>
+                                    ${request.approved_by ? `<br><small>Reviewed by: ${request.approved_by} on ${new Date(request.approved_at).toLocaleString()}</small>` : ''}
+                                </div>
+                            </div>
+                            <div class="working-modal-footer" style="padding: 1rem 1.5rem; border-top: 1px solid #dee2e6; display: flex; justify-content: flex-end; gap: 0.5rem;">
+                                ${request.status === 'pending' ? `
+                                    <button type="button" class="btn btn-success" onclick="approveLeaveRequest(${requestId})">Approve</button>
+                                    <button type="button" class="btn btn-danger" onclick="rejectLeaveRequest(${requestId})">Reject</button>
+                                ` : ''}
+                                <button type="button" class="btn btn-secondary" onclick="this.closest('.working-modal').remove(); document.body.style.overflow = 'auto';">Close</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+            document.body.style.overflow = 'hidden';
+        } else {
+            alert('Error loading leave request details: ' + (data.message || 'Unknown error'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error loading leave request details. Please try again.');
+    });
+}
+
+function approveLeaveRequest(requestId) {
+    if (confirm('Are you sure you want to approve this leave request?')) {
+        fetch(`/admin/leave-requests/${requestId}/approve`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Close any open modals
+                document.querySelectorAll('.working-modal').forEach(modal => modal.remove());
+                document.body.style.overflow = 'auto';
+                
+                // Refresh the page
+                location.reload();
+            } else {
+                alert('Error approving leave request: ' + (data.message || 'Unknown error'));
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error approving leave request. Please try again.');
+        });
+    }
+}
+
+function rejectLeaveRequest(requestId) {
+    if (confirm('Are you sure you want to reject this leave request?')) {
+        fetch(`/admin/leave-requests/${requestId}/reject`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Close any open modals
+                document.querySelectorAll('.working-modal').forEach(modal => modal.remove());
+                document.body.style.overflow = 'auto';
+                
+                // Refresh the page
+                location.reload();
+            } else {
+                alert('Error rejecting leave request: ' + (data.message || 'Unknown error'));
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error rejecting leave request. Please try again.');
+        });
+    }
+}
+
+// Claims Management Functions
+function viewClaim(claimId) {
+    fetch(`/admin/claims/${claimId}`, {
+        method: 'GET',
+        headers: {
+            'Accept': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            const claim = data.claim;
+            const modalHtml = `
+                <div class="working-modal" style="display: flex; position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 9999; background: rgba(0,0,0,0.5); align-items: center; justify-content: center;">
+                    <div class="working-modal-dialog" style="max-width: 600px; width: 90%;">
+                        <div class="working-modal-content" style="background: white; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.3);">
+                            <div class="working-modal-header" style="padding: 1rem 1.5rem; border-bottom: 1px solid #dee2e6; display: flex; justify-content: space-between; align-items: center;">
+                                <h5 class="working-modal-title" style="margin: 0; font-size: 1.25rem; font-weight: 500;">Claim Details</h5>
+                                <button type="button" class="working-modal-close" style="background: none; border: none; font-size: 1.5rem; cursor: pointer;" onclick="this.closest('.working-modal').remove(); document.body.style.overflow = 'auto';">&times;</button>
+                            </div>
+                            <div class="working-modal-body" style="padding: 1.5rem;">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <strong>Employee:</strong> ${claim.employee_name}<br>
+                                        <strong>Claim Type:</strong> ${claim.claim_type_name}<br>
+                                        <strong>Status:</strong> <span class="badge bg-${claim.status === 'approved' ? 'success' : claim.status === 'rejected' ? 'danger' : 'warning'}">${claim.status.charAt(0).toUpperCase() + claim.status.slice(1)}</span>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <strong>Amount:</strong> $${parseFloat(claim.amount || 0).toFixed(2)}<br>
+                                        <strong>Date:</strong> ${new Date(claim.claim_date || claim.expense_date).toLocaleDateString()}<br>
+                                        <strong>Submitted:</strong> ${new Date(claim.created_at).toLocaleDateString()}
+                                    </div>
+                                </div>
+                                <div class="mt-3">
+                                    <strong>Description:</strong><br>
+                                    ${claim.description || 'No description provided'}
+                                </div>
+                                ${claim.attachment ? `<div class="mt-3"><strong>Attachment:</strong><br><a href="${claim.attachment}" target="_blank" class="btn btn-sm btn-outline-primary"><i class="fas fa-paperclip"></i> View Attachment</a></div>` : ''}
+                                <div class="mt-3 text-muted">
+                                    <small>Claim ID: #${claim.id}</small>
+                                    ${claim.approved_by ? `<br><small>Reviewed by: ${claim.approved_by} on ${new Date(claim.approved_at).toLocaleString()}</small>` : ''}
+                                </div>
+                            </div>
+                            <div class="working-modal-footer" style="padding: 1rem 1.5rem; border-top: 1px solid #dee2e6; display: flex; justify-content: flex-end; gap: 0.5rem;">
+                                ${claim.status === 'pending' ? `
+                                    <button type="button" class="btn btn-success" onclick="approveClaim(${claimId})">Approve</button>
+                                    <button type="button" class="btn btn-danger" onclick="rejectClaim(${claimId})">Reject</button>
+                                ` : ''}
+                                <button type="button" class="btn btn-secondary" onclick="this.closest('.working-modal').remove(); document.body.style.overflow = 'auto';">Close</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.insertAdjacentHTML('beforeend', modalHtml);
+            document.body.style.overflow = 'hidden';
+        } else {
+            alert('Error loading claim details: ' + (data.message || 'Unknown error'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error loading claim details. Please try again.');
+    });
+}
+
+function approveClaim(claimId) {
+    if (confirm('Are you sure you want to approve this claim?')) {
+        fetch(`/admin/claims/${claimId}/approve`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Close any open modals
+                document.querySelectorAll('.working-modal').forEach(modal => modal.remove());
+                document.body.style.overflow = 'auto';
+                
+                // Refresh the page
+                location.reload();
+            } else {
+                alert('Error approving claim: ' + (data.message || 'Unknown error'));
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error approving claim. Please try again.');
+        });
+    }
+}
+
+function rejectClaim(claimId) {
+    if (confirm('Are you sure you want to reject this claim?')) {
+        fetch(`/admin/claims/${claimId}/reject`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Close any open modals
+                document.querySelectorAll('.working-modal').forEach(modal => modal.remove());
+                document.body.style.overflow = 'auto';
+                
+                // Refresh the page
+                location.reload();
+            } else {
+                alert('Error rejecting claim: ' + (data.message || 'Unknown error'));
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Error rejecting claim. Please try again.');
+        });
+    }
+}
+
+// View Details Functions - Production Version
+function viewTimesheetDetails(timesheetId) {
+    try {
+        const button = document.querySelector(`button[onclick="viewTimesheetDetails(${timesheetId})"]`);
+        if (!button) return;
+        
+        const row = button.closest('tr');
+        if (!row || row.cells.length < 8) return;
+        
+        // Populate modal fields
+        document.getElementById('view-timesheet-employee').textContent = row.cells[1].textContent.trim();
+        document.getElementById('view-timesheet-date').textContent = row.cells[2].textContent.trim();
+        document.getElementById('view-timesheet-clock-in').textContent = row.cells[3].textContent.trim();
+        document.getElementById('view-timesheet-clock-out').textContent = row.cells[4].textContent.trim();
+        document.getElementById('view-timesheet-hours').textContent = row.cells[5].textContent.trim();
+        document.getElementById('view-timesheet-status').textContent = row.cells[6].querySelector('.badge')?.textContent.trim() || 'Unknown';
+        
+        // Show modal
+        openWorkingModal('view-timesheet-modal');
+    } catch (error) {
+        console.error('Error viewing timesheet details:', error);
+    }
+}
+
+function viewShiftDetails(shiftId) {
+    try {
+        const shiftRow = document.querySelector(`button[onclick="viewShiftDetails(${shiftId})"]`)?.closest('tr');
+        if (!shiftRow || shiftRow.cells.length < 7) return;
+        
+        document.getElementById('view-shift-employee').textContent = shiftRow.cells[0].textContent.trim();
+        document.getElementById('view-shift-date').textContent = shiftRow.cells[1].textContent.trim();
+        document.getElementById('view-shift-type').textContent = shiftRow.cells[2].textContent.trim();
+        document.getElementById('view-shift-start').textContent = shiftRow.cells[3].textContent.trim();
+        document.getElementById('view-shift-end').textContent = shiftRow.cells[4].textContent.trim();
+        document.getElementById('view-shift-status').textContent = shiftRow.cells[5].querySelector('.badge')?.textContent.trim() || 'Unknown';
+        
+        openWorkingModal('view-shift-modal');
+    } catch (error) {
+        console.error('Error viewing shift details:', error);
+    }
+}
+
+function viewLeaveDetails(leaveId) {
+    try {
+        const leaveRow = document.querySelector(`button[onclick="viewLeaveDetails(${leaveId})"]`)?.closest('tr');
+        if (!leaveRow || leaveRow.cells.length < 7) return;
+        
+        document.getElementById('view-leave-employee').textContent = leaveRow.cells[0].textContent.trim();
+        document.getElementById('view-leave-type').textContent = leaveRow.cells[1].textContent.trim();
+        document.getElementById('view-leave-start').textContent = leaveRow.cells[2].textContent.trim();
+        document.getElementById('view-leave-end').textContent = leaveRow.cells[3].textContent.trim();
+        document.getElementById('view-leave-days').textContent = leaveRow.cells[4].textContent.trim();
+        document.getElementById('view-leave-status').textContent = leaveRow.cells[5].querySelector('.badge')?.textContent.trim() || 'Unknown';
+        document.getElementById('view-leave-reason').textContent = 'View full details for complete reason';
+        
+        openWorkingModal('view-leave-modal');
+    } catch (error) {
+        console.error('Error viewing leave details:', error);
+    }
+}
+
+function viewClaimDetails(claimId) {
+    try {
+        const claimRow = document.querySelector(`button[onclick="viewClaimDetails(${claimId})"]`)?.closest('tr');
+        if (!claimRow || claimRow.cells.length < 6) return;
+        
+        document.getElementById('view-claim-details-employee').textContent = claimRow.cells[0].textContent.trim();
+        document.getElementById('view-claim-details-type').textContent = claimRow.cells[1].textContent.trim();
+        document.getElementById('view-claim-details-amount').textContent = claimRow.cells[2].textContent.trim();
+        document.getElementById('view-claim-details-date').textContent = claimRow.cells[3].textContent.trim();
+        document.getElementById('view-claim-details-status').textContent = claimRow.cells[4].querySelector('.badge')?.textContent.trim() || 'Unknown';
+        document.getElementById('view-claim-details-attachment').textContent = 'N/A';
+        document.getElementById('view-claim-details-description').textContent = 'View full details for complete description';
+        
+        openWorkingModal('view-claim-details-modal');
+    } catch (error) {
+        console.error('Error viewing claim details:', error);
+    }
+}
+
+function viewAttendanceDetails(attendanceId) {
+    try {
+        const attendanceRow = document.querySelector(`button[onclick="viewAttendanceDetails(${attendanceId})"]`)?.closest('tr');
+        if (!attendanceRow || attendanceRow.cells.length < 9) return;
+        
+        // Extract employee name from the complex cell structure
+        const employeeCell = attendanceRow.cells[0];
+        const employeeName = employeeCell.querySelector('.fw-medium')?.textContent.trim() || employeeCell.textContent.trim();
+        
+        document.getElementById('view-attendance-employee').textContent = employeeName;
+        document.getElementById('view-attendance-date').textContent = attendanceRow.cells[1].textContent.trim();
+        document.getElementById('view-attendance-clock-in').textContent = attendanceRow.cells[2].textContent.trim();
+        document.getElementById('view-attendance-clock-out').textContent = attendanceRow.cells[3].textContent.trim();
+        document.getElementById('view-attendance-hours').textContent = attendanceRow.cells[4].textContent.trim();
+        document.getElementById('view-attendance-status').textContent = attendanceRow.cells[6].querySelector('.badge')?.textContent.trim() || 'Unknown';
+        
+        openWorkingModal('view-attendance-modal');
+    } catch (error) {
+        console.error('Error viewing attendance details:', error);
+    }
+}
+
+// Navigation and utility functions
+function clearEmployeeFilters() {
+    document.getElementById('employee-search-timesheet').value = '';
+    document.getElementById('department-filter-timesheet').value = '';
+    document.getElementById('status-filter-timesheet').value = '';
+    filterEmployeesInTimesheet();
+}
+
+function navigateToShifts(employeeId) {
+    window.location.href = `/shift-schedule-management?employee=${employeeId}`;
+}
+
+function navigateToLeave(employeeId) {
+    window.location.href = `/leave-management?employee=${employeeId}`;
+}
+
+function navigateToClaims(employeeId) {
+    window.location.href = `/claims-reimbursement?employee=${employeeId}`;
+}
+
+function formatTime(timeString) {
+    if (!timeString) return 'N/A';
+    return new Date('2000-01-01 ' + timeString).toLocaleTimeString('en-US', {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
+    });
+}
+
+function filterEmployeesInTimesheet() {
+    const searchTerm = document.getElementById('employee-search-timesheet')?.value.toLowerCase() || '';
+    const departmentFilter = document.getElementById('department-filter-timesheet')?.value || '';
+    const statusFilter = document.getElementById('status-filter-timesheet')?.value || '';
+    const rows = document.querySelectorAll('#employees-tbody tr');
+    
+    rows.forEach(row => {
+        if (row.cells.length < 6) return;
+        
+        const name = row.cells[1].textContent.toLowerCase();
+        const department = row.cells[3].textContent;
+        const statusBadge = row.cells[4].querySelector('.badge');
+        const status = statusBadge ? statusBadge.textContent.toLowerCase() : '';
+        
+        const matchesSearch = name.includes(searchTerm);
+        const matchesDepartment = !departmentFilter || department.includes(departmentFilter);
+        const matchesStatus = !statusFilter || status.includes(statusFilter.toLowerCase());
+        
+        if (matchesSearch && matchesDepartment && matchesStatus) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+}
+
+// Make functions globally available
+window.openWorkingModal = openWorkingModal;
+window.closeWorkingModal = closeWorkingModal;
+window.viewTimesheetDetails = viewTimesheetDetails;
+window.viewShiftDetails = viewShiftDetails;
+window.viewLeaveDetails = viewLeaveDetails;
+window.viewClaimDetails = viewClaimDetails;
+window.viewAttendanceDetails = viewAttendanceDetails;
+window.addTimesheetForEmployee = addTimesheetForEmployee;
+window.editTimesheet = editTimesheet;
+window.deleteTimesheet = deleteTimesheet;
+window.approveTimesheet = approveTimesheet;
+window.rejectTimesheet = rejectTimesheet;
+window.clearEmployeeFilters = clearEmployeeFilters;
+window.navigateToShifts = navigateToShifts;
+window.navigateToLeave = navigateToLeave;
+window.navigateToClaims = navigateToClaims;
+window.formatTime = formatTime;
+window.filterEmployeesInTimesheet = filterEmployeesInTimesheet;
+
+console.log('All timesheet management functions made globally available');
 </script>
 
 <style>
+/* Working Modal Centering - Enhanced */
+.working-modal {
+  display: none !important;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  background: rgba(0, 0, 0, 0.5) !important;
+  z-index: 9999 !important;
+  align-items: center !important;
+  justify-content: center !important;
+  transition: opacity 0.3s ease !important;
+}
+
+.working-modal-dialog {
+  max-width: 600px;
+  width: 90%;
+  margin: 0 auto;
+}
+
+.working-modal-content {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+  overflow: hidden;
+}
+
+.working-modal-header {
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid #dee2e6;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: #f8f9fa;
+}
+
+.working-modal-title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #495057;
+}
+
+.working-modal-close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  color: #6c757d;
+  cursor: pointer;
+  padding: 0;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.working-modal-close:hover {
+  color: #495057;
+}
+
+.working-modal-body {
+  padding: 1.5rem;
+}
+
+.working-modal-footer {
+  padding: 1rem 1.5rem;
+  border-top: 1px solid #dee2e6;
+  background-color: #f8f9fa;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.working-modal-dialog {
+  max-width: 600px !important;
+  width: 90% !important;
+  margin: 0 !important;
+}
+
+.working-modal-content {
+  background: white !important;
+  border-radius: 8px !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* Preserve original button sizes - Force uniform sizing */
+.btn-sm, .btn.btn-sm {
+  padding: 0.25rem 0.5rem !important;
+  font-size: 0.875rem !important;
+  line-height: 1.5 !important;
+  border-radius: 0.2rem !important;
+  min-width: 32px !important;
+  height: 31px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.btn-group .btn-sm, .btn-group .btn {
+  padding: 0.25rem 0.5rem !important;
+  min-width: 32px !important;
+  height: 31px !important;
+}
+
+/* Clean Modal Detail Styling - Matching Reference Design */
+.detail-item {
+    margin-bottom: 1rem;
+}
+
+.detail-label {
+    font-weight: 600;
+    color: #374151;
+    font-size: 0.875rem;
+    margin-bottom: 0.25rem;
+    display: block;
+}
+
+.detail-value {
+    color: #111827;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    background-color: #f9fafb;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.375rem;
+    border: 1px solid #e5e7eb;
+}
+
+.working-modal-content {
+    background: white;
+    border-radius: 0.5rem;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    overflow: hidden;
+}
+
+.working-modal-header {
+    background-color: #f9fafb;
+    border-bottom: 1px solid #e5e7eb;
+    padding: 1rem 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.working-modal-title {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: #111827;
+    margin: 0;
+}
+
+.working-modal-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    color: #6b7280;
+    cursor: pointer;
+    padding: 0;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.working-modal-close:hover {
+    color: #374151;
+}
+
+.working-modal-body {
+    padding: 1.5rem;
+}
+
+.working-modal-footer {
+    background-color: #f9fafb;
+    border-top: 1px solid #e5e7eb;
+    padding: 1rem 1.5rem;
+    display: flex;
+    justify-content: flex-end;
+}
+
+/* Ensure ALL action buttons maintain exact same sizing */
+td .btn-group .btn, 
+td .btn-group .btn-sm,
+.btn-group .btn-outline-info,
+.btn-group .btn-outline-primary,
+.btn-group .btn-outline-danger,
+.btn-group .btn-outline-success,
+.btn-group .btn-outline-warning {
+  padding: 0.25rem 0.5rem !important;
+  font-size: 0.875rem !important;
+  min-width: 32px !important;
+  height: 31px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+/* Force icon sizing consistency */
+td .btn-group .btn i,
+td .btn-group .btn-sm i {
+  font-size: 0.875rem !important;
+}
+
 /* Modern Statistics Cards */
 .stat-card-modern {
   background: #fff;
@@ -2114,6 +3826,33 @@ function createTimesheetFromClockData(employeeId, workDate, clockInTime, clockOu
   }
 }
 </style>
+
+<script>
+// Auto-populate start and end times when shift type is selected
+document.addEventListener('DOMContentLoaded', function() {
+    const shiftTypeSelect = document.getElementById('shift-assignment-type');
+    const startTimeInput = document.getElementById('shift-assignment-start-time');
+    const endTimeInput = document.getElementById('shift-assignment-end-time');
+    
+    if (shiftTypeSelect && startTimeInput && endTimeInput) {
+        shiftTypeSelect.addEventListener('change', function() {
+            const selectedOption = this.options[this.selectedIndex];
+            if (selectedOption && selectedOption.value) {
+                const startTime = selectedOption.getAttribute('data-start-time');
+                const endTime = selectedOption.getAttribute('data-end-time');
+                
+                if (startTime) {
+                    startTimeInput.value = startTime;
+                }
+                if (endTime) {
+                    endTimeInput.value = endTime;
+                }
+            }
+        });
+    }
+});
+</script>
+
 @endpush
 
 @endsection

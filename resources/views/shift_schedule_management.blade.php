@@ -453,6 +453,8 @@ function openWorkingModal(modalId) {
     const modal = document.getElementById(modalId);
     if (modal) {
         modal.style.setProperty('display', 'flex', 'important');
+        modal.style.setProperty('align-items', 'center', 'important');
+        modal.style.setProperty('justify-content', 'center', 'important');
         modal.style.visibility = 'visible';
         modal.classList.add('show');
         document.body.style.overflow = 'hidden';
@@ -572,10 +574,7 @@ function editShiftTypeForm(id, name, code, startTime, endTime, duration, breakDu
     openWorkingModal('create-shift-type-modal');
 }
 
-// View shift type details function
-function viewShiftTypeDetails(id, name, code, startTime, endTime, duration, breakDuration) {
-    alert(`Shift Type Details:\n\nName: ${name}\nCode: ${code}\nStart Time: ${startTime}\nEnd Time: ${endTime}\nDuration: ${duration} hours\nBreak: ${breakDuration} minutes`);
-}
+// View shift type details function - REMOVED (replaced with modal version below)
 
 // Open create shift modal with selected date
 function openCreateShiftModal(selectedDate) {
@@ -635,13 +634,7 @@ document.addEventListener('keydown', function(e) {
     }
 });
 
-// Make functions globally available
-window.openWorkingModal = openWorkingModal;
-window.closeWorkingModal = closeWorkingModal;
-window.editShiftTypeForm = editShiftTypeForm;
-window.viewShiftTypeDetails = viewShiftTypeDetails;
-window.openCreateShiftModal = openCreateShiftModal;
-window.handleCalendarCellClick = handleCalendarCellClick;
+// Functions will be made globally available after they are defined
 
 // Initialize page
 document.addEventListener('DOMContentLoaded', function() {
@@ -746,59 +739,54 @@ setTimeout(function() {
 
 {{-- Statistics data is now passed from ShiftController --}}
 
+@php
+    $dashboardCards = [
+        [
+            'icon' => 'fa-calendar-alt',
+            'bg' => 'bg-primary',
+            'id' => 'total-shifts',
+            'value' => $stats['active_shifts'] ?? 0,
+            'label' => 'Total Shifts',
+        ],
+        [
+            'icon' => 'fa-users',
+            'bg' => 'bg-success',
+            'id' => 'assigned-employees',
+            'value' => $stats['total_employees'] ?? 0,
+            'label' => 'Assigned Employees',
+        ],
+        [
+            'icon' => 'fa-exchange-alt',
+            'bg' => 'bg-warning',
+            'id' => 'pending-requests',
+            'value' => $stats['pending_requests'] ?? 0,
+            'label' => 'Pending Requests',
+        ],
+        [
+            'icon' => 'fa-calendar-week',
+            'bg' => 'bg-info',
+            'id' => 'weekly-hours',
+            'value' => number_format($stats['weekly_hours'] ?? 0.0, 1),
+            'label' => 'Weekly Hours',
+        ],
+    ];
+@endphp
 <div class="row g-4 mb-4">
-  <div class="col-md-3">
-    <div class="stat-card-modern">
-      <div class="d-flex align-items-center">
-        <div class="stat-icon-circle bg-primary">
-          <i class="fas fa-calendar-alt text-white"></i>
+    @foreach($dashboardCards as $card)
+        <div class="col-md-3">
+            <div class="stat-card-modern">
+                <div class="d-flex align-items-center">
+                    <div class="stat-icon-circle {{ $card['bg'] }}">
+                        <i class="fas {{ $card['icon'] }} text-white"></i>
+                    </div>
+                    <div class="ms-3">
+                        <h3 class="fw-bold mb-0 stat-number" id="{{ $card['id'] }}">{{ $card['value'] }}</h3>
+                        <p class="text-muted mb-0 small stat-label">{{ $card['label'] }}</p>
+                    </div>
+                </div>
+            </div>
         </div>
-        <div class="ms-3">
-          <h3 class="fw-bold mb-0 stat-number" id="total-shifts">{{ $totalShifts ?? 0 }}</h3>
-          <p class="text-muted mb-0 small stat-label">Total Shifts</p>
-        </div>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-3">
-    <div class="stat-card-modern">
-      <div class="d-flex align-items-center">
-        <div class="stat-icon-circle bg-success">
-          <i class="fas fa-users text-white"></i>
-        </div>
-        <div class="ms-3">
-          <h3 class="fw-bold mb-0 stat-number" id="assigned-employees">{{ $assignedEmployees ?? 0 }}</h3>
-          <p class="text-muted mb-0 small stat-label">Assigned Employees</p>
-        </div>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-3">
-    <div class="stat-card-modern">
-      <div class="d-flex align-items-center">
-        <div class="stat-icon-circle bg-warning">
-          <i class="fas fa-exchange-alt text-white"></i>
-        </div>
-        <div class="ms-3">
-          <h3 class="fw-bold mb-0 stat-number" id="pending-requests">{{ $pendingRequests ?? 0 }}</h3>
-          <p class="text-muted mb-0 small stat-label">Pending Requests</p>
-        </div>
-      </div>
-    </div>
-  </div>
-  <div class="col-md-3">
-    <div class="stat-card-modern">
-      <div class="d-flex align-items-center">
-        <div class="stat-icon-circle bg-info">
-          <i class="fas fa-calendar-week text-white"></i>
-        </div>
-        <div class="ms-3">
-          <h3 class="fw-bold mb-0 stat-number" id="weekly-hours">{{ number_format($weeklyHours ?? 0, 1) }}</h3>
-          <p class="text-muted mb-0 small stat-label">Weekly Hours</p>
-        </div>
-      </div>
-    </div>
-  </div>
+    @endforeach
 </div>
 
 
@@ -900,7 +888,7 @@ setTimeout(function() {
                 @endphp
                 @if($shiftTypeId)
                   <div class="btn-group" role="group">
-                    <button class="btn btn-sm btn-outline-info" onclick="viewShiftTypeDetails({{ $shiftTypeId }}, '{{ addslashes($shiftTypeName) }}', '{{ addslashes($shiftTypeCode) }}', '{{ $startTime ?? '' }}', '{{ $endTime ?? '' }}', {{ $shiftType->duration_hours ?? $shiftType['duration_hours'] ?? 8 }}, {{ $shiftType->break_duration_minutes ?? $shiftType['break_duration_minutes'] ?? 60 }})" title="View">
+                    <button class="btn btn-sm btn-outline-info" onclick="viewShiftTypeDetails({{ $shiftTypeId }})" title="View">
                       <i class="fas fa-eye"></i>
                     </button>
                     <button class="btn btn-sm btn-outline-primary" onclick="editShiftTypeForm({{ $shiftTypeId }}, '{{ addslashes($shiftTypeName) }}', '{{ addslashes($shiftTypeCode) }}', '{{ $startTime ?? '' }}', '{{ $endTime ?? '' }}', {{ $shiftType->duration_hours ?? $shiftType['duration_hours'] ?? 8 }}, {{ $shiftType->break_duration_minutes ?? $shiftType['break_duration_minutes'] ?? 60 }})" title="Edit">
@@ -943,15 +931,15 @@ setTimeout(function() {
         <span class="fw-bold" style="color: #495057; font-size: 16px; margin: 0 12px;" id="calendar-month-year">
           {{ $displayMonth->format('F Y') }}
         </span>
-        <button class="btn btn-sm" onclick="changeMonth(-1)" title="Previous Month" style="border: none; background: none; color: #6c757d; padding: 4px 8px;">
+        <a href="/shift-schedule-management?month={{ $displayMonth->copy()->subMonth()->format('Y-m') }}" class="btn btn-sm" title="Previous Month" style="border: none; background: none; color: #6c757d; padding: 4px 8px;">
           <i class="fas fa-chevron-left"></i>
-        </button>
-        <button class="btn btn-sm" onclick="goToCurrentMonth()" title="Today" style="border: 1px solid #dee2e6; background: #f8f9fa; color: #495057; padding: 4px 12px; margin: 0 4px; border-radius: 4px; font-size: 12px;">
+        </a>
+        <a href="/shift-schedule-management" class="btn btn-sm" title="Today" style="border: 1px solid #dee2e6; background: #f8f9fa; color: #495057; padding: 4px 12px; margin: 0 4px; border-radius: 4px; font-size: 12px; text-decoration: none;">
           Today
-        </button>
-        <button class="btn btn-sm" onclick="changeMonth(1)" title="Next Month" style="border: none; background: none; color: #6c757d; padding: 4px 8px;">
+        </a>
+        <a href="/shift-schedule-management?month={{ $displayMonth->copy()->addMonth()->format('Y-m') }}" class="btn btn-sm" title="Next Month" style="border: none; background: none; color: #6c757d; padding: 4px 8px;">
           <i class="fas fa-chevron-right"></i>
-        </button>
+        </a>
       </div>
     </div>
   </div>
@@ -1143,9 +1131,9 @@ setTimeout(function() {
               </td>
               <td>
                 @if($request->status === 'pending')
-                  <form method="POST" action="{{ route('shift-requests.approve', $request->id) }}" class="d-inline">
+                  <form method="POST" action="{{ route('shift-requests.approve', $request->id) }}" class="d-inline" onsubmit="handleApprovalSubmit(event, this)">
                     @csrf
-                    <button type="submit" class="btn btn-sm btn-success me-1" title="Approve" onclick="return confirm('Approve this shift request?')">
+                    <button type="submit" class="btn btn-sm btn-success me-1" title="Approve" onclick="return confirm('Approve this shift request? This will automatically add the shift to the schedule calendar.')">
                       <i class="fas fa-check"></i>
                     </button>
                   </form>
@@ -1557,25 +1545,7 @@ function setupCalendarNavigation() {
   if (todayBtn) todayBtn.addEventListener('click', () => goToCurrentMonth());
 }
 
-// Navigate to different months
-function changeMonth(direction) {
-  const currentUrl = new URL(window.location);
-  const currentMonth = currentUrl.searchParams.get('month') || new Date().toISOString().slice(0, 7);
-  const [year, month] = currentMonth.split('-');
-  
-  const newDate = new Date(parseInt(year), parseInt(month) - 1 + direction, 1);
-  const newMonth = newDate.toISOString().slice(0, 7);
-  
-  currentUrl.searchParams.set('month', newMonth);
-  window.location.href = currentUrl.toString();
-}
-
-// Go to current month
-function goToCurrentMonth() {
-  const currentUrl = new URL(window.location);
-  currentUrl.searchParams.delete('month');
-  window.location.href = currentUrl.toString();
-}
+// Calendar navigation now uses HTML links - no JavaScript needed
 
 // Working hours configuration - removed blocking functionality
 // Templates saving - removed blocking functionality
@@ -2278,17 +2248,8 @@ document.addEventListener('keydown', function(event) {
     }
 @endphp
 
-let currentCalendarDate = new Date('{{ $displayMonth->format('Y-m-01') }}');
-
-function changeMonth(direction) {
-    currentCalendarDate.setMonth(currentCalendarDate.getMonth() + direction);
-    loadCalendarData();
-}
-
-function goToCurrentMonth() {
-    currentCalendarDate = new Date();
-    loadCalendarData();
-}
+// Removed duplicate changeMonth and goToCurrentMonth functions
+// Using the URL-based implementation above
 
 function loadCalendarData() {
     const year = currentCalendarDate.getFullYear();
@@ -2346,19 +2307,590 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 
-// View shift type details in modal
-function viewShiftTypeDetails(id, name, description, startTime, endTime, type, breakDuration, hourlyRate) {
-    const details = `Name: ${name}\nCode: ${type}\nStart Time: ${startTime}\nEnd Time: ${endTime}\nDuration: ${breakDuration} minutes break\nDescription: ${description || 'N/A'}`;
-    alert(details);
-}
+// View shift type details in modal - REMOVED (replaced with modal version below)
 
 // REMOVED - All duplicate Bootstrap modal functions
 
 // Shift request functions - using server-side forms instead of JavaScript
 // All shift request actions are handled by existing server-side forms in the template
 
+// View Details Functions - Production Version (Following Consistent Pattern)
+function viewShiftTypeDetails(shiftTypeId) {
+    try {
+        const button = document.querySelector(`button[onclick*="viewShiftTypeDetails(${shiftTypeId}"]`);
+        if (!button) return;
+        
+        const row = button.closest('tr');
+        if (!row || row.cells.length < 6) return;
+        
+        // Extract data from table row
+        document.getElementById('view-shift-type-name').textContent = row.cells[0].textContent.trim();
+        document.getElementById('view-shift-type-code').textContent = row.cells[1].querySelector('.badge')?.textContent.trim() || '-';
+        document.getElementById('view-shift-type-start').textContent = row.cells[2].textContent.trim();
+        document.getElementById('view-shift-type-end').textContent = row.cells[3].textContent.trim();
+        document.getElementById('view-shift-type-break').textContent = row.cells[4].textContent.trim();
+        document.getElementById('view-shift-type-duration').textContent = '8 hours'; // Default duration
+        
+        openWorkingModal('view-shift-type-modal');
+    } catch (error) {
+        console.error('Error viewing shift type details:', error);
+    }
+}
+
+function viewShiftAssignmentDetails(shiftId) {
+    const shiftRow = document.querySelector(`button[onclick*="viewShiftAssignmentDetails(${shiftId})"]`)?.closest('tr');
+    
+    if (shiftRow && shiftRow.cells.length >= 6) {
+        document.getElementById('view-shift-assignment-employee').textContent = shiftRow.cells[0].textContent.trim();
+        document.getElementById('view-shift-assignment-date').textContent = shiftRow.cells[1].textContent.trim();
+        document.getElementById('view-shift-assignment-type').textContent = shiftRow.cells[2].textContent.trim();
+        document.getElementById('view-shift-assignment-time').textContent = shiftRow.cells[3].textContent.trim();
+        document.getElementById('view-shift-assignment-location').textContent = shiftRow.cells[4].textContent.trim();
+        document.getElementById('view-shift-assignment-status').textContent = shiftRow.cells[5].querySelector('.badge')?.textContent.trim() || 'Unknown';
+        openWorkingModal('view-shift-assignment-modal');
+    }
+}
+
+function viewShiftRequestDetails(requestId) {
+    const requestRow = document.querySelector(`button[onclick*="viewShiftRequestDetails(${requestId})"]`)?.closest('tr');
+    
+    if (requestRow && requestRow.cells.length >= 7) {
+        document.getElementById('view-shift-request-employee').textContent = requestRow.cells[0].textContent.trim();
+        document.getElementById('view-shift-request-type').textContent = requestRow.cells[1].textContent.trim();
+        document.getElementById('view-shift-request-date').textContent = requestRow.cells[2].textContent.trim();
+        document.getElementById('view-shift-request-time').textContent = requestRow.cells[3].textContent.trim();
+        document.getElementById('view-shift-request-reason').textContent = requestRow.cells[4].textContent.trim();
+        document.getElementById('view-shift-request-status').textContent = requestRow.cells[5].querySelector('.badge')?.textContent.trim() || 'Unknown';
+        document.getElementById('view-shift-request-submitted').textContent = requestRow.cells[6].textContent.trim();
+        openWorkingModal('view-shift-request-modal');
+    }
+}
+
+// Edit Shift Function for Calendar
+function editShift(shiftId) {
+    if (!shiftId) {
+        alert('Invalid shift ID');
+        return;
+    }
+
+    // Fetch shift data from server
+    fetch(`/shifts/${shiftId}/edit`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.shift) {
+                populateEditShiftModal(data.shift);
+                openWorkingModal('edit-shift-modal');
+            } else {
+                alert('Failed to load shift data: ' + (data.message || 'Unknown error'));
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching shift data:', error);
+            alert('Error loading shift data. Please try again.');
+        });
+}
+
+// Populate Edit Shift Modal with data
+function populateEditShiftModal(shift) {
+    document.getElementById('edit-shift-id').value = shift.id;
+    document.getElementById('edit-shift-date').value = shift.shift_date;
+    document.getElementById('edit-shift-start-time').value = shift.start_time;
+    document.getElementById('edit-shift-end-time').value = shift.end_time;
+    document.getElementById('edit-shift-status').value = shift.status;
+    document.getElementById('edit-shift-location').value = shift.location || '';
+    document.getElementById('edit-shift-notes').value = shift.notes || '';
+    
+    // Update modal title
+    document.getElementById('edit-shift-modal-title').textContent = `Edit Shift - ${shift.employee_name || 'Unknown Employee'}`;
+}
+
+// Save Edit Shift
+function saveEditShift() {
+    const form = document.getElementById('edit-shift-form');
+    const formData = new FormData(form);
+    const shiftId = document.getElementById('edit-shift-id').value;
+
+    fetch(`/shifts/${shiftId}`, {
+        method: 'PUT',
+        headers: {
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+            shift_date: formData.get('shift_date'),
+            start_time: formData.get('start_time'),
+            end_time: formData.get('end_time'),
+            status: formData.get('status'),
+            location: formData.get('location'),
+            notes: formData.get('notes')
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            closeWorkingModal('edit-shift-modal');
+            location.reload(); // Refresh page to show updated data
+        } else {
+            alert('Failed to update shift: ' + (data.message || 'Unknown error'));
+        }
+    })
+    .catch(error => {
+        console.error('Error updating shift:', error);
+        alert('Error updating shift. Please try again.');
+    });
+}
+
+// Make functions globally available
+window.openWorkingModal = openWorkingModal;
+window.closeWorkingModal = closeWorkingModal;
+window.editShiftTypeForm = editShiftTypeForm;
+window.viewShiftTypeDetails = viewShiftTypeDetails;
+window.openCreateShiftModal = openCreateShiftModal;
+window.handleCalendarCellClick = handleCalendarCellClick;
+window.viewShiftAssignmentDetails = viewShiftAssignmentDetails;
+window.viewShiftRequestDetails = viewShiftRequestDetails;
+window.editShift = editShift;
+window.populateEditShiftModal = populateEditShiftModal;
+window.saveEditShift = saveEditShift;
+window.handleApprovalSubmit = handleApprovalSubmit;
+
+// Handle approval form submission with auto-refresh
+function handleApprovalSubmit(event, form) {
+    // Let the form submit normally, but add a flag to refresh after success
+    sessionStorage.setItem('refreshAfterApproval', 'true');
+    return true;
+}
+
+// Check if we need to refresh after approval
+document.addEventListener('DOMContentLoaded', function() {
+    if (sessionStorage.getItem('refreshAfterApproval') === 'true') {
+        sessionStorage.removeItem('refreshAfterApproval');
+        
+        // Check for success message and refresh calendar if found
+        const successAlert = document.getElementById('success-alert');
+        if (successAlert && successAlert.textContent.includes('approved')) {
+            console.log('Shift approved successfully, refreshing calendar...');
+            
+            // Refresh the page after a short delay to show the success message
+            setTimeout(() => {
+                window.location.reload();
+            }, 2000);
+        }
+    }
 });
+
+console.log('All functions made globally available');
 </script>
+
+<!-- View Shift Type Details Modal -->
+<div class="working-modal" id="view-shift-type-modal" style="display: none;">
+    <div class="working-modal-backdrop" onclick="closeWorkingModal('view-shift-type-modal')"></div>
+    <div class="working-modal-dialog">
+        <div class="working-modal-content">
+            <div class="working-modal-header">
+                <h5 class="working-modal-title">Shift Type Details</h5>
+                <button type="button" class="working-modal-close" onclick="closeWorkingModal('view-shift-type-modal')">&times;</button>
+            </div>
+            <div class="working-modal-body">
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <div class="detail-item">
+                            <label class="detail-label">Name:</label>
+                            <div id="view-shift-type-name" class="detail-value">-</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="detail-item">
+                            <label class="detail-label">Code:</label>
+                            <div id="view-shift-type-code" class="detail-value">-</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <div class="detail-item">
+                            <label class="detail-label">Start Time:</label>
+                            <div id="view-shift-type-start" class="detail-value">-</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="detail-item">
+                            <label class="detail-label">End Time:</label>
+                            <div id="view-shift-type-end" class="detail-value">-</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <div class="detail-item">
+                            <label class="detail-label">Duration:</label>
+                            <div id="view-shift-type-duration" class="detail-value">-</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="detail-item">
+                            <label class="detail-label">Break Duration:</label>
+                            <div id="view-shift-type-break" class="detail-value">-</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="working-modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeWorkingModal('view-shift-type-modal')">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- View Shift Assignment Details Modal -->
+<div class="working-modal" id="view-shift-assignment-modal" style="display: none;">
+    <div class="working-modal-backdrop" onclick="closeWorkingModal('view-shift-assignment-modal')"></div>
+    <div class="working-modal-dialog">
+        <div class="working-modal-content">
+            <div class="working-modal-header">
+                <h5 class="working-modal-title">Shift Assignment Details</h5>
+                <button type="button" class="working-modal-close" onclick="closeWorkingModal('view-shift-assignment-modal')">&times;</button>
+            </div>
+            <div class="working-modal-body">
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <div class="detail-item">
+                            <label class="detail-label">Employee:</label>
+                            <div id="view-shift-assignment-employee" class="detail-value">-</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="detail-item">
+                            <label class="detail-label">Date:</label>
+                            <div id="view-shift-assignment-date" class="detail-value">-</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <div class="detail-item">
+                            <label class="detail-label">Shift Type:</label>
+                            <div id="view-shift-assignment-type" class="detail-value">-</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="detail-item">
+                            <label class="detail-label">Time:</label>
+                            <div id="view-shift-assignment-time" class="detail-value">-</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <div class="detail-item">
+                            <label class="detail-label">Location:</label>
+                            <div id="view-shift-assignment-location" class="detail-value">-</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="detail-item">
+                            <label class="detail-label">Status:</label>
+                            <div id="view-shift-assignment-status" class="detail-value">-</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="working-modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeWorkingModal('view-shift-assignment-modal')">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- View Shift Request Details Modal -->
+<div class="working-modal" id="view-shift-request-modal" style="display: none;">
+    <div class="working-modal-backdrop" onclick="closeWorkingModal('view-shift-request-modal')"></div>
+    <div class="working-modal-dialog">
+        <div class="working-modal-content">
+            <div class="working-modal-header">
+                <h5 class="working-modal-title">Shift Request Details</h5>
+                <button type="button" class="working-modal-close" onclick="closeWorkingModal('view-shift-request-modal')">&times;</button>
+            </div>
+            <div class="working-modal-body">
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <div class="detail-item">
+                            <label class="detail-label">Employee:</label>
+                            <div id="view-shift-request-employee" class="detail-value">-</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="detail-item">
+                            <label class="detail-label">Shift Type:</label>
+                            <div id="view-shift-request-type" class="detail-value">-</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <div class="detail-item">
+                            <label class="detail-label">Date:</label>
+                            <div id="view-shift-request-date" class="detail-value">-</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="detail-item">
+                            <label class="detail-label">Time:</label>
+                            <div id="view-shift-request-time" class="detail-value">-</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <div class="detail-item">
+                            <label class="detail-label">Status:</label>
+                            <div id="view-shift-request-status" class="detail-value">-</div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="detail-item">
+                            <label class="detail-label">Submitted:</label>
+                            <div id="view-shift-request-submitted" class="detail-value">-</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-12">
+                        <div class="detail-item">
+                            <label class="detail-label">Reason:</label>
+                            <div id="view-shift-request-reason" class="detail-value">-</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="working-modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeWorkingModal('view-shift-request-modal')">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Shift Modal -->
+<div class="working-modal" id="edit-shift-modal" style="display: none;">
+    <div class="working-modal-backdrop" onclick="closeWorkingModal('edit-shift-modal')"></div>
+    <div class="working-modal-dialog">
+        <div class="working-modal-content">
+            <div class="working-modal-header">
+                <h5 class="working-modal-title" id="edit-shift-modal-title">Edit Shift</h5>
+                <button type="button" class="working-modal-close" onclick="closeWorkingModal('edit-shift-modal')">&times;</button>
+            </div>
+            <div class="working-modal-body">
+                <form id="edit-shift-form">
+                    <input type="hidden" id="edit-shift-id" name="shift_id">
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <div class="detail-item">
+                                <label class="detail-label" for="edit-shift-date">Shift Date:</label>
+                                <input type="date" class="form-control" id="edit-shift-date" name="shift_date" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="detail-item">
+                                <label class="detail-label" for="edit-shift-status">Status:</label>
+                                <select class="form-control" id="edit-shift-status" name="status" required>
+                                    <option value="scheduled">Scheduled</option>
+                                    <option value="in_progress">In Progress</option>
+                                    <option value="completed">Completed</option>
+                                    <option value="cancelled">Cancelled</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <div class="detail-item">
+                                <label class="detail-label" for="edit-shift-start-time">Start Time:</label>
+                                <input type="time" class="form-control" id="edit-shift-start-time" name="start_time" required>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="detail-item">
+                                <label class="detail-label" for="edit-shift-end-time">End Time:</label>
+                                <input type="time" class="form-control" id="edit-shift-end-time" name="end_time" required>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-12">
+                            <div class="detail-item">
+                                <label class="detail-label" for="edit-shift-location">Location:</label>
+                                <input type="text" class="form-control" id="edit-shift-location" name="location" placeholder="Optional">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-12">
+                            <div class="detail-item">
+                                <label class="detail-label" for="edit-shift-notes">Notes:</label>
+                                <textarea class="form-control" id="edit-shift-notes" name="notes" rows="3" placeholder="Optional notes"></textarea>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="working-modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeWorkingModal('edit-shift-modal')">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="saveEditShift()">Save Changes</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 @endpush
+
+<style>
+/* Clean Modal Detail Styling - Matching Reference Design */
+.detail-item {
+    margin-bottom: 1rem;
+}
+
+.detail-label {
+    font-weight: 600;
+    color: #374151;
+    font-size: 0.875rem;
+    margin-bottom: 0.25rem;
+    display: block;
+}
+
+.detail-value {
+    color: #111827;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    background-color: #f9fafb;
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.375rem;
+    border: 1px solid #e5e7eb;
+}
+
+.working-modal-content {
+    background: white;
+    border-radius: 0.5rem;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    overflow: hidden;
+}
+
+.working-modal-header {
+    background-color: #f9fafb;
+    border-bottom: 1px solid #e5e7eb;
+    padding: 1rem 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.working-modal-title {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: #111827;
+    margin: 0;
+}
+
+.working-modal-close {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    color: #6b7280;
+    cursor: pointer;
+    padding: 0;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.working-modal-close:hover {
+    color: #374151;
+}
+
+.working-modal-body {
+    padding: 1.5rem;
+}
+
+.working-modal-footer {
+    background-color: #f9fafb;
+    border-top: 1px solid #e5e7eb;
+    padding: 1rem 1.5rem;
+    display: flex;
+    justify-content: flex-end;
+}
+
+/* Working Modal Centering */
+.working-modal {
+  display: none !important;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  background: rgba(0, 0, 0, 0.5) !important;
+  z-index: 9999 !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.working-modal-dialog {
+  max-width: 600px !important;
+  width: 90% !important;
+  margin: 0 !important;
+}
+
+.working-modal-content {
+  background: white !important;
+  border-radius: 8px !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* Preserve original button sizes - Force uniform sizing */
+.btn-sm, .btn.btn-sm {
+  padding: 0.25rem 0.5rem !important;
+  font-size: 0.875rem !important;
+  line-height: 1.5 !important;
+  border-radius: 0.2rem !important;
+  min-width: 32px !important;
+  height: 31px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.btn-group .btn-sm, .btn-group .btn {
+  padding: 0.25rem 0.5rem !important;
+  min-width: 32px !important;
+  height: 31px !important;
+}
+
+/* Ensure ALL action buttons maintain exact same sizing */
+td .btn-group .btn, 
+td .btn-group .btn-sm,
+.btn-group .btn-outline-info,
+.btn-group .btn-outline-primary,
+.btn-group .btn-outline-danger,
+.btn-group .btn-outline-success,
+.btn-group .btn-outline-warning {
+  padding: 0.25rem 0.5rem !important;
+  font-size: 0.875rem !important;
+  min-width: 32px !important;
+  height: 31px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+/* Force icon sizing consistency */
+td .btn-group .btn i,
+td .btn-group .btn-sm i {
+  font-size: 0.875rem !important;
+}
+</style>
 
 @endsection

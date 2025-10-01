@@ -2009,5 +2009,291 @@ class EmployeeESSController extends Controller
         }
     }
 
+    /**
+     * Clock in employee (ESS)
+     */
+    public function clockIn(Request $request)
+    {
+        try {
+            $employee = Auth::guard('employee')->user();
+            $today = Carbon::today();
+            
+            // Check if employee already has attendance record for today
+            $existingAttendance = DB::table('attendances')
+                ->where('employee_id', $employee->id)
+                ->whereDate('date', $today)
+                ->first();
+            
+            if ($existingAttendance && $existingAttendance->clock_in_time) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You have already clocked in today'
+                ], 400);
+            }
+
+            $clockInTime = Carbon::now();
+            
+            // Determine if employee is late (assuming 9:00 AM is standard start time)
+            $standardStartTime = Carbon::today()->setTime(9, 0, 0);
+            $status = $clockInTime->gt($standardStartTime) ? 'late' : 'present';
+
+            if ($existingAttendance) {
+                // Update existing record
+                DB::table('attendances')
+                    ->where('id', $existingAttendance->id)
+                    ->update([
+                        'clock_in_time' => $clockInTime,
+                        'status' => $status,
+                        'location' => 'ESS Portal',
+                        'ip_address' => $request->ip(),
+                        'updated_at' => now()
+                    ]);
+                $attendanceId = $existingAttendance->id;
+            } else {
+                // Create new attendance record
+                $attendanceId = DB::table('attendances')->insertGetId([
+                    'employee_id' => $employee->id,
+                    'date' => $today,
+                    'clock_in_time' => $clockInTime,
+                    'status' => $status,
+                    'location' => 'ESS Portal',
+                    'ip_address' => $request->ip(),
+                    'created_at' => now(),
+                    'updated_at' => now()
+                ]);
+            }
+
+            // Also create/update time entry for timesheet management
+            $existingTimeEntry = DB::table('time_entries')
+                ->where('employee_id', $employee->id)
+                ->whereDate('work_date', $today)
+                ->first();
+
+            if ($existingTimeEntry) {
+                // Update existing time entry
+                DB::table('time_entries')
+                    ->where('id', $existingTimeEntry->id)
+                    ->update([
+                        'clock_in_time' => $clockInTime->format('H:i:s'),
+                        'status' => 'pending',
+                        'updated_at' => now()
+                    ]);
+            } else {
+                // Create new time entry
+                DB::table('time_entries')->insert([
+                    'employee_id' => $employee->id,
+                    'work_date' => $today,
+                    'clock_in_time' => $clockInTime->format('H:i:s'),
+                    'status' => 'pending',
+                    'created_at' => now(),
+                    'updated_at' => now()
+                ]);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Successfully clocked in',
+                'data' => [
+                    'clock_in_time' => $clockInTime->format('h:i A'),
+                    'status' => $status,
+                    'clocked_in' => true
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('ESS Clock In Error: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to clock in: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Clock out employee (ESS)
+     */
+    public function clockOut(Request $request)
+    {
+        try {
+            $employee = Auth::guard('employee')->user();
+            $today = Carbon::today();
+            
+            \Log::info('Clock-out attempt', [
+                'employee_id' => $employee->id,
+                'date' => $today->toDateString()
+            ]);
+            
+            // Get today's attendance record
+            $attendance = DB::table('attendances')
+                ->where('employee_id', $employee->id)
+                ->whereDate('date', $today)
+                ->first();
+                
+            \Log::info('Attendance record found', [
+                'attendance' => $attendance ? 'exists' : 'not found',
+                'clock_in_time' => $attendance->clock_in_time ?? null,
+                'clock_out_time' => $attendance->clock_out_time ?? null
+            ]);
+            
+            if (!$attendance || !$attendance->clock_in_time) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You have not clocked in today'
+                ], 400);
+            }
+
+            if ($attendance->clock_out_time) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You have already clocked out today'
+                ], 400);
+            }
+
+            $clockOutTime = Carbon::now();
+            $clockInTime = Carbon::parse($attendance->clock_in_time);
+            
+            // Calculate total hours
+            $totalMinutes = $clockOutTime->diffInMinutes($clockInTime);
+            $totalHours = round($totalMinutes / 60, 2);
+            $overtimeHours = $totalHours > 8 ? $totalHours - 8 : 0;
+            
+            // Update attendance record
+            DB::table('attendances')
+                ->where('id', $attendance->id)
+                ->update([
+                    'clock_out_time' => $clockOutTime,
+                    'total_hours' => $totalHours,
+                    'overtime_hours' => $overtimeHours,
+                    'status' => 'clocked_out',
+                    'updated_at' => now()
+                ]);
+
+            // Update time entry record
+            $timeEntry = DB::table('time_entries')
+                ->where('employee_id', $employee->id)
+                ->whereDate('work_date', $today)
+                ->first();
+
+            if ($timeEntry) {
+                DB::table('time_entries')
+                    ->where('id', $timeEntry->id)
+                    ->update([
+                        'clock_out_time' => $clockOutTime->format('H:i:s'),
+                        'hours_worked' => min(8, $totalHours), // Regular hours capped at 8
+                        'overtime_hours' => $overtimeHours,
+                        'status' => 'pending',
+                        'updated_at' => now()
+                    ]);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Successfully clocked out',
+                'data' => [
+                    'clock_out_time' => $clockOutTime->format('h:i A'),
+                    'total_hours' => $totalHours,
+                    'overtime_hours' => $overtimeHours,
+                    'clocked_in' => false
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('ESS Clock Out Error: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to clock out: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get current clock status for employee
+     */
+    public function getClockStatus(Request $request)
+    {
+        try {
+            $employee = Auth::guard('employee')->user();
+            $today = Carbon::today();
+            
+            $attendance = DB::table('attendances')
+                ->where('employee_id', $employee->id)
+                ->whereDate('date', $today)
+                ->first();
+            
+            if (!$attendance) {
+                return response()->json([
+                    'success' => true,
+                    'data' => [
+                        'clocked_in' => false,
+                        'status' => 'not_clocked_in',
+                        'message' => 'Not clocked in today'
+                    ]
+                ]);
+            }
+
+            $clockedIn = $attendance->clock_in_time && !$attendance->clock_out_time;
+            
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'clocked_in' => $clockedIn,
+                    'clock_in_time' => $attendance->clock_in_time,
+                    'clock_out_time' => $attendance->clock_out_time,
+                    'total_hours' => $attendance->total_hours ?? 0,
+                    'status' => $attendance->status,
+                    'location' => $attendance->location
+                ]
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('ESS Clock Status Error: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to get clock status: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get attendance log for employee dashboard
+     */
+    public function getAttendanceLog(Request $request)
+    {
+        try {
+            $employee = Auth::guard('employee')->user();
+            
+            $attendances = DB::table('attendances')
+                ->where('employee_id', $employee->id)
+                ->orderBy('date', 'desc')
+                ->limit(10)
+                ->get()
+                ->map(function ($attendance) {
+                    return [
+                        'date' => Carbon::parse($attendance->date)->format('M d, Y'),
+                        'clock_in' => $attendance->clock_in_time ? Carbon::parse($attendance->clock_in_time)->format('h:i A') : '--',
+                        'clock_out' => $attendance->clock_out_time ? Carbon::parse($attendance->clock_out_time)->format('h:i A') : '--',
+                        'hours' => $attendance->total_hours ? number_format($attendance->total_hours, 2) : '0.00',
+                        'status' => $attendance->status
+                    ];
+                });
+
+            return response()->json([
+                'success' => true,
+                'data' => $attendances
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('ESS Attendance Log Error: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to load attendance log: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
 
 }

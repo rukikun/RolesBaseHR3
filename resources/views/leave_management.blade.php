@@ -1198,6 +1198,205 @@ setTimeout(function() {
         modal.classList.remove('show');
     }
 }, 100);
+
+// View Details Functions (following claims reimbursement pattern)
+function viewLeaveTypeDetails(name, code, maxDays, carryForward, requiresApproval) {
+    document.getElementById('view-leave-type-name').textContent = name || '-';
+    document.getElementById('view-leave-type-code').textContent = code || '-';
+    document.getElementById('view-leave-type-max-days').textContent = maxDays + ' days/year';
+    document.getElementById('view-leave-type-carry-forward').textContent = carryForward || 'No';
+    document.getElementById('view-leave-type-approval').textContent = requiresApproval || 'Yes';
+    document.getElementById('view-leave-type-status').textContent = 'Active';
+    openWorkingModal('view-leave-type-modal');
+}
+
+function viewLeaveRequestDetails(requestId) {
+    const requestRow = document.querySelector(`button[onclick="viewLeaveRequestDetails(${requestId})"]`)?.closest('tr');
+    
+    if (requestRow && requestRow.cells.length >= 7) {
+        document.getElementById('view-leave-request-employee').textContent = requestRow.cells[0].textContent.trim();
+        document.getElementById('view-leave-request-type').textContent = requestRow.cells[1].textContent.trim();
+        document.getElementById('view-leave-request-start').textContent = requestRow.cells[2].textContent.trim();
+        document.getElementById('view-leave-request-end').textContent = requestRow.cells[3].textContent.trim();
+        document.getElementById('view-leave-request-days').textContent = requestRow.cells[4].textContent.trim();
+        document.getElementById('view-leave-request-reason').textContent = requestRow.cells[5].textContent.trim();
+        document.getElementById('view-leave-request-status').textContent = requestRow.cells[6].querySelector('.badge')?.textContent.trim() || 'Unknown';
+        openWorkingModal('view-leave-request-modal');
+    }
+}
 </script>
+
+<!-- View Leave Type Details Modal -->
+<div class="working-modal" id="view-leave-type-modal" style="display: none;">
+    <div class="working-modal-backdrop" onclick="closeWorkingModal('view-leave-type-modal')"></div>
+    <div class="working-modal-dialog">
+        <div class="working-modal-content">
+            <div class="working-modal-header">
+                <h5 class="working-modal-title">Leave Type Details</h5>
+                <button type="button" class="working-modal-close" onclick="closeWorkingModal('view-leave-type-modal')">&times;</button>
+            </div>
+            <div class="working-modal-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <strong>Name:</strong>
+                        <p id="view-leave-type-name" class="mb-2">-</p>
+                    </div>
+                    <div class="col-md-6">
+                        <strong>Code:</strong>
+                        <p id="view-leave-type-code" class="mb-2">-</p>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <strong>Max Days Per Year:</strong>
+                        <p id="view-leave-type-max-days" class="mb-2">-</p>
+                    </div>
+                    <div class="col-md-6">
+                        <strong>Carry Forward:</strong>
+                        <p id="view-leave-type-carry-forward" class="mb-2">-</p>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <strong>Requires Approval:</strong>
+                        <p id="view-leave-type-approval" class="mb-2">-</p>
+                    </div>
+                    <div class="col-md-6">
+                        <strong>Status:</strong>
+                        <p id="view-leave-type-status" class="mb-2">-</p>
+                    </div>
+                </div>
+            </div>
+            <div class="working-modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeWorkingModal('view-leave-type-modal')">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- View Leave Request Details Modal -->
+<div class="working-modal" id="view-leave-request-modal" style="display: none;">
+    <div class="working-modal-backdrop" onclick="closeWorkingModal('view-leave-request-modal')"></div>
+    <div class="working-modal-dialog">
+        <div class="working-modal-content">
+            <div class="working-modal-header">
+                <h5 class="working-modal-title">Leave Request Details</h5>
+                <button type="button" class="working-modal-close" onclick="closeWorkingModal('view-leave-request-modal')">&times;</button>
+            </div>
+            <div class="working-modal-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <strong>Employee:</strong>
+                        <p id="view-leave-request-employee" class="mb-2">-</p>
+                    </div>
+                    <div class="col-md-6">
+                        <strong>Leave Type:</strong>
+                        <p id="view-leave-request-type" class="mb-2">-</p>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <strong>Start Date:</strong>
+                        <p id="view-leave-request-start" class="mb-2">-</p>
+                    </div>
+                    <div class="col-md-6">
+                        <strong>End Date:</strong>
+                        <p id="view-leave-request-end" class="mb-2">-</p>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <strong>Days:</strong>
+                        <p id="view-leave-request-days" class="mb-2">-</p>
+                    </div>
+                    <div class="col-md-6">
+                        <strong>Status:</strong>
+                        <p id="view-leave-request-status" class="mb-2">-</p>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-12">
+                        <strong>Reason:</strong>
+                        <p id="view-leave-request-reason" class="mb-2">-</p>
+                    </div>
+                </div>
+            </div>
+            <div class="working-modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeWorkingModal('view-leave-request-modal')">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script src="{{ asset('assets/js/working-modal-ess.js') }}"></script>
 @endpush
+
+<style>
+/* Working Modal Centering */
+.working-modal {
+  display: none !important;
+  position: fixed !important;
+  top: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  background: rgba(0, 0, 0, 0.5) !important;
+  z-index: 9999 !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.working-modal-dialog {
+  max-width: 600px !important;
+  width: 90% !important;
+  margin: 0 !important;
+}
+
+.working-modal-content {
+  background: white !important;
+  border-radius: 8px !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* Preserve original button sizes - Force uniform sizing */
+.btn-sm, .btn.btn-sm {
+  padding: 0.25rem 0.5rem !important;
+  font-size: 0.875rem !important;
+  line-height: 1.5 !important;
+  border-radius: 0.2rem !important;
+  min-width: 32px !important;
+  height: 31px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.btn-group .btn-sm, .btn-group .btn {
+  padding: 0.25rem 0.5rem !important;
+  min-width: 32px !important;
+  height: 31px !important;
+}
+
+/* Ensure ALL action buttons maintain exact same sizing */
+td .btn-group .btn, 
+td .btn-group .btn-sm,
+.btn-group .btn-outline-info,
+.btn-group .btn-outline-primary,
+.btn-group .btn-outline-danger,
+.btn-group .btn-outline-success,
+.btn-group .btn-outline-warning {
+  padding: 0.25rem 0.5rem !important;
+  font-size: 0.875rem !important;
+  min-width: 32px !important;
+  height: 31px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+/* Force icon sizing consistency */
+td .btn-group .btn i,
+td .btn-group .btn-sm i {
+  font-size: 0.875rem !important;
+}
+</style>

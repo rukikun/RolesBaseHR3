@@ -57,31 +57,10 @@
 @endif
 
 @php
-  // Statistics are now passed from controller, but keep fallback values
 $totalClaims = $totalClaims ?? 0;
 $pendingClaims = $pendingClaims ?? 0;
 $approvedClaims = $approvedClaims ?? 0;
 $totalAmount = $totalAmount ?? 0;
-
-// DEBUG: Check what data is being passed
-echo "<!-- DEBUG: Claim Types Count: " . (isset($claimTypes) ? $claimTypes->count() : 'NOT SET') . " -->";
-echo "<!-- DEBUG: Claims Count: " . (isset($claims) ? $claims->count() : 'NOT SET') . " -->";
-echo "<!-- DEBUG: Employees Count: " . (isset($employees) ? $employees->count() : 'NOT SET') . " -->";
-
-if (isset($claimTypes) && $claimTypes->count() > 0) {
-    echo "<!-- DEBUG: First Claim Type: " . $claimTypes->first()->name . " -->";
-}
-
-if (isset($employees) && $employees->count() > 0) {
-    echo "<!-- DEBUG: First Employee: " . $employees->first()->first_name . " " . $employees->first()->last_name . " (ID: " . $employees->first()->id . ") -->";
-    echo "<!-- DEBUG: All Employee IDs: ";
-    foreach ($employees as $emp) {
-        echo $emp->id . ":" . $emp->first_name . " ";
-    }
-    echo " -->";
-} else {
-    echo "<!-- DEBUG: NO EMPLOYEES FOUND IN VIEW DATA -->";
-}
 @endphp
 
 <!-- Claims Statistics -->
@@ -518,7 +497,7 @@ if (isset($employees) && $employees->count() > 0) {
                 <h5 class="working-modal-title">Create Claim</h5>
                 <button type="button" class="working-modal-close" onclick="closeWorkingModal('create-claim-modal')">&times;</button>
             </div>
-            <form id="create-claim-form" method="POST" action="{{ route('claims.store') }}" enctype="multipart/form-data" onsubmit="submitClaimForm(event)">
+            <form id="create-claim-form" method="POST" action="{{ route('claims.store.simple') }}" enctype="multipart/form-data">
                 @csrf
                 <div class="working-modal-body">
                     <div class="row">
@@ -526,30 +505,18 @@ if (isset($employees) && $employees->count() > 0) {
                             <label for="employee-select" class="form-label">Employee</label>
                             <select class="form-select" id="employee-select" name="employee_id" required>
                                 <option value="">Select Employee</option>
-                                <!-- Debug: Show employee count -->
-                                @if(isset($employees))
-                                    <!-- Employees found: {{ $employees->count() }} -->
-                                    @forelse($employees as $employee)
-                                        <option value="{{ $employee->id }}" {{ old('employee_id') == $employee->id ? 'selected' : '' }}>
+                                @if(isset($employees) && $employees->count() > 0)
+                                    @foreach($employees as $employee)
+                                        <option value="{{ $employee->id }}">
                                             {{ $employee->first_name }} {{ $employee->last_name }}
                                         </option>
-                                    @empty
-                                        <option value="" disabled>No employees in collection</option>
-                                        <!-- Fallback employees for immediate functionality -->
-                                        <option value="1">John Doe (Fallback)</option>
-                                        <option value="2">Jane Smith (Fallback)</option>
-                                        <option value="3">Mike Johnson (Fallback)</option>
-                                        <option value="4">Sarah Wilson (Fallback)</option>
-                                        <option value="5">Tom Brown (Fallback)</option>
-                                    @endforelse
+                                    @endforeach
                                 @else
-                                    <option value="" disabled>Employees variable not set</option>
-                                    <!-- Guaranteed fallback employees -->
-                                    <option value="1">John Doe (Guaranteed)</option>
-                                    <option value="2">Jane Smith (Guaranteed)</option>
-                                    <option value="3">Mike Johnson (Guaranteed)</option>
-                                    <option value="4">Sarah Wilson (Guaranteed)</option>
-                                    <option value="5">Tom Brown (Guaranteed)</option>
+                                    <option value="1">John Doe</option>
+                                    <option value="2">Jane Smith</option>
+                                    <option value="3">Mike Johnson</option>
+                                    <option value="4">Sarah Wilson</option>
+                                    <option value="5">Tom Brown</option>
                                 @endif
                             </select>
                         </div>
@@ -557,24 +524,13 @@ if (isset($employees) && $employees->count() > 0) {
                             <label for="claim-type-select" class="form-label">Claim Type</label>
                             <select class="form-select" id="claim-type-select" name="claim_type_id" required>
                                 <option value="">Select Claim Type</option>
-                                @if(isset($claimTypes))
-                                    <!-- Claim Types found: {{ $claimTypes->count() }} -->
-                                    @forelse($claimTypes as $claimType)
-                                        <option value="{{ $claimType->id }}" {{ old('claim_type_id') == $claimType->id ? 'selected' : '' }}>
+                                @if(isset($claimTypes) && $claimTypes->count() > 0)
+                                    @foreach($claimTypes as $claimType)
+                                        <option value="{{ $claimType->id }}">
                                             {{ $claimType->name }} ({{ $claimType->code ?? 'N/A' }})
                                         </option>
-                                    @empty
-                                        <option value="" disabled>No claim types in collection</option>
-                                        <!-- Fallback claim types -->
-                                        <option value="1">Travel Expenses (TRAVEL)</option>
-                                        <option value="2">Meal Allowance (MEAL)</option>
-                                        <option value="3">Office Supplies (OFFICE)</option>
-                                        <option value="4">Training Costs (TRAIN)</option>
-                                        <option value="5">Medical Expenses (MEDICAL)</option>
-                                    @endforelse
+                                    @endforeach
                                 @else
-                                    <option value="" disabled>Claim types variable not set</option>
-                                    <!-- Guaranteed fallback claim types -->
                                     <option value="1">Travel Expenses (TRAVEL)</option>
                                     <option value="2">Meal Allowance (MEAL)</option>
                                     <option value="3">Office Supplies (OFFICE)</option>
@@ -587,11 +543,11 @@ if (isset($employees) && $employees->count() > 0) {
                     <div class="row mt-3">
                         <div class="col-md-6">
                             <label for="claim-amount" class="form-label">Amount</label>
-                            <input type="number" class="form-control" id="claim-amount" name="amount" step="0.01" min="0" value="{{ old('amount') }}" required>
+                            <input type="number" class="form-control" id="claim-amount" name="amount" step="0.01" min="0" required>
                         </div>
                         <div class="col-md-6">
                             <label for="claim-date" class="form-label">Claim Date</label>
-                            <input type="date" class="form-control" id="claim-date" name="claim_date" value="{{ old('claim_date') }}" required>
+                            <input type="date" class="form-control" id="claim-date" name="claim_date" required>
                         </div>
                     </div>
                     <div class="row mt-3">
@@ -602,7 +558,7 @@ if (isset($employees) && $employees->count() > 0) {
                     </div>
                     <div class="mt-3">
                         <label for="claim-description" class="form-label">Description</label>
-                        <textarea class="form-control" id="claim-description" name="description" rows="3" required placeholder="Describe the expense...">{{ old('description') }}</textarea>
+                        <textarea class="form-control" id="claim-description" name="description" rows="3" required placeholder="Describe the expense..."></textarea>
                     </div>
                 </div>
                 <div class="working-modal-footer">
@@ -617,91 +573,30 @@ if (isset($employees) && $employees->count() > 0) {
 
 @push('scripts')
 <script>
-// Force hide all modals on page load - CRITICAL FIX
-document.addEventListener('DOMContentLoaded', function() {
-    function forceHideAllModals() {
-        const allModals = document.querySelectorAll('.working-modal');
-        allModals.forEach(modal => {
-            modal.style.setProperty('display', 'none', 'important');
-            modal.style.visibility = 'hidden';
-            modal.classList.remove('show');
-        });
-    }
-    
-    forceHideAllModals();
-    setTimeout(forceHideAllModals, 50);
-    setTimeout(forceHideAllModals, 100);
-    setTimeout(forceHideAllModals, 200);
-    setTimeout(forceHideAllModals, 500);
-    setTimeout(forceHideAllModals, 1000);
-});
-
-// Modal functions - Clean implementation
-function openModal(modalId) {
+// Simple modal functions
+function openWorkingModal(modalId) {
     const modal = document.getElementById(modalId);
     if (modal) {
-        modal.style.setProperty('display', 'flex', 'important');
-        modal.style.visibility = 'visible';
-        modal.classList.add('show');
+        modal.style.display = 'flex';
         document.body.style.overflow = 'hidden';
     }
 }
 
-function closeModal(modalId) {
+function closeWorkingModal(modalId) {
     const modal = document.getElementById(modalId);
     if (modal) {
-        modal.style.setProperty('display', 'none', 'important');
-        modal.style.visibility = 'hidden';
-        modal.classList.remove('show');
+        modal.style.display = 'none';
         document.body.style.overflow = 'auto';
         
-        // Reset form if it exists
+        // Reset form
         const form = modal.querySelector('form');
         if (form) {
             form.reset();
-            // Reset form action and method for create mode
-            if (modalId === 'create-claim-type-modal') {
-                form.action = "#";
-                form.method = 'POST';
-                // Remove any hidden method input
-                const methodInput = form.querySelector('input[name="_method"]');
-                if (methodInput) {
-                    methodInput.remove();
-                }
-                // Update modal title and button
-                document.querySelector('#create-claim-type-modal .working-modal-title').textContent = 'Create Claim Type';
-                document.querySelector('#create-claim-type-modal .btn-primary').textContent = 'Create Claim Type';
-            }
         }
     }
 }
 
-// Handle edit claim data from session (only if explicitly requested)
-@if(session('edit_claim') && session('show_edit_modal'))
-document.addEventListener('DOMContentLoaded', function() {
-    const editData = @json(session('edit_claim'));
-    
-    // Populate form with edit data
-    document.getElementById('claim-type-select').value = editData.claim_type_id || '';
-    document.getElementById('claim-amount').value = editData.amount || '';
-    document.getElementById('claim-date').value = editData.claim_date || '';
-    document.getElementById('claim-description').value = editData.description || '';
-    
-    // Update form action for editing
-    const form = document.getElementById('create-claim-form');
-    form.action = '#';
-    form.innerHTML += '<input type="hidden" name="_method" value="PUT">';
-    
-    // Update modal title
-    document.querySelector('#create-claim-modal .working-modal-title').textContent = 'Edit Claim';
-    document.querySelector('#create-claim-modal .btn-primary').textContent = 'Update Claim';
-    
-    // Show modal
-    openModal('create-claim-modal');
-});
-@endif
-
-// SIMPLIFIED: Use regular form submission instead of AJAX
+// Form submission with validation
 document.addEventListener('DOMContentLoaded', function() {
     const claimForm = document.getElementById('create-claim-form');
     if (claimForm) {
@@ -748,379 +643,45 @@ document.addEventListener('DOMContentLoaded', function() {
                 return false;
             }
             
-            // Debug: Log form data before submission
-            console.log('Form validation passed. Submitting with data:');
-            console.log('Employee ID:', employeeSelect.value);
-            console.log('Employee Name:', employeeSelect.options[employeeSelect.selectedIndex].text);
-            console.log('Claim Type ID:', claimTypeSelect.value);
-            console.log('Amount:', amountInput.value);
-            console.log('Date:', dateInput.value);
-            console.log('Description:', descriptionInput.value);
-            
-            // Let the form submit normally
+            // Show loading state
             const submitBtn = claimForm.querySelector('button[type="submit"]');
             if (submitBtn) {
                 submitBtn.disabled = true;
                 submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Submitting...';
             }
             
-            return true; // Allow normal form submission
+            // Allow form to submit normally
+            return true;
         });
     }
-    
-    // Add loading states to action buttons
-    const actionForms = document.querySelectorAll('form[action*="/claims/"]');
-    actionForms.forEach(form => {
-        // Skip the create claim form as it's handled above
-        if (form.id === 'create-claim-form') return;
-        
-        form.addEventListener('submit', function(e) {
-            const submitBtn = form.querySelector('button[type="submit"]');
-            if (submitBtn) {
-                submitBtn.disabled = true;
-                const originalHtml = submitBtn.innerHTML;
-                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-                
-                // Re-enable after 3 seconds in case of issues
-                setTimeout(() => {
-                    submitBtn.disabled = false;
-                    submitBtn.innerHTML = originalHtml;
-                }, 3000);
-            }
-        });
-    });
 });
 
-// Working Modal Functions
-function openWorkingModal(modalId) {
-    console.log('Opening modal:', modalId);
-    const modal = document.getElementById(modalId);
-    if (modal) {
-        modal.style.setProperty('display', 'flex', 'important');
-        modal.style.visibility = 'visible';
-        modal.classList.add('show');
-        document.body.style.overflow = 'hidden';
-        
-        // Debug employee dropdown content
-        if (modalId === 'create-claim-modal') {
-            setTimeout(() => {
-                const employeeSelect = document.getElementById('employee-select');
-                if (employeeSelect) {
-                    console.log('Employee dropdown options:', employeeSelect.innerHTML);
-                    console.log('Employee dropdown option count:', employeeSelect.options.length);
-                    
-                    // Auto-select first employee if none selected and employees exist
-                    if (!employeeSelect.value && employeeSelect.options.length > 1) {
-                        employeeSelect.selectedIndex = 1; // Skip the "Select Employee" option
-                        console.log('Auto-selected employee:', employeeSelect.value);
-                    }
-                }
-            }, 100);
-        }
-        
-        // Focus first input
-        setTimeout(() => {
-            const firstInput = modal.querySelector('input:not([type="hidden"]), select, textarea');
-            if (firstInput) {
-                firstInput.focus();
-            }
-        }, 100);
-    }
-}
-
-function closeWorkingModal(modalId) {
-    console.log('Closing modal:', modalId);
-    const modal = document.getElementById(modalId);
-    if (modal) {
-        modal.style.setProperty('display', 'none', 'important');
-        modal.style.visibility = 'hidden';
-        modal.classList.remove('show');
-        document.body.style.overflow = 'auto';
-        
-        // Reset form if it exists
-        const form = modal.querySelector('form');
-        if (form) {
-            form.reset();
-            
-            // Reset form action and method for create mode
-            if (modalId === 'create-claim-type-modal') {
-                form.action = "{{ route('claim-types.store') }}";
-                const methodInput = form.querySelector('input[name="_method"]');
-                if (methodInput) {
-                    methodInput.remove();
-                }
-                // Reset modal title and button
-                document.querySelector('#create-claim-type-modal .working-modal-title').textContent = 'Create Claim Type';
-                document.querySelector('#create-claim-type-modal .btn-primary').textContent = 'Create Claim Type';
-            } else if (modalId === 'create-claim-modal') {
-                form.action = "{{ route('claims.store') }}";
-                const methodInput = form.querySelector('input[name="_method"]');
-                if (methodInput) {
-                    methodInput.remove();
-                }
-                // Reset modal title and button
-                document.querySelector('#create-claim-modal .working-modal-title').textContent = 'Create Claim';
-                document.querySelector('#create-claim-modal .btn-primary').textContent = 'Submit Claim';
-            }
-        }
-    }
-}
-
-// View claim type details function
+// View claim type details
 function viewClaimTypeDetails(name, code, maxAmount, requiresAttachment, autoApprove) {
-    console.log('Viewing claim type details:', name);
-    
-    // Populate modal with data
     document.getElementById('view-claim-type-name').textContent = name || 'N/A';
     document.getElementById('view-claim-type-code').textContent = code || 'N/A';
     document.getElementById('view-claim-type-max-amount').textContent = maxAmount ? `$${parseFloat(maxAmount).toFixed(2)}` : 'No limit';
     document.getElementById('view-claim-type-attachment').textContent = requiresAttachment || 'No';
     document.getElementById('view-claim-type-auto-approve').textContent = autoApprove || 'No';
     document.getElementById('view-claim-type-status').textContent = 'Active';
-    
-    // Show modal
     openWorkingModal('view-claim-type-modal');
 }
 
-// Edit claim type function
-function editClaimType(id, name, code, maxAmount, description, requiresAttachment, autoApprove) {
-    console.log('Editing claim type:', id, name);
-    
-    // Populate form with data
-    document.getElementById('claim-type-name').value = name || '';
-    document.getElementById('claim-type-code').value = code || '';
-    document.getElementById('max-amount').value = maxAmount || '';
-    document.getElementById('description').value = description || '';
-    document.getElementById('requires-attachment').checked = requiresAttachment == 1;
-    document.getElementById('auto-approve').checked = autoApprove == 1;
-    
-    // Update form action and method for editing
-    const form = document.getElementById('create-claim-type-form');
-    form.action = `/claim-types/${id}`;
-    
-    // Add method spoofing for PUT request
-    let methodInput = form.querySelector('input[name="_method"]');
-    if (!methodInput) {
-        methodInput = document.createElement('input');
-        methodInput.type = 'hidden';
-        methodInput.name = '_method';
-        form.appendChild(methodInput);
-    }
-    methodInput.value = 'PUT';
-    
-    // Update modal title and button
-    document.querySelector('#create-claim-type-modal .working-modal-title').textContent = 'Edit Claim Type';
-    document.querySelector('#create-claim-type-modal .btn-primary').textContent = 'Update Claim Type';
-    
-    // Show modal
-    openWorkingModal('create-claim-type-modal');
-}
-
-// Edit claim function
-function editClaim(claimId) {
-    console.log('Editing claim:', claimId);
-    
-    // Find the claim row in the table
-    const claimRow = document.querySelector(`button[onclick="viewClaimDetails(${claimId})"]`)?.closest('tr');
-    
-    if (claimRow && claimRow.cells.length >= 7) {
-        // Extract data from table row
-        const employee = claimRow.cells[0].textContent.trim();
-        const claimType = claimRow.cells[1].textContent.trim();
-        const amount = claimRow.cells[2].textContent.trim().replace('$', '');
-        const date = claimRow.cells[3].textContent.trim();
-        const description = claimRow.cells[4].textContent.trim();
-        
-        // Find employee ID from dropdown
-        const employeeSelect = document.getElementById('employee-select');
-        let employeeId = '';
-        for (let option of employeeSelect.options) {
-            if (option.text.includes(employee.split(' ')[0])) {
-                employeeId = option.value;
-                break;
-            }
-        }
-        
-        // Find claim type ID from dropdown
-        const claimTypeSelect = document.getElementById('claim-type-select');
-        let claimTypeId = '';
-        for (let option of claimTypeSelect.options) {
-            if (option.text.includes(claimType)) {
-                claimTypeId = option.value;
-                break;
-            }
-        }
-        
-        // Convert date format (from "Mon dd, yyyy" to "yyyy-mm-dd")
-        let formattedDate = '';
-        if (date && date !== 'N/A') {
-            try {
-                const dateObj = new Date(date);
-                if (!isNaN(dateObj.getTime())) {
-                    formattedDate = dateObj.toISOString().split('T')[0];
-                }
-            } catch (e) {
-                console.warn('Date parsing failed:', e);
-            }
-        }
-        
-        // Populate form with data
-        document.getElementById('employee-select').value = employeeId;
-        document.getElementById('claim-type-select').value = claimTypeId;
-        document.getElementById('claim-amount').value = amount;
-        document.getElementById('claim-date').value = formattedDate;
-        document.getElementById('claim-description').value = description;
-        
-        // Update form action and method for editing
-        const form = document.getElementById('create-claim-form');
-        form.action = `/claims/${claimId}`;
-        
-        // Add method spoofing for PUT request
-        let methodInput = form.querySelector('input[name="_method"]');
-        if (!methodInput) {
-            methodInput = document.createElement('input');
-            methodInput.type = 'hidden';
-            methodInput.name = '_method';
-            form.appendChild(methodInput);
-        }
-        methodInput.value = 'PUT';
-        
-        // Update modal title and button
-        document.querySelector('#create-claim-modal .working-modal-title').textContent = 'Edit Claim';
-        document.querySelector('#create-claim-modal .btn-primary').textContent = 'Update Claim';
-        
-        // Show modal
-        openWorkingModal('create-claim-modal');
-    } else {
-        alert('Unable to load claim data for editing. Please try again.');
-    }
-}
-
-// Submit claim form with AJAX to handle JSON response
-function submitClaimForm(event) {
-    event.preventDefault();
-    
-    const form = event.target;
-    const formData = new FormData(form);
-    const submitButton = form.querySelector('button[type="submit"]');
-    
-    // Disable submit button
-    submitButton.disabled = true;
-    submitButton.textContent = 'Submitting...';
-    
-    fetch(form.action, {
-        method: 'POST',
-        body: formData,
-        headers: {
-            'X-Requested-With': 'XMLHttpRequest',
-            'Accept': 'application/json'
-        }
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            alert('✅ ' + data.message);
-            closeWorkingModal('create-claim-modal');
-            // Optionally reload the page to show updated data
-            // window.location.reload();
-        } else {
-            alert('❌ ' + data.message);
-        }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        alert('❌ Error submitting claim. Please try again.');
-    })
-    .finally(() => {
-        // Re-enable submit button
-        submitButton.disabled = false;
-        submitButton.textContent = 'Submit Claim';
-    });
-}
-
-// View claim details function
+// View claim details
 function viewClaimDetails(claimId) {
-    console.log('Viewing claim details for ID:', claimId);
-    
-    // Find the claim row in the table
     const claimRow = document.querySelector(`button[onclick="viewClaimDetails(${claimId})"]`)?.closest('tr');
     
     if (claimRow && claimRow.cells.length >= 7) {
-        // Extract data from table row
-        const employee = claimRow.cells[0].textContent.trim();
-        const claimType = claimRow.cells[1].textContent.trim();
-        const amount = claimRow.cells[2].textContent.trim();
-        const date = claimRow.cells[3].textContent.trim();
-        const description = claimRow.cells[4].textContent.trim();
-        const hasAttachment = claimRow.cells[5].querySelector('.fa-paperclip') ? 'Yes' : 'No';
-        const status = claimRow.cells[6].querySelector('.badge')?.textContent.trim() || 'Unknown';
-        
-        // Populate modal with data
-        document.getElementById('view-claim-employee').textContent = employee;
-        document.getElementById('view-claim-type').textContent = claimType;
-        document.getElementById('view-claim-amount').textContent = amount;
-        document.getElementById('view-claim-date').textContent = date;
-        document.getElementById('view-claim-description').textContent = description;
-        document.getElementById('view-claim-attachment').textContent = hasAttachment;
-        document.getElementById('view-claim-status').textContent = status;
-        
-        // Show modal
+        document.getElementById('view-claim-employee').textContent = claimRow.cells[0].textContent.trim();
+        document.getElementById('view-claim-type').textContent = claimRow.cells[1].textContent.trim();
+        document.getElementById('view-claim-amount').textContent = claimRow.cells[2].textContent.trim();
+        document.getElementById('view-claim-date').textContent = claimRow.cells[3].textContent.trim();
+        document.getElementById('view-claim-description').textContent = claimRow.cells[4].textContent.trim();
+        document.getElementById('view-claim-attachment').textContent = claimRow.cells[5].querySelector('.fa-paperclip') ? 'Yes' : 'No';
+        document.getElementById('view-claim-status').textContent = claimRow.cells[6].querySelector('.badge')?.textContent.trim() || 'Unknown';
         openWorkingModal('view-claim-modal');
-    } else {
-        alert('Unable to load claim details. Please try again.');
     }
 }
-
-// Filter claims by status (matching leave management pattern)
-function filterClaims() {
-    const statusFilter = document.getElementById('claim-status-filter');
-    const tbody = document.getElementById('claims-tbody');
-    const rows = tbody.querySelectorAll('tr');
-    
-    if (!statusFilter) return;
-    
-    const selectedStatus = statusFilter.value.toLowerCase();
-    
-    rows.forEach(row => {
-        if (row.cells.length < 7) return; // Skip empty state row
-        
-        const statusCell = row.cells[6]; // Status column
-        const statusBadge = statusCell.querySelector('.badge');
-        
-        if (!statusBadge) return;
-        
-        const rowStatus = statusBadge.textContent.toLowerCase().trim();
-        
-        if (selectedStatus === '' || rowStatus === selectedStatus) {
-            row.style.display = '';
-        } else {
-            row.style.display = 'none';
-        }
-    });
-}
-
-// Initialize page
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('Claims management page loaded');
-    
-    // Add event listener for status filter
-    const statusFilter = document.getElementById('claim-status-filter');
-    if (statusFilter) {
-        statusFilter.addEventListener('change', filterClaims);
-    }
-    
-    // Auto-show modal if editing claim type
-    @if(session('edit_claim_type'))
-        openWorkingModal('create-claim-type-modal');
-        
-        // Update form action for editing
-        const form = document.getElementById('create-claim-type-form');
-        if (form) {
-            form.action = "{{ route('claim-types.update', session('edit_claim_type.id')) }}";
-            form.insertAdjacentHTML('afterbegin', '@method("PUT")');
-        }
-    @endif
-});
 </script>
 @endpush
 

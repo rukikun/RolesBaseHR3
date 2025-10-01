@@ -793,14 +793,19 @@
       })
       .then(response => response.json())
       .then(data => {
-        if (data.success) {
-          clockedIn = data.clocked_in;
+        if (data.success && data.data) {
+          clockedIn = data.data.clocked_in;
           if (clockedIn) {
-            clockInTime = new Date(data.clock_in_time);
+            clockInTime = new Date(data.data.clock_in_time);
             document.getElementById('clockStatus').textContent = 'Clocked In';
             document.getElementById('clockStatus').style.background = 'rgba(40, 167, 69, 0.8)';
             document.getElementById('clockInBtn').disabled = true;
             document.getElementById('clockOutBtn').disabled = false;
+          } else {
+            document.getElementById('clockStatus').textContent = 'Not Clocked In';
+            document.getElementById('clockStatus').style.background = 'rgba(255,255,255,0.2)';
+            document.getElementById('clockInBtn').disabled = false;
+            document.getElementById('clockOutBtn').disabled = true;
           }
         }
       })
@@ -891,6 +896,8 @@
     function clockOut() {
       const now = new Date();
       
+      console.log('Attempting to clock out...');
+      
       fetch('/employee/clock-out', {
         method: 'POST',
         headers: {
@@ -901,8 +908,15 @@
           timestamp: now.toISOString()
         })
       })
-      .then(response => response.json())
+      .then(response => {
+        console.log('Clock-out response status:', response.status);
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+      })
       .then(data => {
+        console.log('Clock-out response data:', data);
         if (data.success) {
           clockedIn = false;
           clockInTime = null;
@@ -910,15 +924,17 @@
           document.getElementById('clockStatus').style.background = 'rgba(255,255,255,0.2)';
           document.getElementById('clockInBtn').disabled = false;
           document.getElementById('clockOutBtn').disabled = true;
+          document.getElementById('todayHours').textContent = '0:00';
           loadAttendanceLog();
-          showNotification('Clocked out successfully!', 'success');
+          showNotification('Clocked out successfully! Total hours: ' + (data.data?.total_hours || '0') + 'h', 'success');
         } else {
+          console.error('Clock-out failed:', data.message);
           showNotification('Error clocking out: ' + (data.message || 'Unknown error'), 'error');
         }
       })
       .catch(error => {
-        console.error('Error:', error);
-        showNotification('Error clocking out. Please try again.', 'error');
+        console.error('Clock-out error:', error);
+        showNotification('Error clocking out: ' + error.message, 'error');
       });
     }
     
@@ -933,13 +949,13 @@
       .then(response => response.json())
       .then(data => {
         const tbody = document.getElementById('attendanceLog');
-        if (data.success && data.logs.length > 0) {
-          tbody.innerHTML = data.logs.map(log => `
+        if (data.success && data.data && data.data.length > 0) {
+          tbody.innerHTML = data.data.map(log => `
             <tr>
               <td>${log.date}</td>
               <td>${log.clock_in || '--'}</td>
               <td>${log.clock_out || '--'}</td>
-              <td>${log.hours || '0:00'}</td>
+              <td>${log.hours || '0.00'}</td>
             </tr>
           `).join('');
         } else {

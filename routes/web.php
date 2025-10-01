@@ -19,6 +19,7 @@ use App\Http\Controllers\ShiftRequestController;
 use App\Http\Controllers\EmployeeShiftController;
 use App\Http\Controllers\EmployeeESSController;
 use App\Http\Controllers\LandingController;
+use App\Http\Controllers\AdminProfileController;
 
 // Registration routes
 Route::get('/register', [RegisterController::class, 'showRegistrationForm'])->name('register');
@@ -87,7 +88,8 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/claims-test', [ClaimControllerSimple::class, 'index'])->name('claims-test');
     
     // Claims CRUD Routes - Using Simple Controller for Testing
-    Route::post('/claims/store', [ClaimControllerSimple::class, 'store'])->name('claims.store');
+    Route::get('/claims/test', [ClaimControllerSimple::class, 'test'])->name('claims.test');
+    Route::post('/claims/store', [ClaimControllerSimple::class, 'store'])->name('claims.store.simple');
     Route::get('/claims/{id}/view', [ClaimController::class, 'viewClaim'])->name('claims.view');
     Route::get('/claims/{id}/edit', [ClaimController::class, 'editWeb'])->name('claims.edit');
     Route::put('/claims/{id}', [ClaimController::class, 'updateWeb'])->name('claims.update');
@@ -184,6 +186,28 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/attendance/clock-out', [AttendanceController::class, 'clockOut'])->name('attendance.clock-out');
     Route::post('/attendance/start-break', [AttendanceController::class, 'startBreak'])->name('attendance.start-break');
     Route::post('/attendance/end-break', [AttendanceController::class, 'endBreak'])->name('attendance.end-break');
+    
+    // Admin Attendance Management Routes
+    Route::get('/admin/attendance/{id}', [AttendanceController::class, 'show'])->name('admin.attendance.show');
+    Route::get('/admin/attendance/{id}/edit', [AttendanceController::class, 'edit'])->name('admin.attendance.edit');
+    Route::put('/admin/attendance/{id}', [AttendanceController::class, 'update'])->name('admin.attendance.update');
+    
+    // Admin Shift Management Routes
+    Route::get('/admin/shifts/{id}', [ShiftController::class, 'show'])->name('admin.shifts.show');
+    Route::get('/admin/shifts/{id}/edit', [ShiftController::class, 'edit'])->name('admin.shifts.edit');
+    Route::put('/admin/shifts/{id}', [ShiftController::class, 'update'])->name('admin.shifts.update');
+    Route::post('/shifts/store', [ShiftController::class, 'store'])->name('shifts.store');
+    
+    // Admin Leave Request Management Routes
+    Route::get('/admin/leave-requests/{id}', [LeaveController::class, 'showAdmin'])->name('admin.leave-requests.show');
+    Route::post('/admin/leave-requests/{id}/approve', [LeaveController::class, 'approveAdmin'])->name('admin.leave-requests.approve');
+    Route::post('/admin/leave-requests/{id}/reject', [LeaveController::class, 'rejectAdmin'])->name('admin.leave-requests.reject');
+    Route::post('/leave-requests/store', [LeaveController::class, 'store'])->name('leave-requests.store');
+    
+    // Admin Claims Management Routes
+    Route::get('/admin/claims/{id}', [ClaimControllerSimple::class, 'show'])->name('admin.claims.show');
+    Route::post('/admin/claims/{id}/approve', [ClaimControllerSimple::class, 'approve'])->name('admin.claims.approve');
+    Route::post('/admin/claims/{id}/reject', [ClaimControllerSimple::class, 'reject'])->name('admin.claims.reject');
 
     // Employee Management Routes
     Route::get('/employees', [EmployeeController::class, 'index'])->name('employees');
@@ -334,6 +358,24 @@ Route::get('/test-db', function() {
             'error' => $e->getMessage()
         ]);
     }
+});
+
+// Admin Profile Management Routes (Super Admin and Admin access)
+Route::middleware(['auth'])->prefix('admin/profile')->name('admin.profile.')->group(function () {
+    // Profile management
+    Route::get('/', [AdminProfileController::class, 'index'])->name('index');
+    Route::get('/edit', [AdminProfileController::class, 'edit'])->name('edit');
+    Route::put('/update', [AdminProfileController::class, 'update'])->name('update');
+    
+    // Password management
+    Route::get('/change-password', [AdminProfileController::class, 'showChangePasswordForm'])->name('change-password');
+    Route::put('/update-password', [AdminProfileController::class, 'updatePassword'])->name('update-password');
+    
+    // Admin management (Super Admin only)
+    Route::get('/manage-admins', [AdminProfileController::class, 'manageAdmins'])->name('manage-admins');
+    Route::post('/create-admin', [AdminProfileController::class, 'createAdmin'])->name('create-admin');
+    Route::put('/admins/{id}', [AdminProfileController::class, 'updateAdmin'])->name('update-admin');
+    Route::delete('/admins/{id}', [AdminProfileController::class, 'deleteAdmin'])->name('delete-admin');
 });
 
 // Removed duplicate routes - using the Web methods defined above

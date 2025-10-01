@@ -545,4 +545,183 @@ class AttendanceController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Show attendance details for admin
+     */
+    public function show($id)
+    {
+        try {
+            $attendance = DB::table('attendances as a')
+                ->leftJoin('employees as e', 'a.employee_id', '=', 'e.id')
+                ->select(
+                    'a.*',
+                    DB::raw("CONCAT(COALESCE(e.first_name, ''), ' ', COALESCE(e.last_name, '')) as employee_name")
+                )
+                ->where('a.id', $id)
+                ->first();
+
+            if (!$attendance) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Attendance record not found'
+                ], 404);
+            }
+
+            return response()->json([
+                'success' => true,
+                'attendance' => $attendance
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('Error in AttendanceController@show: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to load attendance record: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get attendance record for editing
+     */
+    public function edit($id)
+    {
+        try {
+            $attendance = DB::table('attendances as a')
+                ->leftJoin('employees as e', 'a.employee_id', '=', 'e.id')
+                ->select(
+                    'a.*',
+                    DB::raw("CONCAT(COALESCE(e.first_name, ''), ' ', COALESCE(e.last_name, '')) as employee_name")
+                )
+                ->where('a.id', $id)
+                ->first();
+
+            if (!$attendance) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Attendance record not found'
+                ], 404);
+            }
+
+            return response()->json([
+                'success' => true,
+                'attendance' => $attendance
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('Error in AttendanceController@edit: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to load attendance record: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Update attendance record
+     */
+    public function update(Request $request, $id)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'clock_in_time' => 'nullable|date',
+                'clock_out_time' => 'nullable|date',
+                'status' => 'required|in:present,late,absent,on_break,clocked_out',
+                'location' => 'nullable|string|max:255',
+                'notes' => 'nullable|string|max:1000'
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            $attendance = DB::table('attendances')->where('id', $id)->first();
+            
+            if (!$attendance) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Attendance record not found'
+                ], 404);
+            }
+
+            $updateData = [
+                'status' => $request->status,
+                'location' => $request->location,
+                'notes' => $request->notes,
+                'updated_at' => now()
+            ];
+
+            // Handle clock times
+            if ($request->clock_in_time) {
+                $updateData['clock_in_time'] = Carbon::parse($request->clock_in_time);
+            }
+
+            if ($request->clock_out_time) {
+                $updateData['clock_out_time'] = Carbon::parse($request->clock_out_time);
+                
+                // Recalculate hours if both times are present
+                if ($request->clock_in_time && $request->clock_out_time) {
+                    $clockIn = Carbon::parse($request->clock_in_time);
+                    $clockOut = Carbon::parse($request->clock_out_time);
+                    
+                    $totalMinutes = $clockOut->diffInMinutes($clockIn);
+                    $totalHours = round($totalMinutes / 60, 2);
+                    $overtimeHours = $totalHours > 8 ? $totalHours - 8 : 0;
+                    
+                    $updateData['total_hours'] = $totalHours;
+                    $updateData['overtime_hours'] = $overtimeHours;
+                }
+            }
+
+            DB::table('attendances')->where('id', $id)->update($updateData);
+
+            // Also update corresponding time entry if it exists
+            $timeEntry = DB::table('time_entries')
+                ->where('employee_id', $attendance->employee_id)
+                ->whereDate('work_date', $attendance->date)
+                ->first();
+
+            if ($timeEntry) {
+                $timeUpdateData = [
+                    'status' => 'pending',
+                    'updated_at' => now()
+                ];
+
+                if (isset($updateData['clock_in_time'])) {
+                    $timeUpdateData['clock_in_time'] = Carbon::parse($request->clock_in_time)->format('H:i:s');
+                }
+
+                if (isset($updateData['clock_out_time'])) {
+                    $timeUpdateData['clock_out_time'] = Carbon::parse($request->clock_out_time)->format('H:i:s');
+                    
+                    if (isset($updateData['total_hours'])) {
+                        $timeUpdateData['hours_worked'] = min(8, $updateData['total_hours']);
+                        $timeUpdateData['overtime_hours'] = $updateData['overtime_hours'];
+                    }
+                }
+
+                DB::table('time_entries')->where('id', $timeEntry->id)->update($timeUpdateData);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Attendance record updated successfully'
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('Error in AttendanceController@update: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update attendance record: ' . $e->getMessage()
+            ], 500);
+        }
+    }
 }
