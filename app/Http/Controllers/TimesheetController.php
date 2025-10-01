@@ -10,6 +10,7 @@ use App\Models\TimeEntry;
 use App\Models\Shift;
 use App\Models\LeaveRequest;
 use App\Models\Claim;
+use App\Models\EmployeeTimesheetDetail;
 
 class TimesheetController extends Controller
 {
@@ -815,6 +816,91 @@ class TimesheetController extends Controller
         }
     }
 
+    // Sync attendance logs to timesheets
+    public function syncAttendanceToTimesheets(Request $request)
+    {
+        try {
+            // Get attendance records that don't have corresponding timesheet entries
+            $attendanceRecords = DB::select("
+                SELECT a.*, 
+                       CONCAT(COALESCE(e.first_name, ''), ' ', COALESCE(e.last_name, '')) as employee_name
+                FROM attendances a
+                LEFT JOIN employees e ON a.employee_id = e.id
+                LEFT JOIN time_entries t ON (a.employee_id = t.employee_id AND a.date = t.work_date)
+                WHERE t.id IS NULL 
+                  AND a.clock_in_time IS NOT NULL 
+                  AND a.clock_out_time IS NOT NULL
+                  AND a.total_hours > 0
+                ORDER BY a.date DESC, a.employee_id
+                LIMIT 100
+            ");
+
+            $syncedCount = 0;
+            $errors = [];
+
+            foreach ($attendanceRecords as $attendance) {
+                try {
+                    // Calculate regular and overtime hours
+                    $totalHours = floatval($attendance->total_hours);
+                    $regularHours = min($totalHours, 8);
+                    $overtimeHours = max(0, $totalHours - 8);
+
+                    // Extract time components from datetime
+                    $clockInTime = \Carbon\Carbon::parse($attendance->clock_in_time)->format('H:i:s');
+                    $clockOutTime = \Carbon\Carbon::parse($attendance->clock_out_time)->format('H:i:s');
+
+                    // Create timesheet entry
+                    DB::insert(
+                        "INSERT INTO time_entries 
+                         (employee_id, work_date, clock_in_time, clock_out_time, hours_worked, overtime_hours, 
+                          break_duration, status, description, notes, created_at, updated_at) 
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())",
+                        [
+                            $attendance->employee_id,
+                            $attendance->date,
+                            $clockInTime,
+                            $clockOutTime,
+                            $regularHours,
+                            $overtimeHours,
+                            1.0, // Default 1 hour break
+                            'pending', // Default status for approval
+                            'Imported from ESS attendance log',
+                            "Synced from attendance record. Location: " . ($attendance->location ?? 'Office') . 
+                            ". IP: " . ($attendance->ip_address ?? 'N/A')
+                        ]
+                    );
+
+                    $syncedCount++;
+                } catch (\Exception $e) {
+                    $errors[] = "Failed to sync attendance for employee {$attendance->employee_id} on {$attendance->date}: " . $e->getMessage();
+                }
+            }
+
+            if ($syncedCount > 0) {
+                return response()->json([
+                    'success' => true,
+                    'message' => "Successfully synced {$syncedCount} attendance records to timesheets",
+                    'synced_count' => $syncedCount,
+                    'errors' => $errors
+                ]);
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No new attendance records found to sync. All attendance logs may already have corresponding timesheet entries.',
+                    'synced_count' => 0,
+                    'errors' => $errors
+                ]);
+            }
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error syncing attendance to timesheets: ' . $e->getMessage(),
+                'synced_count' => 0
+            ], 500);
+        }
+    }
+
     // Reject timesheet via web form
     public function rejectWeb($id)
     {
@@ -920,5 +1006,196 @@ class TimesheetController extends Controller
                 'message' => 'Error fetching employee timesheets: ' . $e->getMessage()
             ], 500);
         }
+    }
+
+    // View detailed weekly timesheet
+    public function viewDetailedTimesheet($employeeId, $weekStartDate = null)
+    {
+        try {
+            if (!$weekStartDate) {
+                $weekStartDate = now()->startOfWeek()->format('Y-m-d');
+            }
+
+            // Get or generate the detailed timesheet
+            $timesheet = EmployeeTimesheetDetail::generateFromAttendance($employeeId, $weekStartDate);
+            
+            if (!$timesheet) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Timesheet not found for this employee and week'
+                ], 404);
+            }
+
+            // Get employee information
+            $employee = Employee::find($employeeId);
+            if (!$employee) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Employee not found'
+                ], 404);
+            }
+
+            // Get supervisor information
+            $supervisor = null;
+            if ($timesheet->supervisor_id) {
+                $supervisor = Employee::find($timesheet->supervisor_id);
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'timesheet' => $timesheet,
+                    'employee' => $employee,
+                    'supervisor' => $supervisor,
+                    'weekly_data' => $timesheet->weekly_data
+                ]
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error loading detailed timesheet: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    // Generate weekly timesheet from attendance data
+    public function generateWeeklyTimesheet(Request $request)
+    {
+        $request->validate([
+            'employee_id' => 'required|integer|exists:employees,id',
+            'week_start_date' => 'required|date'
+        ]);
+
+        try {
+            $timesheet = EmployeeTimesheetDetail::generateFromAttendance(
+                $request->employee_id,
+                $request->week_start_date
+            );
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Weekly timesheet generated successfully',
+                'data' => $timesheet
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error generating weekly timesheet: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    // Get weekly timesheet for modal display
+    public function getWeeklyTimesheetForModal($timesheetId)
+    {
+        try {
+            // Get the basic timesheet entry
+            $timesheet = DB::selectOne(
+                "SELECT t.*, 
+                 COALESCE(CONCAT(e.first_name, ' ', e.last_name), 'Unknown Employee') as employee_name,
+                 e.department,
+                 COALESCE(CONCAT(s.first_name, ' ', s.last_name), 'N/A') as supervisor_name
+                 FROM time_entries t 
+                 LEFT JOIN employees e ON t.employee_id = e.id 
+                 LEFT JOIN employees s ON e.supervisor_id = s.id
+                 WHERE t.id = ?",
+                [$timesheetId]
+            );
+
+            if (!$timesheet) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Timesheet not found'
+                ], 404);
+            }
+
+            // Get the week start date for this timesheet
+            $workDate = \Carbon\Carbon::parse($timesheet->work_date);
+            $weekStartDate = $workDate->startOfWeek()->format('Y-m-d');
+
+            // Try to get or generate detailed weekly timesheet
+            $weeklyTimesheet = EmployeeTimesheetDetail::generateFromAttendance(
+                $timesheet->employee_id,
+                $weekStartDate
+            );
+
+            // If no detailed timesheet exists, create a basic one from the single entry
+            if (!$weeklyTimesheet) {
+                $weeklyTimesheet = $this->createBasicWeeklyTimesheet($timesheet);
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'employee_name' => $timesheet->employee_name,
+                    'department' => $timesheet->department ?? 'N/A',
+                    'supervisor_name' => $timesheet->supervisor_name,
+                    'weekly_data' => $weeklyTimesheet->weekly_data ?? $this->getBasicWeeklyData($timesheet)
+                ]
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error loading weekly timesheet: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    // Create basic weekly timesheet from single entry
+    private function createBasicWeeklyTimesheet($timesheet)
+    {
+        $workDate = \Carbon\Carbon::parse($timesheet->work_date);
+        $dayName = strtolower($workDate->format('l'));
+        
+        $weeklyData = [
+            'Monday' => ['date' => null, 'time_in' => null, 'break' => null, 'time_out' => null, 'total_hours' => '0 hrs.', 'actual_time' => '0 hrs.'],
+            'Tuesday' => ['date' => null, 'time_in' => null, 'break' => null, 'time_out' => null, 'total_hours' => '0 hrs.', 'actual_time' => '0 hrs.'],
+            'Wednesday' => ['date' => null, 'time_in' => null, 'break' => null, 'time_out' => null, 'total_hours' => '0 hrs.', 'actual_time' => '0 hrs.'],
+            'Thursday' => ['date' => null, 'time_in' => null, 'break' => null, 'time_out' => null, 'total_hours' => '0 hrs.', 'actual_time' => '0 hrs.'],
+            'Friday' => ['date' => null, 'time_in' => null, 'break' => null, 'time_out' => null, 'total_hours' => '0 hrs.', 'actual_time' => '0 hrs.']
+        ];
+
+        $dayKey = ucfirst($dayName);
+        if (isset($weeklyData[$dayKey])) {
+            $weeklyData[$dayKey] = [
+                'date' => $workDate->format('m-d-y'),
+                'time_in' => $timesheet->clock_in_time ? \Carbon\Carbon::parse($timesheet->clock_in_time)->format('g:i A') : null,
+                'break' => '12:00 PM - 1:00 PM',
+                'time_out' => $timesheet->clock_out_time ? \Carbon\Carbon::parse($timesheet->clock_out_time)->format('g:i A') : null,
+                'total_hours' => ($timesheet->hours_worked ?? 0) . ' hrs.',
+                'actual_time' => ($timesheet->hours_worked ?? 0) . ' hrs.'
+            ];
+        }
+
+        return (object)['weekly_data' => $weeklyData];
+    }
+
+    // Get basic weekly data from single timesheet entry
+    private function getBasicWeeklyData($timesheet)
+    {
+        $workDate = \Carbon\Carbon::parse($timesheet->work_date);
+        $dayName = strtolower($workDate->format('l'));
+        
+        $weeklyData = [
+            'Monday' => ['date' => null, 'time_in' => null, 'break' => null, 'time_out' => null, 'total_hours' => '0 hrs.', 'actual_time' => '0 hrs.'],
+            'Tuesday' => ['date' => null, 'time_in' => null, 'break' => null, 'time_out' => null, 'total_hours' => '0 hrs.', 'actual_time' => '0 hrs.'],
+            'Wednesday' => ['date' => null, 'time_in' => null, 'break' => null, 'time_out' => null, 'total_hours' => '0 hrs.', 'actual_time' => '0 hrs.'],
+            'Thursday' => ['date' => null, 'time_in' => null, 'break' => null, 'time_out' => null, 'total_hours' => '0 hrs.', 'actual_time' => '0 hrs.'],
+            'Friday' => ['date' => null, 'time_in' => null, 'break' => null, 'time_out' => null, 'total_hours' => '0 hrs.', 'actual_time' => '0 hrs.']
+        ];
+
+        $dayKey = ucfirst($dayName);
+        if (isset($weeklyData[$dayKey])) {
+            $weeklyData[$dayKey] = [
+                'date' => $workDate->format('m-d-y'),
+                'time_in' => $timesheet->clock_in_time ? \Carbon\Carbon::parse($timesheet->clock_in_time)->format('g:i A') : null,
+                'break' => '12:00 PM - 1:00 PM',
+                'time_out' => $timesheet->clock_out_time ? \Carbon\Carbon::parse($timesheet->clock_out_time)->format('g:i A') : null,
+                'total_hours' => ($timesheet->hours_worked ?? 0) . ' hrs.',
+                'actual_time' => ($timesheet->hours_worked ?? 0) . ' hrs.'
+            ];
+        }
+
+        return $weeklyData;
     }
 }

@@ -117,7 +117,7 @@
               <div class="employee-list-hr">
                 <h6 class="text-muted mb-2 small fw-bold">
                   Assigned Employees:
-                  @if(count($shift['employees']) > 4)
+                  @if(count($shift['employees']) > 2)
                     <small class="text-info ms-1">(Scroll to see all {{ count($shift['employees']) }})</small>
                   @endif
                 </h6>
@@ -138,10 +138,13 @@
                         @if(!empty($employee['position']))
                           <div class="employee-position-hr text-muted" style="font-size: 10px;">{{ $employee['position'] }}</div>
                         @endif
+                        @if(!empty($employee['specific_time']))
+                          <div class="employee-specific-time text-info" style="font-size: 9px; font-weight: 500;">{{ $employee['specific_time'] }}</div>
+                        @endif
                       </div>
                     </div>
                   @endforeach
-                  @if(count($shift['employees']) > 4)
+                  @if(count($shift['employees']) > 2)
                     <div class="scroll-indicator text-center text-muted small py-1">
                       <i class="fas fa-chevron-down"></i> Scroll for more
                     </div>
@@ -208,7 +211,7 @@
             <td>{{ $entry->formatted_clock_in ?? '--' }}</td>
             <td>{{ $entry->formatted_clock_out ?? '--' }}</td>
             <td>
-              @if($entry->total_hours)
+              @if($entry->total_hours !== null)
                 @if($entry->total_hours >= 8)
                   <span class="text-success fw-bold">{{ $entry->total_hours }} hrs</span>
                 @else
@@ -219,7 +222,7 @@
               @endif
             </td>
             <td>
-              @if($entry->total_hours && $entry->total_hours >= 8)
+              @if($entry->total_hours !== null && $entry->total_hours >= 8)
                 <span class="badge bg-success">
                   Clocked Out
                 </span>
@@ -345,6 +348,31 @@ document.addEventListener('DOMContentLoaded', function() {
 </script>
 
 <style>
+/* Dashboard Layout Fix - Remove Vertical Scroll */
+.dashboard-section {
+  margin-bottom: 1.5rem;
+}
+
+.dashboard-section:last-child {
+  margin-bottom: 1rem; /* Add bottom margin to prevent cutoff */
+}
+
+/* Ensure content doesn't get cut off by scrollbar */
+.row {
+  margin-right: 0;
+  margin-left: 0;
+}
+
+.card, .stat-card-modern {
+  margin-right: 0;
+}
+
+/* Table responsive container */
+.table-responsive {
+  margin-right: 0;
+  overflow-x: auto;
+}
+
 /* Modern Statistics Cards */
 .stat-card-modern {
   background: #ffffff;
@@ -433,7 +461,7 @@ document.addEventListener('DOMContentLoaded', function() {
   position: relative;
   overflow: visible;
   padding: 20px !important;
-  min-height: 280px;
+  min-height: 240px;
 }
 
 .shift-card-hr:hover {
@@ -470,9 +498,9 @@ document.addEventListener('DOMContentLoaded', function() {
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
-/* Employee list container with vertical scrolling */
+/* Employee list container with vertical scrolling - Limited to 2 visible employees */
 .employee-list-container {
-  max-height: 200px; /* Increased height to show more employees */
+  max-height: 150px; /* Height for exactly 2 employee items (60px each) */
   overflow-y: auto; /* Enable vertical scrolling */
   overflow-x: hidden; /* Disable horizontal scrolling */
   padding: 4px;
@@ -627,7 +655,7 @@ document.addEventListener('DOMContentLoaded', function() {
   
   .shift-card-hr {
     margin-bottom: 1rem;
-    min-height: 250px;
+    min-height: 220px;
     padding: 15px !important;
   }
   
@@ -637,7 +665,7 @@ document.addEventListener('DOMContentLoaded', function() {
   }
   
   .employee-list-container {
-    max-height: 180px; /* Maintain good height on mobile */
+    max-height: 110px; /* Height for 2 employee items on mobile */
     overflow-y: auto;
     overflow-x: hidden;
     padding: 3px;

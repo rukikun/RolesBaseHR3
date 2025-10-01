@@ -158,9 +158,14 @@
           <h5 class="mb-0">
             <i class="fas fa-list me-2"></i>Timesheets Management
           </h5>
-          <button class="btn btn-primary" onclick="openWorkingModal('timesheet-modal')">
-            <i class="fas fa-plus me-2"></i>Add Timesheet
-          </button>
+          <div class="d-flex gap-2">
+            <button class="btn btn-success" onclick="syncAttendanceToTimesheets()" title="Import attendance logs as timesheet entries">
+              <i class="fas fa-sync me-2"></i>Sync Attendance
+            </button>
+            <button class="btn btn-primary" onclick="openWorkingModal('timesheet-modal')">
+              <i class="fas fa-plus me-2"></i>Add Timesheet
+            </button>
+          </div>
         </div>
         <!-- Timesheets Table -->
         <div class="table-responsive">
@@ -200,6 +205,9 @@
                   </td>
                   <td>
                     <div class="btn-group" role="group">
+                      <button class="btn btn-sm btn-outline-info" onclick="viewWeeklyTimesheet({{ $timesheet->id }})" title="View Weekly Timesheet">
+                        <i class="fas fa-eye"></i>
+                      </button>
                       <a href="{{ route('timesheets.edit', $timesheet->id) }}" class="btn btn-sm btn-outline-primary" title="Edit">
                         <i class="fas fa-edit"></i>
                       </a>
@@ -1238,6 +1246,103 @@
             </div>
             <div class="working-modal-footer">
                 <button type="button" class="btn btn-secondary" onclick="closeWorkingModal('view-attendance-modal')">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Weekly Timesheet Details Modal -->
+<div class="working-modal" id="weekly-timesheet-modal" style="display: none;">
+    <div class="working-modal-backdrop" onclick="closeWorkingModal('weekly-timesheet-modal')"></div>
+    <div class="working-modal-dialog" style="max-width: 900px;">
+        <div class="working-modal-content">
+            <div class="working-modal-header">
+                <h5 class="working-modal-title">Employee Timesheet</h5>
+                <button type="button" class="working-modal-close" onclick="closeWorkingModal('weekly-timesheet-modal')">&times;</button>
+            </div>
+            <div class="working-modal-body">
+                <!-- Employee Header Info -->
+                <div class="row mb-4">
+                    <div class="col-md-4">
+                        <strong>Employee Name:</strong> <span id="weekly-employee-name">-</span>
+                    </div>
+                    <div class="col-md-4">
+                        <strong>Department:</strong> <span id="weekly-department">-</span>
+                    </div>
+                    <div class="col-md-4">
+                        <strong>Supervisor Name:</strong> <span id="weekly-supervisor-name">-</span>
+                    </div>
+                </div>
+
+                <!-- Weekly Timesheet Table -->
+                <div class="table-responsive">
+                    <table class="table table-bordered weekly-timesheet-table">
+                        <thead class="table-success">
+                            <tr>
+                                <th class="day-header" style="background-color: #20B2AA; color: white; width: 100px;">Day</th>
+                                <th style="background-color: #20B2AA; color: white;">Date</th>
+                                <th style="background-color: #20B2AA; color: white;">Time In</th>
+                                <th style="background-color: #20B2AA; color: white;">Break</th>
+                                <th style="background-color: #20B2AA; color: white;">Time Out</th>
+                                <th style="background-color: #20B2AA; color: white;">Total Hours</th>
+                                <th style="background-color: #20B2AA; color: white;">Actual Time</th>
+                            </tr>
+                        </thead>
+                        <tbody id="weekly-timesheet-body">
+                            <tr class="monday-row">
+                                <td class="day-cell" style="background-color: #20B2AA; color: white; font-weight: bold;">Monday</td>
+                                <td id="monday-date">-</td>
+                                <td id="monday-time-in">-</td>
+                                <td id="monday-break">-</td>
+                                <td id="monday-time-out">-</td>
+                                <td id="monday-total-hours">-</td>
+                                <td id="monday-actual-time">-</td>
+                            </tr>
+                            <tr class="tuesday-row">
+                                <td class="day-cell" style="background-color: #20B2AA; color: white; font-weight: bold;">Tuesday</td>
+                                <td id="tuesday-date">-</td>
+                                <td id="tuesday-time-in">-</td>
+                                <td id="tuesday-break">-</td>
+                                <td id="tuesday-time-out">-</td>
+                                <td id="tuesday-total-hours">-</td>
+                                <td id="tuesday-actual-time">-</td>
+                            </tr>
+                            <tr class="wednesday-row">
+                                <td class="day-cell" style="background-color: #20B2AA; color: white; font-weight: bold;">Wednesday</td>
+                                <td id="wednesday-date">-</td>
+                                <td id="wednesday-time-in">-</td>
+                                <td id="wednesday-break">-</td>
+                                <td id="wednesday-time-out">-</td>
+                                <td id="wednesday-total-hours">-</td>
+                                <td id="wednesday-actual-time">-</td>
+                            </tr>
+                            <tr class="thursday-row">
+                                <td class="day-cell" style="background-color: #20B2AA; color: white; font-weight: bold;">Thursday</td>
+                                <td id="thursday-date">-</td>
+                                <td id="thursday-time-in">-</td>
+                                <td id="thursday-break">-</td>
+                                <td id="thursday-time-out">-</td>
+                                <td id="thursday-total-hours">-</td>
+                                <td id="thursday-actual-time">-</td>
+                            </tr>
+                            <tr class="friday-row">
+                                <td class="day-cell" style="background-color: #20B2AA; color: white; font-weight: bold;">Friday</td>
+                                <td id="friday-date">-</td>
+                                <td id="friday-time-in">-</td>
+                                <td id="friday-break">-</td>
+                                <td id="friday-time-out">-</td>
+                                <td id="friday-total-hours">-</td>
+                                <td id="friday-actual-time">-</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="working-modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeWorkingModal('weekly-timesheet-modal')">Close</button>
+                <button type="button" class="btn btn-primary" onclick="printTimesheet()">
+                    <i class="fas fa-print me-2"></i>Print
+                </button>
             </div>
         </div>
     </div>
@@ -3469,6 +3574,77 @@ window.navigateToClaims = navigateToClaims;
 window.formatTime = formatTime;
 window.filterEmployeesInTimesheet = filterEmployeesInTimesheet;
 
+// Sync Attendance to Timesheets Function
+function syncAttendanceToTimesheets() {
+    if (!confirm('This will import attendance logs as timesheet entries. Existing timesheets for the same employee and date will not be duplicated. Continue?')) {
+        return;
+    }
+    
+    // Show loading state
+    const syncBtn = document.querySelector('button[onclick="syncAttendanceToTimesheets()"]');
+    const originalText = syncBtn.innerHTML;
+    syncBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Syncing...';
+    syncBtn.disabled = true;
+    
+    fetch('/api/sync-attendance-to-timesheets', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Show success message
+            showAlert('success', `Successfully synced ${data.synced_count || 0} attendance records to timesheets!`);
+            // Reload the page to show updated timesheets
+            setTimeout(() => {
+                window.location.reload();
+            }, 1500);
+        } else {
+            showAlert('error', data.message || 'Failed to sync attendance records');
+        }
+    })
+    .catch(error => {
+        console.error('Sync error:', error);
+        showAlert('error', 'Network error occurred while syncing attendance records');
+    })
+    .finally(() => {
+        // Restore button state
+        syncBtn.innerHTML = originalText;
+        syncBtn.disabled = false;
+    });
+}
+
+// Helper function to show alerts
+function showAlert(type, message) {
+    const alertContainer = document.getElementById('alert-container');
+    const alertClass = type === 'success' ? 'alert-success' : 'alert-danger';
+    const iconClass = type === 'success' ? 'fa-check-circle' : 'fa-exclamation-circle';
+    
+    const alertHtml = `
+        <div class="alert ${alertClass} alert-dismissible fade show" role="alert">
+            <i class="fas ${iconClass} me-2"></i>${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    `;
+    
+    alertContainer.innerHTML = alertHtml;
+    
+    // Auto-dismiss after 5 seconds
+    setTimeout(() => {
+        const alert = alertContainer.querySelector('.alert');
+        if (alert) {
+            alert.remove();
+        }
+    }, 5000);
+}
+
+window.syncAttendanceToTimesheets = syncAttendanceToTimesheets;
+window.viewWeeklyTimesheet = viewWeeklyTimesheet;
+window.printTimesheet = printTimesheet;
+
 console.log('All timesheet management functions made globally available');
 </script>
 
@@ -3783,6 +3959,77 @@ td .btn-group .btn-sm i {
   box-shadow: 0 2px 10px rgba(0,0,0,0.1);
 }
 
+/* Weekly Timesheet Table Styling */
+.weekly-timesheet-table {
+  font-size: 0.9rem;
+  border-collapse: separate;
+  border-spacing: 0;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.weekly-timesheet-table th {
+  background-color: #20B2AA !important;
+  color: white !important;
+  font-weight: 600;
+  text-align: center;
+  padding: 12px 8px;
+  border: none;
+}
+
+.weekly-timesheet-table td {
+  text-align: center;
+  padding: 10px 8px;
+  border: 1px solid #e9ecef;
+  vertical-align: middle;
+}
+
+.weekly-timesheet-table .day-cell {
+  background-color: #20B2AA !important;
+  color: white !important;
+  font-weight: bold;
+  min-width: 80px;
+}
+
+.weekly-timesheet-table tbody tr:nth-child(even) {
+  background-color: #f8f9fa;
+}
+
+.weekly-timesheet-table tbody tr:hover {
+  background-color: #e3f2fd;
+}
+
+/* Modal sizing for weekly timesheet */
+#weekly-timesheet-modal .working-modal-dialog {
+  max-width: 1000px;
+  width: 95%;
+}
+
+#weekly-timesheet-modal .working-modal-content {
+  max-width: none;
+  width: 100%;
+}
+
+/* Print styles */
+@media print {
+  .weekly-timesheet-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  
+  .weekly-timesheet-table th,
+  .weekly-timesheet-table td {
+    border: 1px solid #000 !important;
+    padding: 8px !important;
+  }
+  
+  .working-modal-header,
+  .working-modal-footer {
+    display: none !important;
+  }
+}
+
 .navigation-card:hover {
   transform: translateY(-3px);
   box-shadow: 0 4px 20px rgba(0,0,0,0.15);
@@ -3876,6 +4123,168 @@ if (sessionStorage.getItem('activateAttendanceTab') === 'true') {
             }
         }, 500);
     });
+}
+
+// Weekly Timesheet Modal Functions
+function viewWeeklyTimesheet(timesheetId) {
+    console.log('Loading weekly timesheet for ID:', timesheetId);
+    
+    // Show loading state
+    const modal = document.getElementById('weekly-timesheet-modal');
+    if (!modal) {
+        console.error('Weekly timesheet modal not found');
+        return;
+    }
+    
+    // Clear previous data
+    clearWeeklyTimesheetData();
+    
+    // Show modal first
+    openWorkingModal('weekly-timesheet-modal');
+    
+    // Fetch timesheet data
+    fetch(`/api/timesheets/${timesheetId}/weekly`, {
+        method: 'GET',
+        headers: {
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.success) {
+            populateWeeklyTimesheetModal(data.data);
+        } else {
+            throw new Error(data.message || 'Failed to load timesheet data');
+        }
+    })
+    .catch(error => {
+        console.error('Error loading weekly timesheet:', error);
+        showAlert('error', 'Failed to load weekly timesheet: ' + error.message);
+        closeWorkingModal('weekly-timesheet-modal');
+    });
+}
+
+function clearWeeklyTimesheetData() {
+    // Clear header info
+    document.getElementById('weekly-employee-name').textContent = 'Loading...';
+    document.getElementById('weekly-department').textContent = 'Loading...';
+    document.getElementById('weekly-supervisor-name').textContent = 'Loading...';
+    
+    // Clear table data
+    const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday'];
+    days.forEach(day => {
+        document.getElementById(`${day}-date`).textContent = '-';
+        document.getElementById(`${day}-time-in`).textContent = '-';
+        document.getElementById(`${day}-break`).textContent = '-';
+        document.getElementById(`${day}-time-out`).textContent = '-';
+        document.getElementById(`${day}-total-hours`).textContent = '-';
+        document.getElementById(`${day}-actual-time`).textContent = '-';
+    });
+}
+
+function populateWeeklyTimesheetModal(data) {
+    try {
+        // Populate header info
+        document.getElementById('weekly-employee-name').textContent = data.employee_name || 'N/A';
+        document.getElementById('weekly-department').textContent = data.department || 'N/A';
+        document.getElementById('weekly-supervisor-name').textContent = data.supervisor_name || 'N/A';
+        
+        // Populate weekly data
+        if (data.weekly_data) {
+            Object.keys(data.weekly_data).forEach(day => {
+                const dayLower = day.toLowerCase();
+                const dayData = data.weekly_data[day];
+                
+                if (document.getElementById(`${dayLower}-date`)) {
+                    document.getElementById(`${dayLower}-date`).textContent = dayData.date || '-';
+                    document.getElementById(`${dayLower}-time-in`).textContent = dayData.time_in || '-';
+                    document.getElementById(`${dayLower}-break`).textContent = dayData.break || '-';
+                    document.getElementById(`${dayLower}-time-out`).textContent = dayData.time_out || '-';
+                    document.getElementById(`${dayLower}-total-hours`).textContent = dayData.total_hours || '-';
+                    document.getElementById(`${dayLower}-actual-time`).textContent = dayData.actual_time || '-';
+                }
+            });
+        }
+        
+        console.log('Weekly timesheet data populated successfully');
+    } catch (error) {
+        console.error('Error populating weekly timesheet modal:', error);
+        showAlert('error', 'Error displaying timesheet data');
+    }
+}
+
+function printTimesheet() {
+    // Hide modal elements that shouldn't be printed
+    const modal = document.getElementById('weekly-timesheet-modal');
+    const originalDisplay = modal.style.display;
+    
+    // Create a new window for printing
+    const printWindow = window.open('', '_blank');
+    const timesheetContent = document.querySelector('#weekly-timesheet-modal .working-modal-body').innerHTML;
+    
+    printWindow.document.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Employee Timesheet</title>
+            <style>
+                body { font-family: Arial, sans-serif; margin: 20px; }
+                .table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+                .table th, .table td { border: 1px solid #000; padding: 8px; text-align: center; }
+                .table th { background-color: #20B2AA; color: white; font-weight: bold; }
+                .day-cell { background-color: #20B2AA; color: white; font-weight: bold; }
+                .row { display: flex; justify-content: space-between; margin-bottom: 20px; }
+                .col-md-4 { flex: 1; margin-right: 20px; }
+                h3 { text-align: center; margin-bottom: 30px; }
+            </style>
+        </head>
+        <body>
+            <h3>Employee Timesheet</h3>
+            ${timesheetContent}
+        </body>
+        </html>
+    `);
+    
+    printWindow.document.close();
+    printWindow.focus();
+    
+    // Wait for content to load then print
+    setTimeout(() => {
+        printWindow.print();
+        printWindow.close();
+    }, 250);
+}
+
+// Alert function for showing messages
+function showAlert(type, message) {
+    const alertContainer = document.getElementById('alert-container');
+    if (!alertContainer) return;
+    
+    const alertClass = type === 'error' ? 'alert-danger' : 'alert-success';
+    const iconClass = type === 'error' ? 'fa-exclamation-circle' : 'fa-check-circle';
+    
+    const alertHtml = `
+        <div class="alert ${alertClass} alert-dismissible fade show" role="alert">
+            <i class="fas ${iconClass} me-2"></i>${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    `;
+    
+    alertContainer.innerHTML = alertHtml;
+    
+    // Auto-dismiss after 5 seconds
+    setTimeout(() => {
+        const alert = alertContainer.querySelector('.alert');
+        if (alert) {
+            alert.remove();
+        }
+    }, 5000);
 }
 </script>
 

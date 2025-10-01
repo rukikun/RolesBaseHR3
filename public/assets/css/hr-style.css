@@ -7,10 +7,28 @@
   --sidebar-width: 280px;
 }
 
-body {
+html, body {
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
   background-color: #ffffff !important;
   color: #212529;
+  height: auto !important;
+  overflow-x: hidden;
+}
+
+/* Hide scrollbar completely while keeping scroll functionality */
+::-webkit-scrollbar {
+  width: 0px;
+  background: transparent;
+}
+
+/* For Firefox */
+html {
+  scrollbar-width: none;
+}
+
+/* For Internet Explorer and Edge */
+body {
+  -ms-overflow-style: none;
 }
 
 .navbar {
@@ -100,12 +118,12 @@ main {
   padding-top: calc(56px + 1rem);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   background-color: #f8f9fa !important;
-  min-height: calc(100vh - 56px);
   position: relative;
   z-index: 1;
   box-sizing: border-box;
   width: calc(100% - var(--sidebar-width));
   overflow-x: hidden;
+  overflow-y: auto;
 }
 
 main.expanded {
@@ -270,7 +288,6 @@ main .container-fluid {
     margin-left: 0;
     width: 100%;
     background-color: #f8f9fa !important;
-    min-height: calc(100vh - 56px);
     padding: 1rem;
     padding-top: calc(56px + 1rem);
   }

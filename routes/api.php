@@ -146,6 +146,12 @@ Route::middleware('auth')->group(function () {
     Route::post('/timesheets/clock-data', [TimesheetController::class, 'createFromClockData']);
     Route::get('/timesheets/employee/{employeeId}', [TimesheetController::class, 'getTimesheetForEmployee']);
     
+    // Attendance to Timesheet sync route
+    Route::post('/sync-attendance-to-timesheets', [TimesheetController::class, 'syncAttendanceToTimesheets']);
+    
+    // Weekly timesheet view route
+    Route::get('/timesheets/{id}/weekly', [TimesheetController::class, 'getWeeklyTimesheetForModal']);
+    
     // Clockify Integration API routes
     Route::prefix('clockify')->group(function () {
         Route::get('/test-connection', [ClockifyController::class, 'testConnection']);

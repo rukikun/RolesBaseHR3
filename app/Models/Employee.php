@@ -83,6 +83,11 @@ class Employee extends Authenticatable implements AuthenticatableContract
         return $this->hasMany(Claim::class);
     }
 
+    public function timesheetDetails()
+    {
+        return $this->hasMany(EmployeeTimesheetDetail::class);
+    }
+
     public function user()
     {
         return $this->hasOne(User::class);
