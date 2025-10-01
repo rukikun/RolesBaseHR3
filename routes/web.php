@@ -45,10 +45,8 @@ Route::get('/admin/login', [AuthController::class, 'showLoginForm'])->name('admi
 Route::post('/admin/login', [AuthController::class, 'login']);
 Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
-// Admin dashboard (protected)
-Route::get('/dashboard', function () {
-    return view('dashboard'); // Blade view in resources/views/dashboard.blade.php
-})->middleware('auth')->name('dashboard');
+// HR dashboard (protected)
+Route::get('/dashboard', [App\Http\Controllers\HRDashboardController::class, 'index'])->middleware('auth')->name('dashboard');
 
 // Test modal route
 Route::get('/test-modal', function () {
@@ -359,6 +357,115 @@ Route::get('/test-db', function() {
         ]);
     }
 });
+
+// Dashboard data population route (for testing)
+Route::get('/populate-dashboard', function() {
+    try {
+        $seeder = new \Database\Seeders\DashboardDataSeeder();
+        $seeder->run();
+        return response()->json([
+            'success' => true,
+            'message' => 'Dashboard data populated successfully!'
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Error populating data: ' . $e->getMessage()
+        ]);
+    }
+})->name('populate.dashboard');
+
+// Debug route to check shift data
+Route::get('/debug-shifts', function() {
+    $shiftTypes = DB::table('shift_types')->get();
+    $shifts = DB::table('shifts')
+        ->join('employees', 'shifts.employee_id', '=', 'employees.id')
+        ->select('shifts.*', 'employees.first_name', 'employees.last_name', 'employees.status')
+        ->orderBy('shifts.shift_date', 'desc')
+        ->limit(20)
+        ->get();
+    $employees = DB::table('employees')->where('status', 'active')->count();
+    
+    return response()->json([
+        'shift_types_count' => $shiftTypes->count(),
+        'shift_types' => $shiftTypes,
+        'recent_shifts_count' => $shifts->count(),
+        'recent_shifts' => $shifts,
+        'active_employees_count' => $employees,
+        'today_date' => today()->format('Y-m-d')
+    ]);
+})->name('debug.shifts');
+
+// Debug route to check attendance data
+Route::get('/debug-attendance', function() {
+    $attendances = DB::table('attendances')
+        ->join('employees', 'attendances.employee_id', '=', 'employees.id')
+        ->select('attendances.*', 'employees.first_name', 'employees.last_name')
+        ->orderBy('attendances.attendance_date', 'desc')
+        ->limit(10)
+        ->get();
+    
+    $timeEntries = DB::table('time_entries')
+        ->join('employees', 'time_entries.employee_id', '=', 'employees.id')
+        ->select('time_entries.*', 'employees.first_name', 'employees.last_name')
+        ->orderBy('time_entries.created_at', 'desc')
+        ->limit(10)
+        ->get();
+    
+    return response()->json([
+        'attendances_count' => $attendances->count(),
+        'attendances' => $attendances,
+        'time_entries_count' => $timeEntries->count(),
+        'time_entries' => $timeEntries,
+        'today_date' => today()->format('Y-m-d')
+    ]);
+})->name('debug.attendance');
+
+// Simple test route for HR Dashboard data
+Route::get('/test-hr-data', function() {
+    try {
+        // Test attendances table
+        $attendanceCount = DB::table('attendances')->count();
+        $recentAttendances = DB::table('attendances')
+            ->join('employees', 'attendances.employee_id', '=', 'employees.id')
+            ->select('attendances.*', 'employees.first_name', 'employees.last_name')
+            ->limit(5)
+            ->get();
+        
+        // Test time_entries table
+        $timeEntriesCount = DB::table('time_entries')->count();
+        
+        // Test employees table
+        $employeesCount = DB::table('employees')->count();
+        
+        return [
+            'attendances_count' => $attendanceCount,
+            'time_entries_count' => $timeEntriesCount,
+            'employees_count' => $employeesCount,
+            'sample_attendances' => $recentAttendances->take(3),
+            'tables_exist' => [
+                'attendances' => Schema::hasTable('attendances'),
+                'time_entries' => Schema::hasTable('time_entries'),
+                'employees' => Schema::hasTable('employees')
+            ]
+        ];
+    } catch (Exception $e) {
+        return ['error' => $e->getMessage()];
+    }
+})->name('test.hr.data');
+
+// Test HR Dashboard controller method directly
+Route::get('/test-recent-entries', function() {
+    $controller = new \App\Http\Controllers\HRDashboardController();
+    $method = new \ReflectionMethod($controller, 'getRecentTimeEntries');
+    $method->setAccessible(true);
+    $result = $method->invoke($controller);
+    
+    return [
+        'count' => $result->count(),
+        'data' => $result->toArray()
+    ];
+})->name('test.recent.entries');
 
 // Admin Profile Management Routes (Super Admin and Admin access)
 Route::middleware(['auth'])->prefix('admin/profile')->name('admin.profile.')->group(function () {

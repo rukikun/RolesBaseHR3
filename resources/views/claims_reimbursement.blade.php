@@ -132,7 +132,7 @@ $totalAmount = $totalAmount ?? 0;
         <button class="btn btn-info mb-2 me-2" id="validate-attachments-btn">
           <i class="fas fa-check me-2"></i>Validate Attachments
         </button>
-        <button class="btn btn-warning mb-2 me-2" id="approve-reject-btn">
+        <button class="btn btn-warning mb-2 me-2" id="approve-reject-btn" onclick="scrollToClaims()">
           <i class="fas fa-gavel me-2"></i>Approve/Reject
         </button>
         <button class="btn btn-success mb-2" id="forward-finance-btn">
@@ -226,7 +226,7 @@ $totalAmount = $totalAmount ?? 0;
 </div>
 
 <!-- Claims Table -->
-<div class="card mb-4">
+<div class="card mb-4" id="claims-section">
   <div class="card-header d-flex justify-content-between align-items-center">
     <h5 class="card-title mb-0">
       <i class="fas fa-receipt me-2"></i>Claims
@@ -900,6 +900,21 @@ function viewClaimDetails(claimId) {
   }
 }
 </style>
+
+<script>
+// Function to scroll to claims section (for Approve/Reject button)
+function scrollToClaims() {
+  const claimsSection = document.getElementById('claims-section');
+  if (claimsSection) {
+    claimsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    // Add a subtle highlight effect
+    claimsSection.style.boxShadow = '0 0 20px rgba(0, 123, 255, 0.3)';
+    setTimeout(() => {
+      claimsSection.style.boxShadow = '';
+    }, 2000);
+  }
+}
+</script>
 @endpush
 
 @endsection

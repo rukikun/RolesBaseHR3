@@ -2031,7 +2031,7 @@ class EmployeeESSController extends Controller
                 ], 400);
             }
 
-            $clockInTime = Carbon::now();
+            $clockInTime = Carbon::now('Asia/Manila');
             
             // Determine if employee is late (assuming 9:00 AM is standard start time)
             $standardStartTime = Carbon::today()->setTime(9, 0, 0);
@@ -2042,7 +2042,7 @@ class EmployeeESSController extends Controller
                 DB::table('attendances')
                     ->where('id', $existingAttendance->id)
                     ->update([
-                        'clock_in_time' => $clockInTime,
+                        'clock_in_time' => $clockInTime->format('Y-m-d H:i:s'),
                         'status' => $status,
                         'location' => 'ESS Portal',
                         'ip_address' => $request->ip(),
@@ -2054,7 +2054,7 @@ class EmployeeESSController extends Controller
                 $attendanceId = DB::table('attendances')->insertGetId([
                     'employee_id' => $employee->id,
                     'date' => $today,
-                    'clock_in_time' => $clockInTime,
+                    'clock_in_time' => $clockInTime->format('Y-m-d H:i:s'),
                     'status' => $status,
                     'location' => 'ESS Portal',
                     'ip_address' => $request->ip(),
@@ -2150,7 +2150,7 @@ class EmployeeESSController extends Controller
                 ], 400);
             }
 
-            $clockOutTime = Carbon::now();
+            $clockOutTime = Carbon::now('Asia/Manila');
             $clockInTime = Carbon::parse($attendance->clock_in_time);
             
             // Calculate total hours
@@ -2162,7 +2162,7 @@ class EmployeeESSController extends Controller
             DB::table('attendances')
                 ->where('id', $attendance->id)
                 ->update([
-                    'clock_out_time' => $clockOutTime,
+                    'clock_out_time' => $clockOutTime->format('Y-m-d H:i:s'),
                     'total_hours' => $totalHours,
                     'overtime_hours' => $overtimeHours,
                     'status' => 'clocked_out',
@@ -2271,10 +2271,30 @@ class EmployeeESSController extends Controller
                 ->limit(10)
                 ->get()
                 ->map(function ($attendance) {
+                    // Parse the datetime strings properly and format to 12-hour format
+                    $clockInFormatted = '--';
+                    $clockOutFormatted = '--';
+                    
+                    if ($attendance->clock_in_time) {
+                        try {
+                            $clockInFormatted = Carbon::parse($attendance->clock_in_time)->format('h:i A');
+                        } catch (\Exception $e) {
+                            $clockInFormatted = '--';
+                        }
+                    }
+                    
+                    if ($attendance->clock_out_time) {
+                        try {
+                            $clockOutFormatted = Carbon::parse($attendance->clock_out_time)->format('h:i A');
+                        } catch (\Exception $e) {
+                            $clockOutFormatted = '--';
+                        }
+                    }
+                    
                     return [
                         'date' => Carbon::parse($attendance->date)->format('M d, Y'),
-                        'clock_in' => $attendance->clock_in_time ? Carbon::parse($attendance->clock_in_time)->format('h:i A') : '--',
-                        'clock_out' => $attendance->clock_out_time ? Carbon::parse($attendance->clock_out_time)->format('h:i A') : '--',
+                        'clock_in' => $clockInFormatted,
+                        'clock_out' => $clockOutFormatted,
                         'hours' => $attendance->total_hours ? number_format($attendance->total_hours, 2) : '0.00',
                         'status' => $attendance->status
                     ];

@@ -461,9 +461,7 @@
             <i class="fas fa-user-clock me-2"></i>Employee Attendance Logs
           </h5>
           <div class="d-flex gap-2">
-            <button class="btn btn-primary" onclick="openWorkingModal('attendance-modal')">
-              <i class="fas fa-plus me-2"></i>Manual Entry
-            </button>
+            
           </div>
         </div>
         
@@ -3851,6 +3849,34 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 });
+
+// Check if we need to activate attendance tab when page loads
+if (sessionStorage.getItem('activateAttendanceTab') === 'true') {
+    sessionStorage.removeItem('activateAttendanceTab');
+    // Wait for page to load then activate attendance tab
+    window.addEventListener('load', function() {
+        setTimeout(function() {
+            const attendanceTab = document.getElementById('attendance-tab');
+            const attendanceTabPane = document.getElementById('attendance');
+            
+            if (attendanceTab && attendanceTabPane) {
+                // Deactivate all tabs first
+                document.querySelectorAll('.nav-link').forEach(tab => {
+                    tab.classList.remove('active');
+                    tab.setAttribute('aria-selected', 'false');
+                });
+                document.querySelectorAll('.tab-pane').forEach(pane => {
+                    pane.classList.remove('show', 'active');
+                });
+                
+                // Activate attendance tab
+                attendanceTab.classList.add('active');
+                attendanceTab.setAttribute('aria-selected', 'true');
+                attendanceTabPane.classList.add('show', 'active');
+            }
+        }, 500);
+    });
+}
 </script>
 
 @endpush

@@ -124,10 +124,10 @@
         </h5>
       </div>
       <div class="card-body">
-        <button class="btn btn-info mb-2 me-2" id="review-leave-requests-btn">
+        <button class="btn btn-info mb-2 me-2" id="review-leave-requests-btn" onclick="scrollToLeaveRequests()">
           <i class="fas fa-eye me-2"></i>Review Requests
         </button>
-        <button class="btn btn-success mb-2 me-2" id="approve-deny-btn">
+        <button class="btn btn-success mb-2 me-2" id="approve-deny-btn" onclick="scrollToLeaveRequests()">
           <i class="fas fa-check me-2"></i>Approve/Deny
         </button>
         <button class="btn btn-warning mb-2" id="update-balance-btn">
@@ -217,7 +217,7 @@
 </div>
 
 <!-- Leave Requests -->
-<div class="card mb-4">
+<div class="card mb-4" id="leave-requests-section">
   <div class="card-header d-flex justify-content-between align-items-center">
     <h5 class="card-title mb-0">
       <i class="fas fa-calendar-check me-2"></i>Leave Requests
@@ -1400,3 +1400,19 @@ td .btn-group .btn-sm i {
   font-size: 0.875rem !important;
 }
 </style>
+
+<script>
+// Function to scroll to leave requests section (for Review Requests and Approve/Deny buttons)
+function scrollToLeaveRequests() {
+  const leaveRequestsSection = document.getElementById('leave-requests-section');
+  if (leaveRequestsSection) {
+    leaveRequestsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    // Add a subtle highlight effect
+    leaveRequestsSection.style.boxShadow = '0 0 20px rgba(0, 123, 255, 0.3)';
+    setTimeout(() => {
+      leaveRequestsSection.style.boxShadow = '';
+    }, 2000);
+  }
+}
+</script>
+

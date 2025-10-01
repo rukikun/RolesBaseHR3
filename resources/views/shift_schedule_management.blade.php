@@ -808,7 +808,7 @@ setTimeout(function() {
         <button class="btn btn-primary mb-2 me-2" onclick="openWorkingModal('create-shift-modal')">
           <i class="fas fa-plus me-2"></i>Add Shift
         </button>
-        <button class="btn btn-outline-primary mb-2" data-bs-toggle="modal" data-bs-target="#viewScheduleModal">
+        <button class="btn btn-outline-primary mb-2" onclick="scrollToCalendarSection()">
           <i class="fas fa-calendar-day me-2"></i>View Schedule
         </button>
       </div>
@@ -822,10 +822,10 @@ setTimeout(function() {
         </h5>
       </div>
       <div class="card-body">
-        <button class="btn btn-info mb-2 me-2" onclick="reviewShiftRequests()">
+        <button class="btn btn-info mb-2 me-2" onclick="scrollToShiftRequests()">
           <i class="fas fa-eye me-2"></i>Review Requests
         </button>
-        <button class="btn btn-success mb-2" onclick="bulkApproveReject()">
+        <button class="btn btn-success mb-2" onclick="scrollToShiftRequests()">
           <i class="fas fa-check me-2"></i>Approve/Reject
         </button>
       </div>
@@ -920,7 +920,7 @@ setTimeout(function() {
 </div>
 
 <!-- Schedule Calendar -->
-<div class="card mb-4">
+<div class="card mb-4" id="calendar-section">
   <div class="card-header" style="background-color: #f8f9fa; border-bottom: 1px solid #dee2e6; padding: 0.75rem 1.25rem;">
     <div class="d-flex justify-content-between align-items-center">
       <div class="d-flex align-items-center">
@@ -1081,7 +1081,7 @@ setTimeout(function() {
 </div>
 
 <!-- Shift Requests -->
-<div class="card mb-4">
+<div class="card mb-4" id="shift-requests-section">
   <div class="card-header d-flex justify-content-between align-items-center">
     <h5 class="card-title mb-0">
       <i class="fas fa-exchange-alt me-2"></i>Shift Requests
@@ -2892,5 +2892,44 @@ td .btn-group .btn-sm i {
   font-size: 0.875rem !important;
 }
 </style>
+
+<script>
+// Function to scroll to calendar section (for View Schedule button)
+function scrollToCalendarSection() {
+  const calendarSection = document.getElementById('calendar-section');
+  if (calendarSection) {
+    calendarSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    // Add a subtle highlight effect
+    calendarSection.style.boxShadow = '0 0 20px rgba(0, 123, 255, 0.3)';
+    setTimeout(() => {
+      calendarSection.style.boxShadow = '';
+    }, 2000);
+  }
+}
+
+// Function to scroll to shift requests section (for Review Requests and Approve/Reject buttons)
+function scrollToShiftRequests() {
+  const shiftRequestsSection = document.getElementById('shift-requests-section');
+  if (shiftRequestsSection) {
+    shiftRequestsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    // Add a subtle highlight effect
+    shiftRequestsSection.style.boxShadow = '0 0 20px rgba(0, 123, 255, 0.3)';
+    setTimeout(() => {
+      shiftRequestsSection.style.boxShadow = '';
+    }, 2000);
+  }
+}
+
+// Check if we need to scroll to calendar when page loads (from external navigation)
+if (sessionStorage.getItem('scrollToCalendar') === 'true') {
+  sessionStorage.removeItem('scrollToCalendar');
+  // Wait for page to load then scroll to calendar
+  window.addEventListener('load', function() {
+    setTimeout(function() {
+      scrollToCalendarSection();
+    }, 500);
+  });
+}
+</script>
 
 @endsection
