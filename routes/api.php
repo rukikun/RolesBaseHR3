@@ -152,37 +152,34 @@ Route::middleware('auth')->group(function () {
     // Weekly timesheet view route
     Route::get('/timesheets/{id}/weekly', [TimesheetController::class, 'getWeeklyTimesheetForModal']);
     
-    // Clockify Integration API routes
-    Route::prefix('clockify')->group(function () {
-        Route::get('/test-connection', [ClockifyController::class, 'testConnection']);
-        Route::get('/user', [ClockifyController::class, 'getCurrentUser']);
-        Route::get('/workspaces', [ClockifyController::class, 'getWorkspaces']);
-        Route::post('/timer/start', [ClockifyController::class, 'startTimer']);
-        Route::post('/timer/stop', [ClockifyController::class, 'stopTimer']);
-        Route::get('/time-entries', [ClockifyController::class, 'getTimeEntries']);
-        Route::get('/projects', [ClockifyController::class, 'getProjects']);
-        Route::post('/projects', [ClockifyController::class, 'createProject']);
-        Route::get('/users', [ClockifyController::class, 'getWorkspaceUsers']);
-        Route::post('/reports/detailed', [ClockifyController::class, 'getDetailedReport']);
-    });
+    // Clockify Integration API routes - DISABLED for cleaner interface
+    // Route::prefix('clockify')->group(function () {
+    //     Route::get('/test-connection', [ClockifyController::class, 'testConnection']);
+    //     Route::get('/user', [ClockifyController::class, 'getCurrentUser']);
+    //     Route::get('/workspaces', [ClockifyController::class, 'getWorkspaces']);
+    //     Route::post('/timer/start', [ClockifyController::class, 'startTimer']);
+    //     Route::post('/timer/stop', [ClockifyController::class, 'stopTimer']);
+    //     Route::get('/time-entries', [ClockifyController::class, 'getTimeEntries']);
+    //     Route::post('/projects', [ClockifyController::class, 'createProject']);
+    //     Route::get('/users', [ClockifyController::class, 'getWorkspaceUsers']);
+    //     Route::post('/reports/detailed', [ClockifyController::class, 'getDetailedReport']);
+    // });
     
-    // AI-Powered Features API routes
-    Route::prefix('ai')->group(function () {
-        Route::get('/test-connections', [AIController::class, 'testConnections']);
-        Route::post('/analyze-time-entry', [AIController::class, 'analyzeTimeEntry']);
-        Route::get('/time-insights', [AIController::class, 'getTimeInsights']);
-        Route::post('/validate-claim', [AIController::class, 'validateClaim']);
-        Route::post('/generate-timesheet-summary', [AIController::class, 'generateTimesheetSummary']);
-        Route::get('/schedule-suggestions', [AIController::class, 'getScheduleSuggestions']);
-        Route::post('/estimate-project-time', [AIController::class, 'estimateProjectTime']);
-        Route::get('/team-productivity', [AIController::class, 'analyzeTeamProductivity']);
-        Route::post('/smart-reminder', [AIController::class, 'generateSmartReminder']);
-        Route::get('/dashboard-data', [AIController::class, 'getDashboardData']);
-        Route::post('/timer/start-ai', [AIController::class, 'startAITimer']);
-        Route::post('/timer/stop', [AIController::class, 'stopTimer']);
-        Route::post('/generate-report', [AIController::class, 'generateAIReport']);
-    });
-    
+    // AI-Powered Features API routes - DISABLED for cleaner interface
+    // Route::prefix('ai')->group(function () {
+    //     Route::get('/test-connections', [AIController::class, 'testConnections']);
+    //     Route::post('/analyze-time-entry', [AIController::class, 'analyzeTimeEntry']);
+    //     Route::get('/time-insights', [AIController::class, 'getTimeInsights']);
+    //     Route::post('/validate-claim', [AIController::class, 'validateClaim']);
+    //     Route::post('/generate-timesheet-summary', [AIController::class, 'generateTimesheetSummary']);
+    //     Route::get('/schedule-suggestions', [AIController::class, 'getScheduleSuggestions']);
+    //     Route::post('/estimate-project-time', [AIController::class, 'estimateProjectTime']);
+    //     Route::post('/generate-smart-reminder', [AIController::class, 'generateSmartReminder']);
+    //     Route::get('/dashboard-data', [AIController::class, 'getDashboardData']);
+    //     Route::post('/timer/start-ai', [AIController::class, 'startAITimer']);
+    //     Route::post('/timer/stop', [AIController::class, 'stopTimer']);
+    //     Route::post('/generate-report', [AIController::class, 'generateAIReport']);
+    // });
     // Unified HR Module API routes
     Route::prefix('unified-hr')->group(function () {
         Route::get('/stats', [UnifiedHRController::class, 'getUnifiedStats']);
@@ -191,6 +188,9 @@ Route::middleware('auth')->group(function () {
         Route::get('/dashboard-overview', [UnifiedHRController::class, 'getDashboardOverview']);
     });
     
+    // AI Timesheet Generation API routes (moved outside auth middleware)
+    // These will be accessed from authenticated web pages, so we'll handle auth in controller
+    
     // Database Testing API routes
     Route::prefix('database')->group(function () {
         Route::get('/test-connection', [App\Http\Controllers\DatabaseTestController::class, 'testConnection']);
@@ -198,3 +198,5 @@ Route::middleware('auth')->group(function () {
         Route::get('/stats', [App\Http\Controllers\DatabaseTestController::class, 'getStats']);
     });
 });
+
+// AI Timesheet Generation routes moved to web.php for proper session authentication

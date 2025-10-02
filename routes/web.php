@@ -20,6 +20,7 @@ use App\Http\Controllers\EmployeeShiftController;
 use App\Http\Controllers\EmployeeESSController;
 use App\Http\Controllers\LandingController;
 use App\Http\Controllers\AdminProfileController;
+use Illuminate\Support\Facades\DB;
 
 // Registration routes
 Route::get('/register', [RegisterController::class, 'showRegistrationForm'])->name('register');
@@ -1158,6 +1159,47 @@ Route::middleware(['auth'])->prefix('admin/profile')->name('admin.profile.')->gr
     Route::post('/create-admin', [AdminProfileController::class, 'createAdmin'])->name('create-admin');
     Route::put('/admins/{id}', [AdminProfileController::class, 'updateAdmin'])->name('update-admin');
     Route::delete('/admins/{id}', [AdminProfileController::class, 'deleteAdmin'])->name('delete-admin');
+});
+
+// AI Timesheet Test Route
+Route::get('/test-ai-timesheet', function() {
+    return '<h1>🤖 AI Timesheet System Ready!</h1><p><a href="/timesheet-management">Go to Timesheet Management</a></p>';
+});
+
+// Test AI Generation Route
+Route::get('/test-ai-generation/{employeeId}', function($employeeId) {
+    try {
+        $employee = \App\Models\Employee::find($employeeId);
+        if (!$employee) {
+            return response()->json(['error' => 'Employee not found'], 404);
+        }
+        
+        $aiTimesheet = \App\Models\AIGeneratedTimesheet::generateForEmployee($employeeId);
+        
+        return response()->json([
+            'success' => true,
+            'employee' => $employee->first_name . ' ' . $employee->last_name,
+            'timesheet_id' => $aiTimesheet->id,
+            'weekly_data' => $aiTimesheet->weekly_data,
+            'total_hours' => $aiTimesheet->total_hours,
+            'overtime_hours' => $aiTimesheet->overtime_hours
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ], 500);
+    }
+});
+
+// AI Timesheet Generation Web Routes (for AJAX calls from authenticated pages)
+Route::middleware(['auth'])->group(function () {
+    Route::prefix('api/ai-timesheets')->group(function () {
+        Route::post('/generate/{employeeId}', [TimesheetController::class, 'generateAITimesheet']);
+        Route::post('/generate-all', [TimesheetController::class, 'generateAllAITimesheets']);
+        Route::get('/view/{employeeId}', [TimesheetController::class, 'getAITimesheet']);
+        Route::post('/approve/{id}', [TimesheetController::class, 'approveAITimesheet']);
+    });
 });
 
 // Removed duplicate routes - using the Web methods defined above

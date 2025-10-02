@@ -11,6 +11,7 @@ use App\Models\Shift;
 use App\Models\LeaveRequest;
 use App\Models\Claim;
 use App\Models\EmployeeTimesheetDetail;
+use App\Models\AIGeneratedTimesheet;
 
 class TimesheetController extends Controller
 {
@@ -1197,5 +1198,227 @@ class TimesheetController extends Controller
         }
 
         return $weeklyData;
+    }
+
+    // AI Timesheet Generation Methods
+    
+    /**
+     * Generate AI timesheet for a specific employee
+     */
+    public function generateAITimesheet(Request $request, $employeeId)
+    {
+        try {
+            $weekStartDate = $request->input('week_start_date');
+            
+            $aiTimesheet = AIGeneratedTimesheet::generateForEmployee($employeeId, $weekStartDate);
+            
+            // Handle both Eloquent model and fallback object
+            $employeeName = '';
+            $department = 'General';
+            $supervisorName = 'Not Assigned';
+            $generatedAt = '';
+            
+            if (is_object($aiTimesheet->employee)) {
+                // Eloquent model
+                $employeeName = $aiTimesheet->employee->first_name . ' ' . $aiTimesheet->employee->last_name;
+                $department = $aiTimesheet->employee->department ?? 'General';
+                $supervisorName = $aiTimesheet->employee->supervisor ?? 'Not Assigned';
+            } else {
+                // Fallback mode - get employee data directly
+                $employee = Employee::find($employeeId);
+                if ($employee) {
+                    $employeeName = $employee->first_name . ' ' . $employee->last_name;
+                    $department = $employee->department ?? 'General';
+                    $supervisorName = $employee->supervisor ?? 'Not Assigned';
+                }
+            }
+            
+            if (is_object($aiTimesheet->generated_at) && method_exists($aiTimesheet->generated_at, 'format')) {
+                $generatedAt = $aiTimesheet->generated_at->format('m/d/Y, g:i A');
+            } else {
+                $generatedAt = date('m/d/Y, g:i A');
+            }
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'AI timesheet generated successfully!',
+                'data' => [
+                    'id' => $aiTimesheet->id,
+                    'employee_name' => $employeeName,
+                    'department' => $department,
+                    'supervisor_name' => $supervisorName,
+                    'weekly_data' => $aiTimesheet->weekly_data,
+                    'total_hours' => $aiTimesheet->total_hours,
+                    'overtime_hours' => $aiTimesheet->overtime_hours,
+                    'ai_insights' => $aiTimesheet->ai_insights,
+                    'generated_at' => $generatedAt,
+                    'status' => $aiTimesheet->status
+                ]
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error generating AI timesheet: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
+     * Generate AI timesheets for all employees
+     */
+    public function generateAllAITimesheets(Request $request)
+    {
+        try {
+            $weekStartDate = $request->input('week_start_date');
+            $employees = Employee::where('status', 'active')->get();
+            
+            $generated = [];
+            $errors = [];
+            
+            foreach ($employees as $employee) {
+                try {
+                    $aiTimesheet = AIGeneratedTimesheet::generateForEmployee($employee->id, $weekStartDate);
+                    $generated[] = [
+                        'employee_id' => $employee->id,
+                        'employee_name' => $employee->first_name . ' ' . $employee->last_name,
+                        'timesheet_id' => $aiTimesheet->id
+                    ];
+                } catch (\Exception $e) {
+                    $errors[] = [
+                        'employee_id' => $employee->id,
+                        'employee_name' => $employee->first_name . ' ' . $employee->last_name,
+                        'error' => $e->getMessage()
+                    ];
+                }
+            }
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'AI timesheets generation completed',
+                'generated_count' => count($generated),
+                'error_count' => count($errors),
+                'generated' => $generated,
+                'errors' => $errors
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error generating AI timesheets: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
+     * Get AI timesheet for viewing
+     */
+    public function getAITimesheet($employeeId)
+    {
+        try {
+            $aiTimesheet = AIGeneratedTimesheet::where('employee_id', $employeeId)
+                ->currentWeek()
+                ->with('employee')
+                ->first();
+                
+            if (!$aiTimesheet) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No AI timesheet found for this employee. Please generate one first.'
+                ], 404);
+            }
+            
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'id' => $aiTimesheet->id,
+                    'employee_name' => $aiTimesheet->employee->first_name . ' ' . $aiTimesheet->employee->last_name,
+                    'department' => $aiTimesheet->employee->department ?? 'General',
+                    'supervisor_name' => $aiTimesheet->employee->supervisor ?? 'Not Assigned',
+                    'weekly_data' => $aiTimesheet->weekly_data,
+                    'total_hours' => $aiTimesheet->total_hours,
+                    'overtime_hours' => $aiTimesheet->overtime_hours,
+                    'ai_insights' => $aiTimesheet->ai_insights,
+                    'generated_at' => $aiTimesheet->generated_at->format('m/d/Y, g:i A'),
+                    'status' => $aiTimesheet->status
+                ]
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error loading AI timesheet: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
+     * Approve AI timesheet
+     */
+    public function approveAITimesheet(Request $request, $id)
+    {
+        try {
+            $aiTimesheet = AIGeneratedTimesheet::findOrFail($id);
+            
+            $aiTimesheet->update([
+                'status' => 'approved',
+                'approved_by' => auth()->user()->id ?? 1,
+                'approved_at' => now(),
+                'notes' => $request->input('notes')
+            ]);
+            
+            // Create actual timesheet entries
+            $this->createTimesheetEntriesFromAI($aiTimesheet);
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'AI timesheet approved and saved successfully!'
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error approving AI timesheet: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
+     * Create actual timesheet entries from approved AI timesheet
+     */
+    private function createTimesheetEntriesFromAI(AIGeneratedTimesheet $aiTimesheet)
+    {
+        $weekStart = $aiTimesheet->week_start_date;
+        $weeklyData = $aiTimesheet->weekly_data;
+        
+        foreach ($weeklyData as $day => $data) {
+            $dayIndex = array_search($day, ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']);
+            $workDate = $weekStart->copy()->addDays($dayIndex);
+            
+            // Check if timesheet entry already exists
+            $existing = DB::table('time_entries')
+                ->where('employee_id', $aiTimesheet->employee_id)
+                ->where('work_date', $workDate->format('Y-m-d'))
+                ->first();
+                
+            if (!$existing && isset($data['time_in']) && isset($data['time_out'])) {
+                // Convert 12-hour format back to 24-hour for database
+                $timeIn = \Carbon\Carbon::createFromFormat('h:i A', $data['time_in'])->format('H:i:s');
+                $timeOut = \Carbon\Carbon::createFromFormat('h:i A', $data['time_out'])->format('H:i:s');
+                $totalHours = floatval(str_replace(' hrs.', '', $data['total_hours']));
+                $overtimeHours = floatval(str_replace(' hrs.', '', $data['overtime']));
+                
+                DB::table('time_entries')->insert([
+                    'employee_id' => $aiTimesheet->employee_id,
+                    'work_date' => $workDate->format('Y-m-d'),
+                    'clock_in_time' => $timeIn,
+                    'clock_out_time' => $timeOut,
+                    'hours_worked' => $totalHours,
+                    'overtime_hours' => $overtimeHours,
+                    'break_duration' => 1.0,
+                    'status' => 'approved',
+                    'description' => 'Generated from AI timesheet',
+                    'notes' => 'AI-generated and approved timesheet entry',
+                    'created_at' => now(),
+                    'updated_at' => now()
+                ]);
+            }
+        }
     }
 }
