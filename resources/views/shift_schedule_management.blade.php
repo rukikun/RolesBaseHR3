@@ -1041,10 +1041,18 @@ setTimeout(function() {
                       
                       <!-- Action Buttons -->
                       <div class="shift-actions position-absolute" style="top: 2px; right: 2px; display: none;">
+                        @if(isset($shift['id']) && $shift['id'] > 0)
                         <button type="button" class="btn btn-sm btn-outline-primary" style="padding: 1px 4px; font-size: 8px; line-height: 1;" 
-                                onclick="event.stopPropagation(); editShift({{ $shift['id'] ?? 0 }})" title="Edit Shift">
+                                onclick="event.stopPropagation(); editShift({{ $shift['id'] }})" title="Edit Shift">
                           <i class="fas fa-edit"></i>
                         </button>
+                        @else
+                        <!-- Fallback for any remaining invalid shifts -->
+                        <button type="button" class="btn btn-sm btn-outline-secondary" style="padding: 1px 4px; font-size: 8px; line-height: 1;" 
+                                onclick="event.stopPropagation(); alert('Invalid shift data. Please refresh the page.')" title="Invalid Shift">
+                          <i class="fas fa-exclamation-triangle"></i>
+                        </button>
+                        @endif
                         
                         <!-- Delete Form with Fade Effect -->
                         <form method="POST" action="{{ route('shifts.destroy', $shift['id'] ?? 0) }}" style="display: inline;" 
@@ -1114,10 +1122,29 @@ setTimeout(function() {
               <td>
                 <span class="badge bg-primary">{{ $request->shiftType->name ?? 'Unknown Shift' }}</span>
               </td>
-              <td>{{ $request->shift_date ? $request->shift_date->format('M d, Y') : 'N/A' }}</td>
               <td>
-                {{ $request->start_time ? $request->start_time->format('H:i') : 'N/A' }} - 
-                {{ $request->end_time ? $request->end_time->format('H:i') : 'N/A' }}
+                @if($request->shift_date)
+                  @if(is_string($request->shift_date))
+                    {{ \Carbon\Carbon::parse($request->shift_date)->format('M d, Y') }}
+                  @else
+                    {{ $request->shift_date->format('M d, Y') }}
+                  @endif
+                @else
+                  N/A
+                @endif
+              </td>
+              <td>
+                @if($request->start_time && $request->end_time)
+                  @if(is_string($request->start_time))
+                    {{ \Carbon\Carbon::parse($request->start_time)->format('H:i') }} - 
+                    {{ \Carbon\Carbon::parse($request->end_time)->format('H:i') }}
+                  @else
+                    {{ $request->start_time->format('H:i') }} - 
+                    {{ $request->end_time->format('H:i') }}
+                  @endif
+                @else
+                  N/A
+                @endif
               </td>
               <td>{{ $request->location ?? 'Main Office' }}</td>
               <td>{{ $request->notes ?? 'No notes provided' }}</td>
@@ -1147,7 +1174,12 @@ setTimeout(function() {
                   <span class="text-muted small">
                     {{ $request->status === 'approved' ? 'Approved' : 'Rejected' }} 
                     @if($request->approved_at)
-                      on {{ $request->approved_at->format('M d, Y') }}
+                      on 
+                      @if(is_string($request->approved_at))
+                        {{ \Carbon\Carbon::parse($request->approved_at)->format('M d, Y') }}
+                      @else
+                        {{ $request->approved_at->format('M d, Y') }}
+                      @endif
                     @endif
                     @if($request->approver)
                       by {{ $request->approver->first_name }} {{ $request->approver->last_name }}
@@ -2046,11 +2078,7 @@ function openCreateShiftModal(date) {
     openWorkingModal('create-shift-modal');
 }
 
-// Edit shift function
-function editShift(shiftId) {
-    console.log('Edit shift clicked for ID:', shiftId);
-    alert(`Edit functionality for shift ID ${shiftId} will be implemented in a future update. For now, use the delete button to remove shifts.`);
-}
+// Old edit shift function removed - replaced with working version below
 
 // Handle shift deletion with fade effect
 function handleShiftDelete(form, employeeName, shiftDate) {
@@ -2368,15 +2396,35 @@ function viewShiftRequestDetails(requestId) {
 
 // Edit Shift Function for Calendar
 function editShift(shiftId) {
-    if (!shiftId) {
-        alert('Invalid shift ID');
+    console.log('editShift called with ID:', shiftId, 'Type:', typeof shiftId);
+    
+    // Validate shift ID
+    if (!shiftId || shiftId === 0 || shiftId === '0' || isNaN(shiftId)) {
+        console.error('Invalid shift ID provided:', shiftId);
+        alert('Invalid shift ID: ' + shiftId + '. Please refresh the page and try again.');
         return;
     }
 
-    // Fetch shift data from server
-    fetch(`/shifts/${shiftId}/edit`)
-        .then(response => response.json())
+    console.log('Fetching shift data for valid ID:', shiftId);
+
+    // Fetch shift data from server using the correct endpoint
+    fetch(`/shifts/${shiftId}/edit`, {
+        method: 'GET',
+        headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+        }
+    })
+        .then(response => {
+            console.log('Response status:', response.status);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+        })
         .then(data => {
+            console.log('Received data:', data);
             if (data.success && data.shift) {
                 populateEditShiftModal(data.shift);
                 openWorkingModal('edit-shift-modal');
@@ -2386,7 +2434,7 @@ function editShift(shiftId) {
         })
         .catch(error => {
             console.error('Error fetching shift data:', error);
-            alert('Error loading shift data. Please try again.');
+            alert('Error loading shift data: ' + error.message + '. Please try again.');
         });
 }
 
@@ -2410,11 +2458,22 @@ function saveEditShift() {
     const formData = new FormData(form);
     const shiftId = document.getElementById('edit-shift-id').value;
 
+    console.log('Saving shift with ID:', shiftId);
+    console.log('Form data:', {
+        shift_date: formData.get('shift_date'),
+        start_time: formData.get('start_time'),
+        end_time: formData.get('end_time'),
+        status: formData.get('status'),
+        location: formData.get('location'),
+        notes: formData.get('notes')
+    });
+
     fetch(`/shifts/${shiftId}`, {
         method: 'PUT',
         headers: {
             'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
             'Content-Type': 'application/json',
+            'Accept': 'application/json'
         },
         body: JSON.stringify({
             shift_date: formData.get('shift_date'),
@@ -2425,8 +2484,15 @@ function saveEditShift() {
             notes: formData.get('notes')
         })
     })
-    .then(response => response.json())
+    .then(response => {
+        console.log('Update response status:', response.status);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+    })
     .then(data => {
+        console.log('Update response data:', data);
         if (data.success) {
             closeWorkingModal('edit-shift-modal');
             location.reload(); // Refresh page to show updated data
@@ -2436,8 +2502,67 @@ function saveEditShift() {
     })
     .catch(error => {
         console.error('Error updating shift:', error);
-        alert('Error updating shift. Please try again.');
+        alert('Error updating shift: ' + error.message + '. Please try again.');
     });
+}
+
+// Handle invalid shift data - try to fix or provide detailed debugging
+function handleInvalidShift(shiftData) {
+    console.log('Invalid shift data:', shiftData);
+    
+    const message = `Invalid Shift Detected:\n\n` +
+        `ID: ${shiftData.id || 'Missing'}\n` +
+        `Employee: ${shiftData.employee_name || 'Unknown'}\n` +
+        `Date: ${shiftData.shift_date || 'Unknown'}\n` +
+        `Type: ${shiftData.shift_type || 'Unknown'}\n` +
+        `Time: ${shiftData.start_time || 'N/A'} - ${shiftData.end_time || 'N/A'}\n\n` +
+        `This shift has an invalid ID (${shiftData.id}). Would you like to:\n` +
+        `• Create a new shift entry\n` +
+        `• View debug information\n` +
+        `• Report this issue`;
+    
+    if (confirm(message + '\n\nClick OK to create a new shift entry, Cancel to view debug info.')) {
+        // Try to create a new shift entry
+        createNewShiftFromData(shiftData);
+    } else {
+        // Show detailed debug information
+        showShiftDebugInfo(shiftData);
+    }
+}
+
+// Create a new shift entry from invalid shift data
+function createNewShiftFromData(shiftData) {
+    if (!shiftData.employee_id || !shiftData.shift_date) {
+        alert('Cannot create shift: Missing employee ID or date');
+        return;
+    }
+    
+    // Pre-populate the create shift modal with existing data
+    document.getElementById('shift-assignment-employee').value = shiftData.employee_id || '';
+    document.getElementById('shift-assignment-date').value = shiftData.shift_date || '';
+    document.getElementById('shift-assignment-type').value = shiftData.shift_type_id || '';
+    document.getElementById('shift-assignment-start-time').value = shiftData.start_time || '';
+    document.getElementById('shift-assignment-end-time').value = shiftData.end_time || '';
+    document.getElementById('shift-assignment-location').value = shiftData.location || 'Main Office';
+    document.getElementById('shift-assignment-notes').value = 'Recreated from invalid shift data';
+    
+    openWorkingModal('create-shift-modal');
+}
+
+// Show detailed debug information for invalid shift
+function showShiftDebugInfo(shiftData) {
+    const debugInfo = `SHIFT DEBUG INFORMATION\n\n` +
+        `Raw Data: ${JSON.stringify(shiftData, null, 2)}\n\n` +
+        `Issues Found:\n` +
+        `${!shiftData.id || shiftData.id <= 0 ? '• Invalid or missing ID\n' : ''}` +
+        `${!shiftData.employee_id ? '• Missing employee ID\n' : ''}` +
+        `${!shiftData.shift_date ? '• Missing shift date\n' : ''}` +
+        `${!shiftData.start_time ? '• Missing start time\n' : ''}` +
+        `${!shiftData.end_time ? '• Missing end time\n' : ''}\n` +
+        `Recommendation: This shift should be recreated in the database with proper validation.`;
+    
+    alert(debugInfo);
+    console.error('Invalid shift debug info:', debugInfo);
 }
 
 // Make functions globally available
@@ -2453,6 +2578,9 @@ window.editShift = editShift;
 window.populateEditShiftModal = populateEditShiftModal;
 window.saveEditShift = saveEditShift;
 window.handleApprovalSubmit = handleApprovalSubmit;
+window.handleInvalidShift = handleInvalidShift;
+window.createNewShiftFromData = createNewShiftFromData;
+window.showShiftDebugInfo = showShiftDebugInfo;
 
 // Handle approval form submission with auto-refresh
 function handleApprovalSubmit(event, form) {

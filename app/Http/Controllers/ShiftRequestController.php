@@ -62,12 +62,15 @@ class ShiftRequestController extends Controller
         try {
             $shiftRequest = ShiftRequest::findOrFail($id);
             
-            // Update shift request status
-            $shiftRequest->update([
-                'status' => 'approved',
-                'approved_by' => auth()->id() ?? 1, // Default to admin if no auth
-                'approved_at' => now()
-            ]);
+            // Update shift request status using DB query to avoid model issues
+            DB::table('shift_requests')
+                ->where('id', $id)
+                ->update([
+                    'status' => 'approved',
+                    'approved_by' => auth()->id() ?? 1, // Default to admin if no auth
+                    'approved_at' => now(),
+                    'updated_at' => now()
+                ]);
 
             // Check if shift assignment already exists for this employee on this date
             $existingShift = DB::table('shifts')
@@ -78,7 +81,7 @@ class ShiftRequestController extends Controller
 
             if (!$existingShift) {
                 // Automatically create shift assignment in calendar
-                $shiftAssignment = DB::table('shifts')->insert([
+                $shiftId = DB::table('shifts')->insertGetId([
                     'employee_id' => $shiftRequest->employee_id,
                     'shift_type_id' => $shiftRequest->shift_type_id,
                     'shift_date' => $shiftRequest->shift_date,
@@ -91,7 +94,7 @@ class ShiftRequestController extends Controller
                     'updated_at' => now()
                 ]);
 
-                Log::info("Shift request {$id} approved and shift assignment created for employee {$shiftRequest->employee_id}");
+                Log::info("Shift request {$id} approved and shift assignment created with ID {$shiftId} for employee {$shiftRequest->employee_id}");
                 $message = 'Shift request approved successfully! Shift has been automatically added to the schedule calendar.';
             } else {
                 Log::info("Shift request {$id} approved but shift assignment already exists for employee {$shiftRequest->employee_id}");

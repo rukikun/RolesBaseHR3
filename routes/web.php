@@ -194,7 +194,7 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/admin/shifts/{id}', [ShiftController::class, 'show'])->name('admin.shifts.show');
     Route::get('/admin/shifts/{id}/edit', [ShiftController::class, 'edit'])->name('admin.shifts.edit');
     Route::put('/admin/shifts/{id}', [ShiftController::class, 'update'])->name('admin.shifts.update');
-    Route::post('/shifts/store', [ShiftController::class, 'store'])->name('shifts.store');
+    Route::post('/shifts/api/store', [ShiftController::class, 'store'])->name('shifts.api.store');
     
     // Admin Leave Request Management Routes
     Route::get('/admin/leave-requests/{id}', [LeaveController::class, 'showAdmin'])->name('admin.leave-requests.show');
@@ -265,12 +265,7 @@ Route::get('/shift-types/{id}/edit', [ShiftController::class, 'editShiftTypeWeb'
 Route::get('/shift-types/{id}/view', [ShiftController::class, 'viewShiftTypeWeb'])->name('shift-types.view');
 Route::delete('/shift-types/{id}', [ShiftController::class, 'destroyShiftTypeWeb'])->name('shift-types.destroy');
 
-Route::post('/shifts/store', [ShiftController::class, 'storeShiftWeb'])->name('shifts.store');
-Route::put('/shifts/{id}', [ShiftController::class, 'updateShiftWeb'])->name('shifts.update');
-Route::get('/shifts/{id}/edit', [ShiftController::class, 'editShiftWeb'])->name('shifts.edit');
-Route::get('/shifts/{id}/view', [ShiftController::class, 'viewShiftWeb'])->name('shifts.view');
-Route::delete('/shifts/{id}', [ShiftController::class, 'destroyShiftWeb'])->name('shifts.destroy');
-Route::post('/shifts/{id}/complete', [ShiftController::class, 'completeShiftWeb'])->name('shifts.complete');
+// Duplicate shift routes removed - already defined in middleware group above
 
 // Shift Request Routes - Updated to use ShiftRequestController
 Route::post('/shift-requests/store', [ShiftRequestController::class, 'store'])->name('shift-requests.store');
@@ -395,6 +390,264 @@ Route::get('/debug-shifts', function() {
         'today_date' => today()->format('Y-m-d')
     ]);
 })->name('debug.shifts');
+
+// Test route to create sample shift data
+Route::get('/create-sample-shifts', function() {
+    try {
+        // Check if we have employees and shift types
+        $employees = DB::table('employees')->where('status', 'active')->limit(3)->get();
+        $shiftTypes = DB::table('shift_types')->where('is_active', 1)->limit(3)->get();
+        
+        if ($employees->isEmpty() || $shiftTypes->isEmpty()) {
+            return response()->json([
+                'error' => 'Need employees and shift types first',
+                'employees_count' => $employees->count(),
+                'shift_types_count' => $shiftTypes->count()
+            ]);
+        }
+        
+        // Create sample shifts for the next few days
+        $dates = [
+            Carbon\Carbon::today()->format('Y-m-d'),
+            Carbon\Carbon::today()->addDay()->format('Y-m-d'),
+            Carbon\Carbon::today()->addDays(2)->format('Y-m-d'),
+        ];
+        
+        $created = 0;
+        foreach ($employees as $employee) {
+            foreach ($dates as $date) {
+                $shiftType = $shiftTypes->random();
+                
+                // Check if shift already exists
+                $exists = DB::table('shifts')
+                    ->where('employee_id', $employee->id)
+                    ->where('shift_date', $date)
+                    ->exists();
+                    
+                if (!$exists) {
+                    DB::table('shifts')->insert([
+                        'employee_id' => $employee->id,
+                        'shift_type_id' => $shiftType->id,
+                        'shift_date' => $date,
+                        'start_time' => $shiftType->default_start_time ?? '09:00:00',
+                        'end_time' => $shiftType->default_end_time ?? '17:00:00',
+                        'location' => 'Main Office',
+                        'notes' => 'Sample shift for testing',
+                        'status' => 'scheduled',
+                        'created_at' => now(),
+                        'updated_at' => now()
+                    ]);
+                    $created++;
+                }
+            }
+        }
+        
+        return response()->json([
+            'success' => true,
+            'message' => "Created {$created} sample shifts",
+            'employees_used' => $employees->count(),
+            'shift_types_available' => $shiftTypes->count()
+        ]);
+        
+    } catch (Exception $e) {
+        return response()->json([
+            'error' => $e->getMessage()
+        ]);
+    }
+})->name('create.sample.shifts');
+
+// Test route to verify shift edit endpoint
+Route::get('/test-shift-edit/{id}', function($id) {
+    try {
+        $controller = new \App\Http\Controllers\ShiftController();
+        $response = $controller->editShiftWeb($id);
+        
+        return [
+            'endpoint_test' => '/shifts/' . $id . '/edit',
+            'controller_method' => 'editShiftWeb',
+            'response_status' => $response->getStatusCode(),
+            'response_data' => $response->getData()
+        ];
+    } catch (Exception $e) {
+        return [
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ];
+    }
+})->name('test.shift.edit');
+
+// Debug route to check calendar shifts data structure
+Route::get('/debug-calendar-shifts', function() {
+    try {
+        $controller = new \App\Http\Controllers\ShiftController();
+        $request = request();
+        $request->merge(['month' => now()->format('Y-m')]);
+        
+        // Call the controller method to get the data
+        $response = $controller->index();
+        $data = $response->getData();
+        
+        return response()->json([
+            'calendar_shifts_structure' => $data['calendarShifts'] ?? 'Not found',
+            'sample_shift' => isset($data['calendarShifts']) && !empty($data['calendarShifts']) ? 
+                array_values($data['calendarShifts'])[0][0] ?? 'No shifts in first date' : 'No calendar shifts',
+            'shifts_count' => isset($data['calendarShifts']) ? count($data['calendarShifts']) : 0
+        ]);
+    } catch (Exception $e) {
+        return response()->json([
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+    }
+})->name('debug.calendar.shifts');
+
+// Debug route to check actual database shifts
+Route::get('/debug-db-shifts', function() {
+    try {
+        $shifts = DB::table('shifts')
+            ->leftJoin('employees', 'shifts.employee_id', '=', 'employees.id')
+            ->leftJoin('shift_types', 'shifts.shift_type_id', '=', 'shift_types.id')
+            ->select(
+                'shifts.*',
+                'employees.first_name',
+                'employees.last_name',
+                'shift_types.name as shift_type_name'
+            )
+            ->orderBy('shifts.shift_date', 'desc')
+            ->limit(10)
+            ->get();
+            
+        return response()->json([
+            'total_shifts' => DB::table('shifts')->count(),
+            'shifts_with_zero_id' => DB::table('shifts')->where('id', 0)->count(),
+            'shifts_with_null_id' => DB::table('shifts')->whereNull('id')->count(),
+            'recent_shifts' => $shifts,
+            'id_range' => [
+                'min' => DB::table('shifts')->min('id'),
+                'max' => DB::table('shifts')->max('id')
+            ]
+        ]);
+    } catch (Exception $e) {
+        return response()->json([
+            'error' => $e->getMessage()
+        ]);
+    }
+})->name('debug.db.shifts');
+
+// Route to fix invalid shift IDs in database
+Route::get('/fix-invalid-shifts', function() {
+    try {
+        $results = [];
+        
+        // Find shifts with invalid IDs
+        $invalidShifts = DB::table('shifts')->where('id', '<=', 0)->get();
+        $results['invalid_shifts_found'] = $invalidShifts->count();
+        
+        if ($invalidShifts->count() > 0) {
+            $results['invalid_shifts'] = $invalidShifts->toArray();
+            
+            // Delete shifts with invalid IDs
+            $deleted = DB::table('shifts')->where('id', '<=', 0)->delete();
+            $results['deleted_invalid_shifts'] = $deleted;
+        }
+        
+        // Check for any shifts that might have been created incorrectly
+        $duplicateShifts = DB::table('shifts')
+            ->select('employee_id', 'shift_date', DB::raw('COUNT(*) as count'))
+            ->groupBy('employee_id', 'shift_date')
+            ->having('count', '>', 1)
+            ->get();
+            
+        $results['duplicate_shifts'] = $duplicateShifts->count();
+        
+        // Get current shift statistics
+        $results['current_stats'] = [
+            'total_shifts' => DB::table('shifts')->count(),
+            'valid_shifts' => DB::table('shifts')->where('id', '>', 0)->count(),
+            'min_id' => DB::table('shifts')->min('id'),
+            'max_id' => DB::table('shifts')->max('id')
+        ];
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'Invalid shifts cleanup completed',
+            'results' => $results
+        ]);
+        
+    } catch (Exception $e) {
+        return response()->json([
+            'success' => false,
+            'error' => $e->getMessage()
+        ]);
+    }
+})->name('fix.invalid.shifts');
+
+// Verification route to check if shifts are properly fixed
+Route::get('/verify-shifts-fix', function() {
+    try {
+        $stats = [
+            'total_shifts' => DB::table('shifts')->count(),
+            'valid_shifts' => DB::table('shifts')->where('id', '>', 0)->count(),
+            'invalid_shifts' => DB::table('shifts')->where('id', '<=', 0)->count(),
+            'id_range' => [
+                'min' => DB::table('shifts')->min('id'),
+                'max' => DB::table('shifts')->max('id')
+            ],
+            'auto_increment_info' => DB::select("SHOW TABLE STATUS LIKE 'shifts'")[0] ?? null
+        ];
+        
+        $message = $stats['invalid_shifts'] > 0 ? 
+            'WARNING: Still have invalid shifts!' : 
+            'SUCCESS: All shifts have valid IDs!';
+            
+        return response()->json([
+            'status' => $stats['invalid_shifts'] > 0 ? 'warning' : 'success',
+            'message' => $message,
+            'statistics' => $stats
+        ]);
+        
+    } catch (Exception $e) {
+        return response()->json([
+            'status' => 'error',
+            'message' => $e->getMessage()
+        ]);
+    }
+})->name('verify.shifts.fix');
+
+// Test route for shift request approval
+Route::get('/test-shift-approval/{id}', function($id) {
+    try {
+        $shiftRequest = DB::table('shift_requests')->where('id', $id)->first();
+        
+        if (!$shiftRequest) {
+            return response()->json([
+                'error' => 'Shift request not found'
+            ]);
+        }
+        
+        // Simulate approval process
+        $controller = new \App\Http\Controllers\ShiftRequestController();
+        $response = $controller->approve($id);
+        
+        // Check if shift was created
+        $createdShift = DB::table('shifts')
+            ->where('employee_id', $shiftRequest->employee_id)
+            ->where('shift_date', $shiftRequest->shift_date)
+            ->where('notes', 'LIKE', '%Auto-created from approved shift request%')
+            ->first();
+            
+        return response()->json([
+            'shift_request' => $shiftRequest,
+            'created_shift' => $createdShift,
+            'approval_successful' => $createdShift ? true : false
+        ]);
+        
+    } catch (Exception $e) {
+        return response()->json([
+            'error' => $e->getMessage()
+        ]);
+    }
+})->name('test.shift.approval');
 
 // Debug route to check attendance data
 Route::get('/debug-attendance', function() {
