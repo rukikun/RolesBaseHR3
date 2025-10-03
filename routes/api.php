@@ -149,6 +149,9 @@ Route::middleware('auth')->group(function () {
     // Attendance to Timesheet sync route
     Route::post('/sync-attendance-to-timesheets', [TimesheetController::class, 'syncAttendanceToTimesheets']);
     
+    // Fix negative attendance hours route
+    Route::post('/fix-negative-attendance-hours', [TimesheetController::class, 'fixNegativeAttendanceHours']);
+    
     // Weekly timesheet view route
     Route::get('/timesheets/{id}/weekly', [TimesheetController::class, 'getWeeklyTimesheetForModal']);
     

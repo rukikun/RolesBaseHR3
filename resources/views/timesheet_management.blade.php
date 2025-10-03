@@ -489,7 +489,16 @@
                     @endif
                   </td>
                   <td>
-                    <strong>{{ number_format($attendance->total_hours ?? 0, 2) }}h</strong>
+                    @php
+                      $totalHours = $attendance->total_hours ?? 0;
+                      $isNegative = $totalHours < 0;
+                    @endphp
+                    @if($isNegative)
+                      <strong class="text-danger">{{ number_format($totalHours, 2) }}h</strong>
+                      <i class="fas fa-exclamation-triangle text-warning ms-1" title="Negative hours detected"></i>
+                    @else
+                      <strong>{{ number_format($totalHours, 2) }}h</strong>
+                    @endif
                   </td>
                   <td>
                     @if($attendance->overtime_hours > 0)
@@ -3706,7 +3715,7 @@ function syncAttendanceToTimesheets() {
     syncBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Syncing...';
     syncBtn.disabled = true;
     
-    fetch('/api/sync-attendance-to-timesheets', {
+    fetch('/sync-attendance-to-timesheets', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -3734,6 +3743,49 @@ function syncAttendanceToTimesheets() {
         // Restore button state
         syncBtn.innerHTML = originalText;
         syncBtn.disabled = false;
+    });
+}
+
+// Fix Negative Attendance Hours Function
+function fixNegativeAttendanceHours() {
+    if (!confirm('This will recalculate and fix all attendance records with negative or zero total hours. This action cannot be undone. Continue?')) {
+        return;
+    }
+    
+    // Show loading state
+    const fixBtn = document.querySelector('button[onclick="fixNegativeAttendanceHours()"]');
+    const originalText = fixBtn.innerHTML;
+    fixBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Fixing...';
+    fixBtn.disabled = true;
+    
+    fetch('/fix-negative-attendance-hours', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Show success message
+            showAlert('success', `Successfully fixed ${data.fixed_count || 0} attendance records with negative hours!`);
+            // Reload the page to show updated attendance logs
+            setTimeout(() => {
+                window.location.reload();
+            }, 1500);
+        } else {
+            showAlert('error', data.message || 'Failed to fix negative attendance hours');
+        }
+    })
+    .catch(error => {
+        console.error('Fix negative hours error:', error);
+        showAlert('error', 'Network error occurred while fixing negative attendance hours');
+    })
+    .finally(() => {
+        // Restore button state
+        fixBtn.innerHTML = originalText;
+        fixBtn.disabled = false;
     });
 }
 

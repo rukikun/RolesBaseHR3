@@ -186,6 +186,56 @@ Route::middleware(['auth'])->group(function () {
     Route::post('/attendance/start-break', [AttendanceController::class, 'startBreak'])->name('attendance.start-break');
     Route::post('/attendance/end-break', [AttendanceController::class, 'endBreak'])->name('attendance.end-break');
     
+    // Fix negative attendance hours route
+    Route::post('/fix-negative-attendance-hours', [TimesheetController::class, 'fixNegativeAttendanceHours'])->name('fix.negative.attendance.hours');
+    Route::post('/sync-attendance-to-timesheets', [TimesheetController::class, 'syncAttendanceToTimesheets'])->name('sync.attendance.timesheets');
+    
+    // Debug route to check attendance table structure
+    Route::get('/debug-attendance-structure', function() {
+        try {
+            $columns = DB::select("SHOW COLUMNS FROM attendances");
+            $sampleData = DB::table('attendances')->limit(5)->get();
+            $negativeHours = DB::table('attendances')->where('total_hours', '<', 0)->get();
+            
+            return response()->json([
+                'table_columns' => $columns,
+                'sample_data' => $sampleData,
+                'negative_hours_count' => $negativeHours->count(),
+                'negative_hours_data' => $negativeHours
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()]);
+        }
+    });
+    
+    // Quick fix route to convert negative hours to positive
+    Route::get('/quick-fix-negative-hours', function() {
+        try {
+            // Simple approach: convert all negative total_hours to positive
+            $negativeRecords = DB::table('attendances')->where('total_hours', '<', 0)->get();
+            $fixedCount = 0;
+            
+            foreach ($negativeRecords as $record) {
+                $positiveHours = abs($record->total_hours);
+                DB::table('attendances')
+                    ->where('id', $record->id)
+                    ->update([
+                        'total_hours' => $positiveHours,
+                        'updated_at' => now()
+                    ]);
+                $fixedCount++;
+            }
+            
+            return response()->json([
+                'success' => true,
+                'message' => "Quick fix completed: converted {$fixedCount} negative hours to positive",
+                'fixed_count' => $fixedCount
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()]);
+        }
+    });
+    
     // Admin Attendance Management Routes
     Route::get('/admin/attendance/{id}', [AttendanceController::class, 'show'])->name('admin.attendance.show');
     Route::get('/admin/attendance/{id}/edit', [AttendanceController::class, 'edit'])->name('admin.attendance.edit');

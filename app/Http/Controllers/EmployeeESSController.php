@@ -2173,10 +2173,19 @@ class EmployeeESSController extends Controller
             $clockOutTime = Carbon::now('Asia/Manila');
             $clockInTime = Carbon::parse($attendance->clock_in_time);
             
-            // Calculate total hours
-            $totalMinutes = $clockOutTime->diffInMinutes($clockInTime);
+            // Ensure clock-in time is before clock-out time
+            if ($clockInTime->gt($clockOutTime)) {
+                // Handle case where clock-in is after clock-out (shouldn't happen, but safety check)
+                $clockInTime = $clockOutTime->copy()->subHours(8); // Default to 8 hour shift
+            }
+            
+            // Calculate total hours - ensure positive value
+            $totalMinutes = abs($clockOutTime->diffInMinutes($clockInTime));
             $totalHours = round($totalMinutes / 60, 2);
-            $overtimeHours = $totalHours > 8 ? $totalHours - 8 : 0;
+            
+            // Ensure total hours is positive and reasonable (max 24 hours)
+            $totalHours = max(0, min(24, $totalHours));
+            $overtimeHours = $totalHours > 8 ? round($totalHours - 8, 2) : 0;
             
             // Update attendance record using model
             $attendance->update([

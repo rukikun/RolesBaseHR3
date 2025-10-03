@@ -817,6 +817,102 @@ class TimesheetController extends Controller
         }
     }
 
+    // Fix negative total hours in attendance records
+    public function fixNegativeAttendanceHours(Request $request)
+    {
+        try {
+            \Log::info('Starting fix negative attendance hours process');
+            
+            // First, let's check what columns exist in the attendances table
+            $tableColumns = DB::select("SHOW COLUMNS FROM attendances");
+            $columnNames = array_column($tableColumns, 'Field');
+            
+            \Log::info('Attendances table columns: ' . implode(', ', $columnNames));
+            
+            // Determine the correct date column name
+            $dateColumn = in_array('date', $columnNames) ? 'date' : 'attendance_date';
+            
+            // Get attendance records with negative or zero total_hours that have both clock-in and clock-out times
+            $query = "
+                SELECT id, employee_id, {$dateColumn} as date, 
+                       clock_in_time, clock_out_time, total_hours
+                FROM attendances 
+                WHERE (total_hours < 0 OR total_hours IS NULL)
+                  AND clock_in_time IS NOT NULL 
+                  AND clock_out_time IS NOT NULL
+                ORDER BY {$dateColumn} DESC
+            ";
+            
+            $negativeRecords = DB::select($query);
+            \Log::info('Found ' . count($negativeRecords) . ' records with negative or null total_hours');
+
+            $fixedCount = 0;
+            $errors = [];
+
+            foreach ($negativeRecords as $record) {
+                try {
+                    \Log::info("Processing record ID {$record->id} with total_hours: {$record->total_hours}");
+                    
+                    $clockInTime = \Carbon\Carbon::parse($record->clock_in_time);
+                    $clockOutTime = \Carbon\Carbon::parse($record->clock_out_time);
+                    
+                    // Ensure clock-in is before clock-out
+                    if ($clockInTime->gt($clockOutTime)) {
+                        // If clock-out is before clock-in, assume it's next day
+                        $clockOutTime->addDay();
+                    }
+                    
+                    // Calculate total hours - ensure positive value
+                    $totalMinutes = abs($clockOutTime->diffInMinutes($clockInTime));
+                    $totalHours = round($totalMinutes / 60, 2);
+                    
+                    // Ensure total hours is positive and reasonable (max 24 hours)
+                    $totalHours = max(0, min(24, $totalHours));
+                    $overtimeHours = $totalHours > 8 ? round($totalHours - 8, 2) : 0;
+
+                    \Log::info("Calculated total_hours: {$totalHours}, overtime_hours: {$overtimeHours}");
+
+                    // Update the record
+                    $affected = DB::update(
+                        "UPDATE attendances 
+                         SET total_hours = ?, overtime_hours = ?, updated_at = NOW() 
+                         WHERE id = ?",
+                        [$totalHours, $overtimeHours, $record->id]
+                    );
+                    
+                    if ($affected > 0) {
+                        $fixedCount++;
+                        \Log::info("Successfully updated record ID {$record->id}");
+                    } else {
+                        \Log::warning("No rows affected for record ID {$record->id}");
+                    }
+                } catch (\Exception $e) {
+                    $error = "Failed to fix attendance record ID {$record->id}: " . $e->getMessage();
+                    $errors[] = $error;
+                    \Log::error($error);
+                }
+            }
+
+            \Log::info("Fix process completed. Fixed {$fixedCount} records");
+
+            return response()->json([
+                'success' => true,
+                'message' => "Successfully fixed {$fixedCount} attendance records with negative hours",
+                'fixed_count' => $fixedCount,
+                'total_found' => count($negativeRecords),
+                'errors' => $errors
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('Error in fixNegativeAttendanceHours: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Error fixing negative attendance hours: ' . $e->getMessage(),
+                'fixed_count' => 0
+            ], 500);
+        }
+    }
+
     // Sync attendance logs to timesheets
     public function syncAttendanceToTimesheets(Request $request)
     {
