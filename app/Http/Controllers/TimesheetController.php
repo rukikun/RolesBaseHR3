@@ -3,15 +3,18 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Validator;
 use App\Models\Employee;
-use App\Models\TimeEntry;
+use App\Models\EmployeeTimesheet;
 use App\Models\Shift;
+use App\Models\ShiftType;
 use App\Models\LeaveRequest;
-use App\Models\Claim;
+use App\Models\ClaimReimbursement;
+use App\Models\Attendance;
 use App\Models\EmployeeTimesheetDetail;
 use App\Models\AIGeneratedTimesheet;
+use App\Models\TimeEntry;
+use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
 
 class TimesheetController extends Controller
 {
@@ -1299,59 +1302,182 @@ class TimesheetController extends Controller
     // AI Timesheet Generation Methods
     
     /**
-     * Generate AI timesheet for a specific employee
+     * Simple test endpoint for AI timesheet generation
      */
-    public function generateAITimesheet(Request $request, $employeeId)
+    public function testAIGeneration($employeeId)
     {
         try {
-            $weekStartDate = $request->input('week_start_date');
+            \Log::info('AI Test - Simple generation for employee: ' . $employeeId);
             
-            $aiTimesheet = AIGeneratedTimesheet::generateForEmployee($employeeId, $weekStartDate);
-            
-            // Handle both Eloquent model and fallback object
-            $employeeName = '';
-            $department = 'General';
-            $supervisorName = 'Not Assigned';
-            $generatedAt = '';
-            
-            if (is_object($aiTimesheet->employee)) {
-                // Eloquent model
-                $employeeName = $aiTimesheet->employee->first_name . ' ' . $aiTimesheet->employee->last_name;
-                $department = $aiTimesheet->employee->department ?? 'General';
-                $supervisorName = $aiTimesheet->employee->supervisor ?? 'Not Assigned';
-            } else {
-                // Fallback mode - get employee data directly
-                $employee = Employee::find($employeeId);
-                if ($employee) {
-                    $employeeName = $employee->first_name . ' ' . $employee->last_name;
-                    $department = $employee->department ?? 'General';
-                    $supervisorName = $employee->supervisor ?? 'Not Assigned';
-                }
-            }
-            
-            if (is_object($aiTimesheet->generated_at) && method_exists($aiTimesheet->generated_at, 'format')) {
-                $generatedAt = $aiTimesheet->generated_at->format('m/d/Y, g:i A');
-            } else {
-                $generatedAt = date('m/d/Y, g:i A');
-            }
-            
+            // Ultra-simple response
             return response()->json([
                 'success' => true,
                 'message' => 'AI timesheet generated successfully!',
                 'data' => [
-                    'id' => $aiTimesheet->id,
-                    'employee_name' => $employeeName,
-                    'department' => $department,
-                    'supervisor_name' => $supervisorName,
-                    'weekly_data' => $aiTimesheet->weekly_data,
-                    'total_hours' => $aiTimesheet->total_hours,
-                    'overtime_hours' => $aiTimesheet->overtime_hours,
-                    'ai_insights' => $aiTimesheet->ai_insights,
-                    'generated_at' => $generatedAt,
-                    'status' => $aiTimesheet->status
+                    'id' => 'test-' . $employeeId,
+                    'employee_name' => 'Test Employee #' . $employeeId,
+                    'department' => 'General',
+                    'supervisor_name' => 'Not Assigned',
+                    'weekly_data' => self::generateCurrentWeekData(),
+                    'total_hours' => 0,
+                    'overtime_hours' => 0,
+                    'ai_insights' => ['📋 Test timesheet with no attendance records'],
+                    'generated_at' => date('m/d/Y, g:i A'),
+                    'status' => 'generated'
                 ]
             ]);
         } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Test error: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Generate current week data with real dates
+     */
+    private static function generateCurrentWeekData()
+    {
+        $weekStart = \Carbon\Carbon::now()->startOfWeek(\Carbon\Carbon::MONDAY);
+        $days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+        $weeklyData = [];
+
+        foreach ($days as $index => $day) {
+            $currentDate = $weekStart->copy()->addDays($index);
+            $weeklyData[$day] = [
+                'date' => $currentDate->format('m/d/y'),
+                'time_in' => '--',
+                'break' => '--',
+                'time_out' => '--',
+                'total_hours' => '--',
+                'overtime' => '--'
+            ];
+        }
+
+        return $weeklyData;
+    }
+
+    /**
+     * Generate AI timesheet for a specific employee - Ultra simple version
+     */
+    public function generateAITimesheet(Request $request, $employeeId)
+    {
+        try {
+            \Log::info('AI Timesheet Controller - Ultra simple generation for employee: ' . $employeeId);
+            
+            // Get employee name safely
+            $employeeName = 'Employee #' . $employeeId;
+            $department = 'General';
+            
+            try {
+                $employee = Employee::find($employeeId);
+                if ($employee) {
+                    $employeeName = $employee->first_name . ' ' . $employee->last_name;
+                    $department = $employee->department ?? 'General';
+                }
+            } catch (\Exception $e) {
+                // Use defaults
+            }
+            
+            // Generate current week dates
+            $weekStart = \Carbon\Carbon::now()->startOfWeek(\Carbon\Carbon::MONDAY);
+            $days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+            $weeklyData = [];
+            
+            foreach ($days as $index => $day) {
+                $currentDate = $weekStart->copy()->addDays($index);
+                $weeklyData[$day] = [
+                    'date' => $currentDate->format('m/d/y'),
+                    'time_in' => '--',
+                    'break' => '--',
+                    'time_out' => '--',
+                    'total_hours' => '--',
+                    'overtime' => '--'
+                ];
+            }
+            
+            // Try to get real attendance data
+            try {
+                $attendances = \DB::table('attendances')
+                    ->where('employee_id', $employeeId)
+                    ->whereBetween('date', [
+                        $weekStart->format('Y-m-d'),
+                        $weekStart->copy()->addDays(6)->format('Y-m-d')
+                    ])
+                    ->get();
+                    
+                foreach ($attendances as $att) {
+                    $dayOfWeek = \Carbon\Carbon::parse($att->date)->format('l');
+                    if (isset($weeklyData[$dayOfWeek]) && $att->clock_in_time && $att->clock_out_time) {
+                        $clockIn = \Carbon\Carbon::parse($att->clock_in_time);
+                        $clockOut = \Carbon\Carbon::parse($att->clock_out_time);
+                        
+                        // Handle same time (likely test data) or calculate proper hours
+                        if ($clockIn->equalTo($clockOut)) {
+                            // Same time - assume 8 hour workday
+                            $hours = 8;
+                            $clockOut = $clockIn->copy()->addHours(8);
+                        } else {
+                            // Handle overnight shifts
+                            if ($clockOut->lt($clockIn)) {
+                                $clockOut->addDay();
+                            }
+                            
+                            // Calculate total minutes and convert to hours
+                            $totalMinutes = $clockOut->diffInMinutes($clockIn);
+                            $hours = round($totalMinutes / 60, 1);
+                        }
+                        
+                        $regularHours = min($hours, 8);
+                        $overtimeHours = max(0, $hours - 8);
+                        
+                        // Ensure no negative hours are displayed
+                        $displayHours = max(0, $regularHours);
+                        $displayOvertime = max(0, $overtimeHours);
+                        
+                        $weeklyData[$dayOfWeek] = [
+                            'date' => $clockIn->format('m/d/y'),
+                            'time_in' => $clockIn->format('g:i A'),
+                            'break' => '12:00 PM - 1:00 PM',
+                            'time_out' => $clockOut->format('g:i A'),
+                            'total_hours' => $displayHours . ' hrs.',
+                            'overtime' => $displayOvertime > 0 ? $displayOvertime . ' hrs.' : '0 hrs.'
+                        ];
+                    }
+                }
+            } catch (\Exception $e) {
+                \Log::error('AI Timesheet - Attendance query failed: ' . $e->getMessage());
+            }
+            
+            // Generate comprehensive AI insights
+            $insights = $this->generateAIInsights($weeklyData, $employeeName, $department);
+            
+            // Create response data
+            $responseData = [
+                'id' => 'ai-' . $employeeId . '-' . time(),
+                'employee_id' => $employeeId,
+                'employee_name' => $employeeName,
+                'department' => $department,
+                'supervisor_name' => 'Not Assigned',
+                'weekly_data' => $weeklyData,
+                'total_hours' => 0,
+                'overtime_hours' => 0,
+                'ai_insights' => $insights,
+                'status' => 'generated',
+                'generated_at' => now()->format('m/d/Y, g:i A')
+            ];
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'AI timesheet generated successfully!',
+                'data' => $responseData
+            ]);
+            
+        } catch (\Exception $e) {
+            \Log::error('AI Timesheet Controller Error: ' . $e->getMessage());
+            \Log::error('AI Timesheet Controller Stack: ' . $e->getTraceAsString());
+            
             return response()->json([
                 'success' => false,
                 'message' => 'Error generating AI timesheet: ' . $e->getMessage()
@@ -1360,12 +1486,13 @@ class TimesheetController extends Controller
     }
     
     /**
-     * Generate AI timesheets for all employees
+     * Generate AI timesheets for all employees - Ultra simple version
      */
     public function generateAllAITimesheets(Request $request)
     {
         try {
-            $weekStartDate = $request->input('week_start_date');
+            \Log::info('AI Timesheet - Starting bulk generation for all employees');
+            
             $employees = Employee::where('status', 'active')->get();
             
             $generated = [];
@@ -1373,12 +1500,101 @@ class TimesheetController extends Controller
             
             foreach ($employees as $employee) {
                 try {
-                    $aiTimesheet = AIGeneratedTimesheet::generateForEmployee($employee->id, $weekStartDate);
-                    $generated[] = [
-                        'employee_id' => $employee->id,
-                        'employee_name' => $employee->first_name . ' ' . $employee->last_name,
-                        'timesheet_id' => $aiTimesheet->id
+                    // Use the same logic as individual generation
+                    $employeeId = $employee->id;
+                    $employeeName = $employee->first_name . ' ' . $employee->last_name;
+                    $department = $employee->department ?? 'General';
+                    
+                    // Generate current week dates
+                    $weekStart = \Carbon\Carbon::now()->startOfWeek(\Carbon\Carbon::MONDAY);
+                    $days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+                    $weeklyData = [];
+                    
+                    foreach ($days as $index => $day) {
+                        $currentDate = $weekStart->copy()->addDays($index);
+                        $weeklyData[$day] = [
+                            'date' => $currentDate->format('m/d/y'),
+                            'time_in' => '--',
+                            'break' => '--',
+                            'time_out' => '--',
+                            'total_hours' => '--',
+                            'overtime' => '--'
+                        ];
+                    }
+                    
+                    // Try to get real attendance data
+                    try {
+                        $attendances = \DB::table('attendances')
+                            ->where('employee_id', $employeeId)
+                            ->whereBetween('date', [
+                                $weekStart->format('Y-m-d'),
+                                $weekStart->copy()->addDays(6)->format('Y-m-d')
+                            ])
+                            ->get();
+                            
+                        foreach ($attendances as $att) {
+                            $dayOfWeek = \Carbon\Carbon::parse($att->date)->format('l');
+                            if (isset($weeklyData[$dayOfWeek]) && $att->clock_in_time && $att->clock_out_time) {
+                                $clockIn = \Carbon\Carbon::parse($att->clock_in_time);
+                                $clockOut = \Carbon\Carbon::parse($att->clock_out_time);
+                                
+                                // Handle same time (likely test data) or calculate proper hours
+                                if ($clockIn->equalTo($clockOut)) {
+                                    $hours = 8;
+                                    $clockOut = $clockIn->copy()->addHours(8);
+                                } else {
+                                    if ($clockOut->lt($clockIn)) {
+                                        $clockOut->addDay();
+                                    }
+                                    $totalMinutes = $clockOut->diffInMinutes($clockIn);
+                                    $hours = round($totalMinutes / 60, 1);
+                                }
+                                
+                                $regularHours = min($hours, 8);
+                                $overtimeHours = max(0, $hours - 8);
+                                $displayHours = max(0, $regularHours);
+                                $displayOvertime = max(0, $overtimeHours);
+                                
+                                $weeklyData[$dayOfWeek] = [
+                                    'date' => $clockIn->format('m/d/y'),
+                                    'time_in' => $clockIn->format('g:i A'),
+                                    'break' => '12:00 PM - 1:00 PM',
+                                    'time_out' => $clockOut->format('g:i A'),
+                                    'total_hours' => $displayHours . ' hrs.',
+                                    'overtime' => $displayOvertime > 0 ? $displayOvertime . ' hrs.' : '0 hrs.'
+                                ];
+                            }
+                        }
+                    } catch (\Exception $e) {
+                        // Ignore attendance errors for individual employees
+                    }
+                    
+                    // Generate comprehensive AI insights
+                    $insights = $this->generateAIInsights($weeklyData, $employeeName, $department);
+                    
+                    // Create the same response data structure as individual generation
+                    $timesheetData = [
+                        'id' => 'ai-' . $employeeId . '-' . time(),
+                        'employee_id' => $employeeId,
+                        'employee_name' => $employeeName,
+                        'department' => $department,
+                        'supervisor_name' => 'Not Assigned',
+                        'weekly_data' => $weeklyData,
+                        'total_hours' => 0,
+                        'overtime_hours' => 0,
+                        'ai_insights' => $insights,
+                        'status' => 'generated',
+                        'generated_at' => now()->format('m/d/Y, g:i A')
                     ];
+                    
+                    $generated[] = [
+                        'employee_id' => $employeeId,
+                        'employee_name' => $employeeName,
+                        'timesheet_id' => $timesheetData['id'],
+                        'status' => 'generated',
+                        'timesheet_data' => $timesheetData
+                    ];
+                    
                 } catch (\Exception $e) {
                     $errors[] = [
                         'employee_id' => $employee->id,
@@ -1400,6 +1616,532 @@ class TimesheetController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Error generating AI timesheets: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
+     * Generate comprehensive AI insights for timesheet
+     */
+    private function generateAIInsights($weeklyData, $employeeName, $department)
+    {
+        $insights = [];
+        
+        // Count days worked
+        $daysWorked = 0;
+        $totalHours = 0;
+        $overtimeHours = 0;
+        $workDays = [];
+        
+        foreach ($weeklyData as $day => $data) {
+            if ($data['time_in'] !== '--' && $data['time_out'] !== '--') {
+                $daysWorked++;
+                $workDays[] = $day;
+                
+                // Extract hours from string (e.g., "8 hrs." -> 8)
+                if (isset($data['total_hours']) && $data['total_hours'] !== '--') {
+                    $hours = (float) str_replace(' hrs.', '', $data['total_hours']);
+                    $totalHours += $hours;
+                }
+                
+                if (isset($data['overtime']) && $data['overtime'] !== '0 hrs.' && $data['overtime'] !== '--') {
+                    $overtime = (float) str_replace(' hrs.', '', $data['overtime']);
+                    $overtimeHours += $overtime;
+                }
+            }
+        }
+        
+        // Basic attendance insights
+        if ($daysWorked > 0) {
+            $insights[] = "📊 {$employeeName} worked {$daysWorked} day(s) this week";
+            
+            if ($totalHours > 0) {
+                $avgHours = round($totalHours / $daysWorked, 1);
+                $insights[] = "⏱️ Average daily hours: {$avgHours} hours per day";
+            }
+        } else {
+            $insights[] = "ℹ️ No attendance records found for {$employeeName} this week";
+        }
+        
+        // Work pattern and consistency analysis
+        if ($daysWorked >= 3) {
+            // Analyze consistency of work days
+            $consistencyInsight = $this->analyzeWorkConsistency($workDays, $weeklyData);
+            $insights[] = $consistencyInsight;
+            
+            $insights[] = "✅ Good attendance pattern - consistent work schedule";
+        } elseif ($daysWorked > 0) {
+            $insights[] = "⚠️ Partial attendance - only {$daysWorked} day(s) recorded";
+            
+            if ($daysWorked == 2) {
+                $insights[] = "📅 Inconsistent schedule - consider establishing regular work days";
+            }
+        }
+        
+        // Overtime analysis
+        if ($overtimeHours > 0) {
+            $insights[] = "🕐 Overtime detected: {$overtimeHours} hours beyond regular schedule";
+        } elseif ($daysWorked > 0) {
+            $insights[] = "👍 No overtime - maintaining regular work hours";
+        }
+        
+        // Department-specific insights
+        switch (strtolower($department)) {
+            case 'it':
+                if ($overtimeHours > 5) {
+                    $insights[] = "💻 High IT overtime - consider workload distribution";
+                } elseif ($daysWorked >= 4) {
+                    $insights[] = "💻 IT schedule looks balanced - good work-life balance";
+                }
+                break;
+                
+            case 'sales':
+                if ($daysWorked >= 5) {
+                    $insights[] = "📈 Full sales week - excellent client engagement potential";
+                } elseif ($daysWorked >= 3) {
+                    $insights[] = "📈 Good sales presence - maintaining client relationships";
+                }
+                break;
+                
+            case 'marketing':
+                if ($daysWorked >= 4) {
+                    $insights[] = "🎯 Strong marketing presence - consistent campaign support";
+                }
+                break;
+                
+            case 'finance':
+                if ($daysWorked >= 4) {
+                    $insights[] = "💰 Reliable finance schedule - maintaining fiscal operations";
+                }
+                break;
+                
+            case 'human resources':
+                if ($daysWorked >= 4) {
+                    $insights[] = "👥 Consistent HR support - maintaining employee services";
+                }
+                break;
+                
+            default:
+                if ($daysWorked >= 4) {
+                    $insights[] = "🏢 Regular {$department} schedule - maintaining department operations";
+                }
+        }
+        
+        // Weekly completion insights
+        if ($daysWorked == 5) {
+            $insights[] = "🎉 Perfect attendance - full work week completed";
+        } elseif ($daysWorked >= 3) {
+            $insights[] = "📋 Partial week completed - {$daysWorked}/5 work days recorded";
+        }
+        
+        // Ensure we always have at least one insight
+        if (empty($insights)) {
+            $insights[] = "📋 Weekly timesheet generated successfully";
+        }
+        
+        return $insights;
+    }
+    
+    /**
+     * Analyze work consistency patterns
+     */
+    private function analyzeWorkConsistency($workDays, $weeklyData)
+    {
+        if (count($workDays) < 2) {
+            return "📅 Single work day - unable to analyze consistency";
+        }
+        
+        // Define typical work day patterns
+        $weekdays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
+        $weekends = ['Saturday', 'Sunday'];
+        
+        // Check if working weekdays vs weekends
+        $weekdayWork = array_intersect($workDays, $weekdays);
+        $weekendWork = array_intersect($workDays, $weekends);
+        
+        // Analyze time consistency
+        $workTimes = [];
+        $clockInTimes = [];
+        $clockOutTimes = [];
+        
+        foreach ($workDays as $day) {
+            if (isset($weeklyData[$day])) {
+                $timeIn = $weeklyData[$day]['time_in'];
+                $timeOut = $weeklyData[$day]['time_out'];
+                
+                if ($timeIn !== '--' && $timeOut !== '--') {
+                    $clockInTimes[] = $timeIn;
+                    $clockOutTimes[] = $timeOut;
+                }
+            }
+        }
+        
+        // Pattern analysis
+        if (count($workDays) >= 4) {
+            // Check for consecutive days
+            $dayNumbers = array_map(function($day) {
+                $days = ['Monday' => 1, 'Tuesday' => 2, 'Wednesday' => 3, 'Thursday' => 4, 'Friday' => 5, 'Saturday' => 6, 'Sunday' => 7];
+                return $days[$day];
+            }, $workDays);
+            
+            sort($dayNumbers);
+            $consecutive = true;
+            for ($i = 1; $i < count($dayNumbers); $i++) {
+                if ($dayNumbers[$i] - $dayNumbers[$i-1] > 1) {
+                    $consecutive = false;
+                    break;
+                }
+            }
+            
+            if ($consecutive && count($weekdayWork) >= 4) {
+                return "🎯 Excellent consistency - consecutive weekday schedule";
+            } elseif (count($weekdayWork) >= 4) {
+                return "📊 Good consistency - regular weekday attendance";
+            }
+        }
+        
+        // Check for mixed patterns
+        if (count($weekendWork) > 0 && count($weekdayWork) > 0) {
+            return "🔄 Mixed schedule - working both weekdays and weekends";
+        }
+        
+        // Check for weekend-only work
+        if (count($weekendWork) > 0 && count($weekdayWork) == 0) {
+            return "📅 Weekend worker - non-traditional schedule pattern";
+        }
+        
+        // Check for scattered weekday pattern
+        if (count($workDays) >= 3 && count($workDays) < 5) {
+            $gaps = 0;
+            $dayNumbers = array_map(function($day) {
+                $days = ['Monday' => 1, 'Tuesday' => 2, 'Wednesday' => 3, 'Thursday' => 4, 'Friday' => 5];
+                return isset($days[$day]) ? $days[$day] : 0;
+            }, $workDays);
+            
+            $dayNumbers = array_filter($dayNumbers); // Remove weekends
+            sort($dayNumbers);
+            
+            for ($i = 1; $i < count($dayNumbers); $i++) {
+                if ($dayNumbers[$i] - $dayNumbers[$i-1] > 1) {
+                    $gaps++;
+                }
+            }
+            
+            if ($gaps > 1) {
+                return "⚠️ Inconsistent pattern - scattered work days with gaps";
+            } else {
+                return "📋 Moderate consistency - some regular pattern detected";
+            }
+        }
+        
+        // Time consistency analysis
+        if (count($clockInTimes) >= 2) {
+            $uniqueInTimes = array_unique($clockInTimes);
+            $uniqueOutTimes = array_unique($clockOutTimes);
+            
+            if (count($uniqueInTimes) == 1 && count($uniqueOutTimes) == 1) {
+                return "⏰ Perfect time consistency - same schedule every work day";
+            } elseif (count($uniqueInTimes) <= 2 && count($uniqueOutTimes) <= 2) {
+                return "🕐 Good time consistency - similar daily schedule";
+            } else {
+                return "🔄 Variable schedule - different times each work day";
+            }
+        }
+        
+        return "📅 Work pattern established - building consistency";
+    }
+    
+    /**
+     * Save AI timesheet to pending approval - Complete database version
+     */
+    public function saveAITimesheet(Request $request)
+    {
+        try {
+            \Log::info('Save AI Timesheet - Complete database version started');
+            
+            $employeeId = $request->input('employee_id');
+            $timesheetData = $request->input('timesheet_data');
+            
+            \Log::info('Save AI Timesheet - Input received', [
+                'employee_id' => $employeeId,
+                'timesheet_data' => $timesheetData
+            ]);
+            
+            if (!$employeeId || !$timesheetData) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Missing employee ID or timesheet data'
+                ], 400);
+            }
+            
+            // Get employee information
+            $employee = DB::table('employees')->where('id', $employeeId)->first();
+            if (!$employee) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Employee not found'
+                ], 404);
+            }
+            
+            $weekStart = Carbon::now()->startOfWeek(Carbon::MONDAY)->format('Y-m-d');
+            
+            // Check if record already exists
+            $existing = DB::table('ai_generated_timesheets')
+                ->where('employee_id', $employeeId)
+                ->where('week_start_date', $weekStart)
+                ->first();
+            
+            // Calculate totals from weekly data
+            $totalHours = 0;
+            $overtimeHours = 0;
+            
+            if (isset($timesheetData['weekly_data'])) {
+                foreach ($timesheetData['weekly_data'] as $day => $dayData) {
+                    if (isset($dayData['total_hours']) && is_numeric($dayData['total_hours'])) {
+                        $totalHours += floatval($dayData['total_hours']);
+                    }
+                    if (isset($dayData['overtime']) && is_numeric($dayData['overtime'])) {
+                        $overtimeHours += floatval($dayData['overtime']);
+                    }
+                }
+            }
+            
+            $saveData = [
+                'employee_id' => $employeeId,
+                'employee_name' => $employee->first_name . ' ' . $employee->last_name,
+                'department' => $employee->department ?? 'General',
+                'week_start_date' => $weekStart,
+                'weekly_data' => json_encode($timesheetData['weekly_data'] ?? []),
+                'total_hours' => $totalHours,
+                'overtime_hours' => $overtimeHours,
+                'ai_insights' => json_encode($timesheetData['ai_insights'] ?? []),
+                'status' => 'pending',
+                'generated_at' => now(),
+                'updated_at' => now()
+            ];
+            
+            if ($existing) {
+                // Update existing record
+                DB::table('ai_generated_timesheets')
+                    ->where('id', $existing->id)
+                    ->update($saveData);
+                $id = $existing->id;
+                \Log::info('Save AI Timesheet - Updated existing record', ['id' => $id]);
+            } else {
+                // Create new record
+                $saveData['created_at'] = now();
+                $id = DB::table('ai_generated_timesheets')->insertGetId($saveData);
+                \Log::info('Save AI Timesheet - Created new record', ['id' => $id]);
+            }
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'AI timesheet saved successfully to pending approval',
+                'timesheet_id' => $id,
+                'employee_name' => $saveData['employee_name'],
+                'total_hours' => $totalHours,
+                'overtime_hours' => $overtimeHours
+            ]);
+            
+        } catch (\Exception $e) {
+            \Log::error('Save AI Timesheet Error: ' . $e->getMessage());
+            \Log::error('Save AI Timesheet Stack: ' . $e->getTraceAsString());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Error saving timesheet: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
+     * Get all AI timesheets for approval - Complete database version
+     */
+    public function getPendingTimesheets()
+    {
+        try {
+            \Log::info('Get All AI Timesheets - Complete database version started');
+            
+            // Get all AI timesheets (pending, approved, rejected) from ai_generated_timesheets table
+            $timesheets = DB::table('ai_generated_timesheets')
+                ->orderByRaw("CASE WHEN status = 'pending' THEN 1 WHEN status = 'approved' THEN 2 ELSE 3 END")
+                ->orderBy('generated_at', 'desc')
+                ->get();
+            
+            \Log::info('Get Pending Timesheets - Found ' . $timesheets->count() . ' records');
+            
+            $formattedTimesheets = $timesheets->map(function ($timesheet) {
+                $weekStart = Carbon::parse($timesheet->week_start_date);
+                $weekEnd = $weekStart->copy()->addDays(6);
+                
+                return [
+                    'id' => $timesheet->id,
+                    'employee_id' => $timesheet->employee_id,
+                    'employee_name' => $timesheet->employee_name ?? 'Employee #' . $timesheet->employee_id,
+                    'department' => $timesheet->department ?? 'General',
+                    'week_period' => $weekStart->format('M d') . ' - ' . $weekEnd->format('M d, Y'),
+                    'total_hours' => $timesheet->total_hours ?? 0,
+                    'overtime_hours' => $timesheet->overtime_hours ?? 0,
+                    'generated_at' => $timesheet->generated_at ? 
+                        Carbon::parse($timesheet->generated_at)->format('M d, Y g:i A') : 
+                        'Unknown',
+                    'status' => $timesheet->status
+                ];
+            });
+            
+            return response()->json([
+                'success' => true,
+                'timesheets' => $formattedTimesheets->toArray()
+            ]);
+            
+        } catch (\Exception $e) {
+            \Log::error('Get Pending Timesheets Error: ' . $e->getMessage());
+            \Log::error('Get Pending Timesheets Stack: ' . $e->getTraceAsString());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Error loading pending timesheets: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
+     * Get saved timesheet details
+     */
+    public function getSavedTimesheet($id)
+    {
+        try {
+            \Log::info('Get Saved Timesheet - Started', ['id' => $id]);
+            
+            $timesheet = DB::table('ai_generated_timesheets')->where('id', $id)->first();
+            
+            if (!$timesheet) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Timesheet not found'
+                ], 404);
+            }
+            
+            $weekStart = Carbon::parse($timesheet->week_start_date);
+            $weekEnd = $weekStart->copy()->addDays(6);
+            
+            $timesheetData = [
+                'id' => $timesheet->id,
+                'employee_id' => $timesheet->employee_id,
+                'employee_name' => $timesheet->employee_name,
+                'department' => $timesheet->department ?? 'General',
+                'supervisor_name' => 'HR Manager',
+                'week_period' => $weekStart->format('M d') . ' - ' . $weekEnd->format('M d, Y'),
+                'weekly_data' => $timesheet->weekly_data,
+                'total_hours' => $timesheet->total_hours,
+                'overtime_hours' => $timesheet->overtime_hours,
+                'ai_insights' => $timesheet->ai_insights,
+                'status' => $timesheet->status,
+                'generated_at' => $timesheet->generated_at ? 
+                    Carbon::parse($timesheet->generated_at)->format('M d, Y g:i A') : 
+                    'Unknown'
+            ];
+            
+            return response()->json([
+                'success' => true,
+                'timesheet' => $timesheetData
+            ]);
+            
+        } catch (\Exception $e) {
+            \Log::error('Get Saved Timesheet Error: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Error loading timesheet: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
+     * Approve AI timesheet
+     */
+    public function approveAITimesheet($id)
+    {
+        try {
+            \Log::info('Approve AI Timesheet - Started', ['id' => $id]);
+            
+            $timesheet = DB::table('ai_generated_timesheets')->where('id', $id)->first();
+            
+            if (!$timesheet) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Timesheet not found'
+                ], 404);
+            }
+            
+            // Update status to approved
+            DB::table('ai_generated_timesheets')
+                ->where('id', $id)
+                ->update([
+                    'status' => 'approved',
+                    'approved_at' => now(),
+                    'approved_by' => auth()->id() ?? 1,
+                    'updated_at' => now()
+                ]);
+            
+            \Log::info('Approve AI Timesheet - Success', ['id' => $id]);
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Timesheet approved successfully'
+            ]);
+            
+        } catch (\Exception $e) {
+            \Log::error('Approve AI Timesheet Error: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Error approving timesheet: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Reject AI timesheet
+     */
+    public function rejectAITimesheet(Request $request, $id)
+    {
+        try {
+            \Log::info('Reject AI Timesheet - Started', ['id' => $id]);
+            
+            $timesheet = DB::table('ai_generated_timesheets')->where('id', $id)->first();
+            
+            if (!$timesheet) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Timesheet not found'
+                ], 404);
+            }
+            
+            // Update status to rejected
+            DB::table('ai_generated_timesheets')
+                ->where('id', $id)
+                ->update([
+                    'status' => 'rejected',
+                    'rejection_reason' => $request->input('reason'),
+                    'rejected_at' => now(),
+                    'rejected_by' => auth()->id() ?? 1,
+                    'updated_at' => now()
+                ]);
+            
+            \Log::info('Reject AI Timesheet - Success', ['id' => $id]);
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Timesheet rejected successfully'
+            ]);
+            
+        } catch (\Exception $e) {
+            \Log::error('Reject AI Timesheet Error: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Error rejecting timesheet: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -1445,35 +2187,6 @@ class TimesheetController extends Controller
         }
     }
     
-    /**
-     * Approve AI timesheet
-     */
-    public function approveAITimesheet(Request $request, $id)
-    {
-        try {
-            $aiTimesheet = AIGeneratedTimesheet::findOrFail($id);
-            
-            $aiTimesheet->update([
-                'status' => 'approved',
-                'approved_by' => auth()->user()->id ?? 1,
-                'approved_at' => now(),
-                'notes' => $request->input('notes')
-            ]);
-            
-            // Create actual timesheet entries
-            $this->createTimesheetEntriesFromAI($aiTimesheet);
-            
-            return response()->json([
-                'success' => true,
-                'message' => 'AI timesheet approved and saved successfully!'
-            ]);
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Error approving AI timesheet: ' . $e->getMessage()
-            ], 500);
-        }
-    }
     
     /**
      * Create actual timesheet entries from approved AI timesheet

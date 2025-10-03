@@ -1245,11 +1245,45 @@ Route::get('/test-ai-generation/{employeeId}', function($employeeId) {
 // AI Timesheet Generation Web Routes (for AJAX calls from authenticated pages)
 Route::middleware(['auth'])->group(function () {
     Route::prefix('api/ai-timesheets')->group(function () {
+        Route::get('/test/{employeeId}', [TimesheetController::class, 'testAIGeneration']);
         Route::post('/generate/{employeeId}', [TimesheetController::class, 'generateAITimesheet']);
         Route::post('/generate-all', [TimesheetController::class, 'generateAllAITimesheets']);
         Route::get('/view/{employeeId}', [TimesheetController::class, 'getAITimesheet']);
+        Route::post('/save', [TimesheetController::class, 'saveAITimesheet']);
+        Route::get('/pending', [TimesheetController::class, 'getPendingTimesheets']);
+        Route::get('/saved/{id}', [TimesheetController::class, 'getSavedTimesheet']);
         Route::post('/approve/{id}', [TimesheetController::class, 'approveAITimesheet']);
+        Route::post('/reject/{id}', [TimesheetController::class, 'rejectAITimesheet']);
     });
 });
+
+// Simple test route to verify controller works
+Route::get('/test-ai/{employeeId}', function($employeeId) {
+    try {
+        $controller = new \App\Http\Controllers\TimesheetController();
+        $request = new \Illuminate\Http\Request();
+        $response = $controller->generateAITimesheet($request, $employeeId);
+        return $response;
+    } catch (\Exception $e) {
+        return response()->json(['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
+    }
+})->middleware('auth');
+
+// Test save functionality
+Route::post('/test-save', function(\Illuminate\Http\Request $request) {
+    try {
+        \Log::info('Test Save Route - Request received', $request->all());
+        
+        $controller = new \App\Http\Controllers\TimesheetController();
+        $response = $controller->saveAITimesheet($request);
+        
+        \Log::info('Test Save Route - Response', ['response' => $response->getContent()]);
+        
+        return $response;
+    } catch (\Exception $e) {
+        \Log::error('Test Save Route - Error', ['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
+        return response()->json(['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
+    }
+})->middleware('auth');
 
 // Removed duplicate routes - using the Web methods defined above

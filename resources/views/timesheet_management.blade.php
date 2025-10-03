@@ -146,9 +146,6 @@
             <button class="btn btn-success" onclick="generateAllTimesheets()">
               <i class="fas fa-magic me-2"></i>Generate All AI Timesheets
             </button>
-            <button class="btn btn-primary" onclick="openWorkingModal('timesheet-modal')">
-              <i class="fas fa-plus me-2"></i>Add Manual Timesheet
-            </button>
           </div>
         </div>
         <!-- AI Employee Timesheets Grid -->
@@ -212,6 +209,43 @@
         <div class="text-center py-4" id="loading-indicator" style="display: none;">
           <div class="spinner-border text-primary" role="status">
             <span class="visually-hidden">Loading...</span>
+          </div>
+        </div>
+
+        <!-- Saved AI Timesheets Table -->
+        <div class="mt-5">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="mb-0">
+              <i class="fas fa-clipboard-check me-2"></i>Saved AI Timesheets - Pending Approval
+            </h5>
+            <button class="btn btn-outline-primary btn-sm" onclick="refreshSavedTimesheets()">
+              <i class="fas fa-refresh me-1"></i>Refresh
+            </button>
+          </div>
+          
+          <div class="table-responsive">
+            <table class="table table-hover" id="saved-timesheets-table">
+              <thead class="table-light">
+                <tr>
+                  <th>Employee</th>
+                  <th>Department</th>
+                  <th>Week Period</th>
+                  <th>Total Hours</th>
+                  <th>Overtime</th>
+                  <th>Generated Date</th>
+                  <th>Status</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="saved-timesheets-body">
+                <tr>
+                  <td colspan="8" class="text-center text-muted py-4">
+                    <i class="fas fa-inbox fa-2x mb-2"></i><br>
+                    No saved timesheets pending approval
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </div>
@@ -1260,9 +1294,9 @@
                             <tr>
                                 <th class="day-header" style="background-color: #20B2AA; color: white; width: 100px;">Day</th>
                                 <th style="background-color: #20B2AA; color: white;">Date</th>
-                                <th style="background-color: #20B2AA; color: white;">Time In</th>
+                                <th style="background-color: #20B2AA; color: white;">Clock In</th>
                                 <th style="background-color: #20B2AA; color: white;">Break</th>
-                                <th style="background-color: #20B2AA; color: white;">Time Out</th>
+                                <th style="background-color: #20B2AA; color: white;">Clock Out</th>
                                 <th style="background-color: #20B2AA; color: white;">Total Hours</th>
                                 <th style="background-color: #20B2AA; color: white;">Overtime</th>
                             </tr>
@@ -1313,6 +1347,24 @@
                                 <td id="ai-friday-total-hours">-</td>
                                 <td id="ai-friday-overtime">-</td>
                             </tr>
+                            <tr class="saturday-row">
+                                <td class="day-cell" style="background-color: #20B2AA; color: white; font-weight: bold;">Saturday</td>
+                                <td id="ai-saturday-date">-</td>
+                                <td id="ai-saturday-time-in">-</td>
+                                <td id="ai-saturday-break">-</td>
+                                <td id="ai-saturday-time-out">-</td>
+                                <td id="ai-saturday-total-hours">-</td>
+                                <td id="ai-saturday-overtime">-</td>
+                            </tr>
+                            <tr class="sunday-row">
+                                <td class="day-cell" style="background-color: #20B2AA; color: white; font-weight: bold;">Sunday</td>
+                                <td id="ai-sunday-date">-</td>
+                                <td id="ai-sunday-time-in">-</td>
+                                <td id="ai-sunday-break">-</td>
+                                <td id="ai-sunday-time-out">-</td>
+                                <td id="ai-sunday-total-hours">-</td>
+                                <td id="ai-sunday-overtime">-</td>
+                            </tr>
                         </tbody>
                     </table>
                 </div>
@@ -1330,8 +1382,8 @@
             </div>
             <div class="working-modal-footer">
                 <button type="button" class="btn btn-secondary" onclick="closeWorkingModal('ai-timesheet-modal')">Close</button>
-                <button type="button" class="btn btn-success" onclick="approveAITimesheet()">
-                    <i class="fas fa-check me-2"></i>Approve & Save
+                <button type="button" class="btn btn-success" onclick="saveAITimesheet()">
+                    <i class="fas fa-save me-2"></i>Save
                 </button>
                 <button type="button" class="btn btn-primary" onclick="printAITimesheet()">
                     <i class="fas fa-print me-2"></i>Print
@@ -4632,7 +4684,7 @@ function generateAITimesheet(employeeId) {
     statusBadge.className = 'badge bg-generating ai-status-badge';
     statusBadge.innerHTML = '<i class="fas fa-cog fa-spin me-1"></i>Generating...';
     
-    // Make API call to generate AI timesheet
+    // Make API call to generate AI timesheet with real attendance data
     console.log('Making API call for employee:', employeeId);
     fetch(`/api/ai-timesheets/generate/${employeeId}`, {
         method: 'POST',
@@ -4899,19 +4951,37 @@ function populateAITimesheetModal(data) {
         document.getElementById('ai-supervisor-name').textContent = data.supervisor_name || 'N/A';
         document.getElementById('ai-generation-time').textContent = `Generated on ${data.generated_at}`;
         
-        // Populate weekly data
+        // Show all 7 days and populate data (real data or dashes)
+        const allDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+        
+        // Populate weekly data for all 7 days
         if (data.weekly_data) {
-            Object.keys(data.weekly_data).forEach(day => {
-                const dayLower = day.toLowerCase();
-                const dayData = data.weekly_data[day];
+            allDays.forEach(day => {
+                const dayCapitalized = day.charAt(0).toUpperCase() + day.slice(1);
+                const dayData = data.weekly_data[dayCapitalized];
+                const row = document.querySelector(`.${day}-row`);
                 
-                if (document.getElementById(`ai-${dayLower}-date`)) {
-                    document.getElementById(`ai-${dayLower}-date`).textContent = dayData.date || '-';
-                    document.getElementById(`ai-${dayLower}-time-in`).textContent = dayData.time_in || '-';
-                    document.getElementById(`ai-${dayLower}-break`).textContent = dayData.break || '-';
-                    document.getElementById(`ai-${dayLower}-time-out`).textContent = dayData.time_out || '-';
-                    document.getElementById(`ai-${dayLower}-total-hours`).textContent = dayData.total_hours || '-';
-                    document.getElementById(`ai-${dayLower}-overtime`).textContent = dayData.overtime || '-';
+                // Always show the row and populate data (real or dashes)
+                if (row && document.getElementById(`ai-${day}-date`)) {
+                    row.style.display = 'table-row'; // Show all rows
+                    
+                    if (dayData) {
+                        // Real attendance data
+                        document.getElementById(`ai-${day}-date`).textContent = dayData.date || '--';
+                        document.getElementById(`ai-${day}-time-in`).textContent = dayData.time_in || '--';
+                        document.getElementById(`ai-${day}-break`).textContent = dayData.break || '12:00 PM - 1:00 PM';
+                        document.getElementById(`ai-${day}-time-out`).textContent = dayData.time_out || '--';
+                        document.getElementById(`ai-${day}-total-hours`).textContent = dayData.total_hours || '--';
+                        document.getElementById(`ai-${day}-overtime`).textContent = dayData.overtime || '--';
+                    } else {
+                        // No data - show dashes
+                        document.getElementById(`ai-${day}-date`).textContent = '--';
+                        document.getElementById(`ai-${day}-time-in`).textContent = '--';
+                        document.getElementById(`ai-${day}-break`).textContent = '--';
+                        document.getElementById(`ai-${day}-time-out`).textContent = '--';
+                        document.getElementById(`ai-${day}-total-hours`).textContent = '--';
+                        document.getElementById(`ai-${day}-overtime`).textContent = '--';
+                    }
                 }
             });
         }
@@ -4982,6 +5052,9 @@ function generateAllTimesheets() {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
+            // Initialize cache if it doesn't exist
+            window.aiTimesheets = window.aiTimesheets || {};
+            
             // Update UI for successful generations
             data.generated.forEach(item => {
                 const employeeId = item.employee_id;
@@ -4989,6 +5062,11 @@ function generateAllTimesheets() {
                 const viewBtn = document.getElementById(`view-btn-${employeeId}`);
                 const statusBadge = document.getElementById(`ai-status-${employeeId}`);
                 const card = generateBtn.closest('.employee-timesheet-card');
+                
+                // Store the timesheet data for "See Details" functionality
+                if (item.timesheet_data) {
+                    window.aiTimesheets[employeeId] = item.timesheet_data;
+                }
                 
                 generateBtn.classList.remove('btn-loading');
                 generateBtn.innerHTML = '<i class="fas fa-check me-1"></i>Generated';
@@ -5166,6 +5244,438 @@ function showAlert(type, message) {
         }
     }, 5000);
 }
+
+// Extract timesheet data from the modal
+function extractTimesheetDataFromModal() {
+    const weeklyData = {};
+    const aiInsights = [];
+    
+    // Extract weekly data from table
+    const tableRows = document.querySelectorAll('#ai-timesheet-modal tbody tr');
+    tableRows.forEach(row => {
+        const cells = row.cells;
+        if (cells.length >= 6) {
+            const day = cells[0].textContent.trim().toLowerCase();
+            const date = cells[1].textContent.trim();
+            const clockIn = cells[2].textContent.trim();
+            const break_time = cells[3].textContent.trim();
+            const clockOut = cells[4].textContent.trim();
+            const totalHours = cells[5].textContent.trim();
+            const overtime = cells[6] ? cells[6].textContent.trim() : '0 hrs.';
+            
+            weeklyData[day] = {
+                date: date,
+                clock_in: clockIn,
+                break: break_time,
+                clock_out: clockOut,
+                total_hours: parseFloat(totalHours.replace(' hrs.', '')) || 0,
+                overtime: parseFloat(overtime.replace(' hrs.', '')) || 0
+            };
+        }
+    });
+    
+    // Extract AI insights
+    const insightElements = document.querySelectorAll('#ai-timesheet-modal .ai-insights-content .insight-item');
+    insightElements.forEach(element => {
+        aiInsights.push(element.textContent.trim());
+    });
+    
+    return {
+        weekly_data: weeklyData,
+        ai_insights: aiInsights,
+        generated_at: document.querySelector('.generation-info')?.textContent || new Date().toLocaleString()
+    };
+}
+
+// Save AI Timesheet (replaces approveAITimesheet)
+function saveAITimesheet() {
+    const employeeName = document.getElementById('ai-employee-name').textContent;
+    
+    // Extract timesheet data from the modal
+    let timesheetData = extractTimesheetDataFromModal();
+    let employeeId = null;
+    
+    // Find employee ID from cached data or extract from modal
+    if (window.aiTimesheets) {
+        for (const [id, data] of Object.entries(window.aiTimesheets)) {
+            if (data.employee_name === employeeName) {
+                employeeId = id;
+                break;
+            }
+        }
+    }
+    
+    if (!employeeId || !timesheetData) {
+        showAlert('error', 'No timesheet data found to save');
+        return;
+    }
+    
+    // Show loading state
+    const saveButton = document.querySelector('#ai-timesheet-modal .btn-success');
+    const originalText = saveButton.innerHTML;
+    saveButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+    saveButton.disabled = true;
+    
+    console.log('Saving timesheet data:', { employee_id: employeeId, timesheet_data: timesheetData });
+    
+    fetch('/api/ai-timesheets/save', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+            'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+            employee_id: employeeId,
+            timesheet_data: timesheetData
+        })
+    })
+    .then(response => {
+        console.log('Save response status:', response.status);
+        console.log('Save response headers:', response.headers);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        return response.json();
+    })
+    .then(data => {
+        console.log('Save response data:', data);
+        
+        // Restore button state
+        saveButton.innerHTML = originalText;
+        saveButton.disabled = false;
+        
+        if (data.success) {
+            showAlert('success', `AI timesheet saved successfully for ${data.employee_name || employeeName}! Total: ${data.total_hours || 0} hrs, Overtime: ${data.overtime_hours || 0} hrs. It now appears in the pending approval table below.`);
+            closeWorkingModal('ai-timesheet-modal');
+            refreshSavedTimesheets();
+        } else {
+            console.error('Save failed:', data);
+            showAlert('error', data.message || 'Failed to save timesheet');
+        }
+    })
+    .catch(error => {
+        console.error('Error saving AI timesheet:', error);
+        
+        // Restore button state
+        saveButton.innerHTML = originalText;
+        saveButton.disabled = false;
+        
+        showAlert('error', 'Failed to save timesheet: ' + error.message);
+    });
+}
+
+// Refresh saved timesheets table
+function refreshSavedTimesheets() {
+    console.log('Refreshing saved timesheets...');
+    
+    fetch('/api/ai-timesheets/pending', {
+        method: 'GET',
+        headers: {
+            'Accept': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            populateSavedTimesheetsTable(data.timesheets);
+        } else {
+            console.error('Failed to load saved timesheets:', data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error loading saved timesheets:', error);
+    });
+}
+
+// Generate consistent avatar color for employee (matching AI generation cards)
+function getEmployeeAvatarColor(employeeId) {
+    // Use the same colors as the AI generation cards
+    const colors = [
+        '#FF6B6B', // Red
+        '#4ECDC4', // Teal  
+        '#45B7D1', // Blue
+        '#96CEB4', // Green
+        '#FFEAA7', // Yellow
+        '#DDA0DD', // Plum
+        '#FFB347', // Orange
+        '#87CEEB'  // Sky Blue
+    ];
+    
+    // CRC32 implementation to match PHP's crc32() function exactly
+    function crc32(str) {
+        const crcTable = [];
+        for (let i = 0; i < 256; i++) {
+            let c = i;
+            for (let j = 0; j < 8; j++) {
+                c = ((c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1));
+            }
+            crcTable[i] = c;
+        }
+        
+        let crc = 0 ^ (-1);
+        for (let i = 0; i < str.length; i++) {
+            crc = (crc >>> 8) ^ crcTable[(crc ^ str.charCodeAt(i)) & 0xFF];
+        }
+        return (crc ^ (-1)) >>> 0;
+    }
+    
+    // Use the same logic as PHP: crc32(employeeId) % colors.length
+    const hash = crc32(employeeId.toString());
+    const colorIndex = hash % colors.length;
+    return colors[colorIndex];
+}
+
+// Get status badge HTML based on status
+function getStatusBadge(status) {
+    switch(status) {
+        case 'pending':
+            return '<span class="badge bg-warning"><i class="fas fa-clock me-1"></i>Pending</span>';
+        case 'approved':
+            return '<span class="badge bg-success"><i class="fas fa-check me-1"></i>Approved</span>';
+        case 'rejected':
+            return '<span class="badge bg-danger"><i class="fas fa-times me-1"></i>Rejected</span>';
+        default:
+            return '<span class="badge bg-secondary"><i class="fas fa-question me-1"></i>Unknown</span>';
+    }
+}
+
+// Get action buttons HTML based on status
+function getActionButtons(timesheetId, status) {
+    const viewButton = `<button class="btn btn-sm btn-outline-info" onclick="viewSavedTimesheet('${timesheetId}')" title="View"><i class="fas fa-eye"></i></button>`;
+    
+    if (status === 'pending') {
+        // Show all three buttons for pending items
+        return `
+            <div class="btn-group" role="group">
+                ${viewButton}
+                <button class="btn btn-sm btn-outline-success" onclick="approveTimesheet('${timesheetId}')" title="Approve">
+                    <i class="fas fa-check"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-danger" onclick="rejectTimesheet('${timesheetId}')" title="Reject">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        `;
+    } else {
+        // Show only view button for approved/rejected items
+        return `
+            <div class="btn-group" role="group">
+                ${viewButton}
+            </div>
+        `;
+    }
+}
+
+// Populate saved timesheets table
+function populateSavedTimesheetsTable(timesheets) {
+    const tbody = document.getElementById('saved-timesheets-body');
+    
+    if (!timesheets || timesheets.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="8" class="text-center text-muted py-4">
+                    <i class="fas fa-inbox fa-2x mb-2"></i><br>
+                    No AI timesheets found
+                </td>
+            </tr>
+        `;
+        return;
+    }
+    
+    tbody.innerHTML = timesheets.map(timesheet => `
+        <tr>
+            <td>
+                <div class="d-flex align-items-center">
+                    <div class="me-2">
+                        <div class="rounded-circle d-flex align-items-center justify-content-center text-white fw-bold" style="width: 32px; height: 32px; font-size: 12px; background: ${getEmployeeAvatarColor(timesheet.employee_id)};">
+                            ${timesheet.employee_name.split(' ').map(n => n[0]).join('').toUpperCase()}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="fw-medium">${timesheet.employee_name}</div>
+                        <small class="text-muted">ID: ${timesheet.employee_id}</small>
+                    </div>
+                </div>
+            </td>
+            <td>${timesheet.department || 'General'}</td>
+            <td>${timesheet.week_period || 'Current Week'}</td>
+            <td><span class="badge bg-info">${timesheet.total_hours || '0'} hrs</span></td>
+            <td><span class="badge bg-warning">${timesheet.overtime_hours || '0'} hrs</span></td>
+            <td>
+                <small>${timesheet.generated_at}</small>
+            </td>
+            <td>
+                ${getStatusBadge(timesheet.status)}
+            </td>
+            <td>
+                ${getActionButtons(timesheet.id, timesheet.status)}
+            </td>
+        </tr>
+    `).join('');
+}
+
+// View saved timesheet details
+function viewSavedTimesheet(timesheetId) {
+    console.log('Loading saved timesheet:', timesheetId);
+    
+    fetch(`/api/ai-timesheets/saved/${timesheetId}`, {
+        method: 'GET',
+        headers: {
+            'Accept': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+        }
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        console.log('Saved timesheet data:', data);
+        
+        if (data.success) {
+            // Populate the AI timesheet modal with saved data
+            populateSavedTimesheetModal(data.timesheet);
+            openWorkingModal('ai-timesheet-modal');
+        } else {
+            showAlert('error', 'Failed to load timesheet details: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error loading timesheet:', error);
+        showAlert('error', 'Failed to load timesheet details: ' + error.message);
+    });
+}
+
+// Populate modal with saved timesheet data
+function populateSavedTimesheetModal(timesheet) {
+    // Set employee information
+    document.getElementById('ai-employee-name').textContent = timesheet.employee_name || 'Unknown Employee';
+    document.getElementById('ai-employee-department').textContent = timesheet.department || 'General';
+    document.getElementById('ai-employee-supervisor').textContent = 'HR Manager'; // Default supervisor
+    
+    // Set generation info
+    const generationInfo = document.querySelector('.generation-info');
+    if (generationInfo) {
+        generationInfo.textContent = `Generated on ${timesheet.generated_at || 'Unknown Date'}`;
+    }
+    
+    // Clear and populate weekly data table
+    const tbody = document.querySelector('#ai-timesheet-modal tbody');
+    if (tbody && timesheet.weekly_data) {
+        const weeklyData = typeof timesheet.weekly_data === 'string' ? 
+            JSON.parse(timesheet.weekly_data) : timesheet.weekly_data;
+        
+        const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+        const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+        
+        tbody.innerHTML = days.map((day, index) => {
+            const dayData = weeklyData[day] || {};
+            return `
+                <tr>
+                    <td class="fw-bold text-white" style="background: #20B2AA;">${dayNames[index]}</td>
+                    <td>${dayData.date || '--'}</td>
+                    <td>${dayData.clock_in || '--'}</td>
+                    <td>${dayData.break || '--'}</td>
+                    <td>${dayData.clock_out || '--'}</td>
+                    <td>${dayData.total_hours ? dayData.total_hours + ' hrs.' : '--'}</td>
+                    <td>${dayData.overtime ? dayData.overtime + ' hrs.' : '0 hrs.'}</td>
+                </tr>
+            `;
+        }).join('');
+    }
+    
+    // Populate AI insights
+    const insightsContainer = document.querySelector('.ai-insights-content');
+    if (insightsContainer && timesheet.ai_insights) {
+        const insights = typeof timesheet.ai_insights === 'string' ? 
+            JSON.parse(timesheet.ai_insights) : timesheet.ai_insights;
+        
+        if (Array.isArray(insights) && insights.length > 0) {
+            insightsContainer.innerHTML = insights.map(insight => 
+                `<div class="insight-item mb-2"><i class="fas fa-lightbulb me-2"></i>${insight}</div>`
+            ).join('');
+        } else {
+            insightsContainer.innerHTML = '<div class="insight-item mb-2"><i class="fas fa-lightbulb me-2"></i>No specific insights available</div>';
+        }
+    }
+    
+    // Hide the Save button since this is a saved timesheet
+    const saveButton = document.querySelector('#ai-timesheet-modal .btn-success');
+    if (saveButton) {
+        saveButton.style.display = 'none';
+    }
+}
+
+// Approve timesheet
+function approveTimesheet(timesheetId) {
+    if (!confirm('Are you sure you want to approve this timesheet?')) {
+        return;
+    }
+    
+    fetch(`/api/ai-timesheets/approve/${timesheetId}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+            'Accept': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert('success', 'Timesheet approved successfully!');
+            refreshSavedTimesheets();
+        } else {
+            showAlert('error', data.message || 'Failed to approve timesheet');
+        }
+    })
+    .catch(error => {
+        console.error('Error approving timesheet:', error);
+        showAlert('error', 'Failed to approve timesheet');
+    });
+}
+
+// Reject timesheet
+function rejectTimesheet(timesheetId) {
+    const reason = prompt('Please provide a reason for rejection (optional):');
+    if (reason === null) return; // User cancelled
+    
+    fetch(`/api/ai-timesheets/reject/${timesheetId}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+            'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+            reason: reason
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert('success', 'Timesheet rejected successfully!');
+            refreshSavedTimesheets();
+        } else {
+            showAlert('error', data.message || 'Failed to reject timesheet');
+        }
+    })
+    .catch(error => {
+        console.error('Error rejecting timesheet:', error);
+        showAlert('error', 'Failed to reject timesheet');
+    });
+}
+
+// Load saved timesheets on page load
+document.addEventListener('DOMContentLoaded', function() {
+    refreshSavedTimesheets();
+});
 </script>
 
 @endpush
