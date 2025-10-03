@@ -22,3 +22,13 @@
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+# Temporary files and diagnostics
+/temp/
+*.tmp
+*.bak
+*_backup.*
+database_diagnostic.txt
+
+# Maintenance scripts (optional - uncomment if you don't want to track these)
+# /maintenance/
