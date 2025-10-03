@@ -1254,6 +1254,8 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/saved/{id}', [TimesheetController::class, 'getSavedTimesheet']);
         Route::post('/approve/{id}', [TimesheetController::class, 'approveAITimesheet']);
         Route::post('/reject/{id}', [TimesheetController::class, 'rejectAITimesheet']);
+        Route::post('/send-to-payroll/{id}', [TimesheetController::class, 'sendToPayroll']);
+        Route::get('/statistics', [TimesheetController::class, 'getTimesheetStatistics']);
     });
 });
 

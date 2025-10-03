@@ -5351,6 +5351,7 @@ function saveAITimesheet() {
             showAlert('success', `AI timesheet saved successfully for ${data.employee_name || employeeName}! Total: ${data.total_hours || 0} hrs, Overtime: ${data.overtime_hours || 0} hrs. It now appears in the pending approval table below.`);
             closeWorkingModal('ai-timesheet-modal');
             refreshSavedTimesheets();
+            refreshStatisticsAfterAction(); // Update statistics after saving
         } else {
             console.error('Save failed:', data);
             showAlert('error', data.message || 'Failed to save timesheet');
@@ -5438,6 +5439,8 @@ function getStatusBadge(status) {
             return '<span class="badge bg-success"><i class="fas fa-check me-1"></i>Approved</span>';
         case 'rejected':
             return '<span class="badge bg-danger"><i class="fas fa-times me-1"></i>Rejected</span>';
+        case 'sent_to_payroll':
+            return '<span class="badge bg-primary"><i class="fas fa-money-bill-wave me-1"></i>Sent to Payroll</span>';
         default:
             return '<span class="badge bg-secondary"><i class="fas fa-question me-1"></i>Unknown</span>';
     }
@@ -5448,7 +5451,7 @@ function getActionButtons(timesheetId, status) {
     const viewButton = `<button class="btn btn-sm btn-outline-info" onclick="viewSavedTimesheet('${timesheetId}')" title="View"><i class="fas fa-eye"></i></button>`;
     
     if (status === 'pending') {
-        // Show all three buttons for pending items
+        // Show view, approve, and reject buttons for pending items
         return `
             <div class="btn-group" role="group">
                 ${viewButton}
@@ -5460,8 +5463,28 @@ function getActionButtons(timesheetId, status) {
                 </button>
             </div>
         `;
+    } else if (status === 'approved') {
+        // Show view and send to payroll buttons for approved items
+        return `
+            <div class="btn-group" role="group">
+                ${viewButton}
+                <button class="btn btn-sm btn-outline-primary" onclick="sendToPayroll('${timesheetId}')" title="Send to Payroll">
+                    <i class="fas fa-money-bill-wave"></i>
+                </button>
+            </div>
+        `;
+    } else if (status === 'sent_to_payroll') {
+        // Show only view button for items sent to payroll
+        return `
+            <div class="btn-group" role="group">
+                ${viewButton}
+                <span class="btn btn-sm btn-outline-secondary disabled" title="Already sent to payroll">
+                    <i class="fas fa-check-circle"></i>
+                </span>
+            </div>
+        `;
     } else {
-        // Show only view button for approved/rejected items
+        // Show only view button for rejected items
         return `
             <div class="btn-group" role="group">
                 ${viewButton}
@@ -5612,6 +5635,85 @@ function populateSavedTimesheetModal(timesheet) {
     }
 }
 
+// Send timesheet to payroll
+function sendToPayroll(timesheetId) {
+    if (!confirm('Are you sure you want to send this timesheet to payroll? This will create actual time entries for payroll processing.')) {
+        return;
+    }
+    
+    const button = document.querySelector(`button[onclick="sendToPayroll('${timesheetId}')"]`);
+    const originalText = button.innerHTML;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    button.disabled = true;
+    
+    fetch(`/api/ai-timesheets/send-to-payroll/${timesheetId}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+            'Accept': 'application/json'
+        }
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        button.innerHTML = originalText;
+        button.disabled = false;
+        
+        if (data.success) {
+            showAlert('success', `Timesheet sent to payroll successfully! ${data.entries_created || 0} time entries created.`);
+            refreshSavedTimesheets();
+            refreshStatisticsAfterAction(); // Update statistics after sending to payroll
+        } else {
+            showAlert('error', 'Failed to send to payroll: ' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error sending to payroll:', error);
+        button.innerHTML = originalText;
+        button.disabled = false;
+        showAlert('error', 'Failed to send to payroll: ' + error.message);
+    });
+}
+
+// Refresh statistics dynamically
+function refreshStatistics() {
+    fetch('/api/ai-timesheets/statistics', {
+        method: 'GET',
+        headers: {
+            'Accept': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success && data.statistics) {
+            const stats = data.statistics;
+            
+            // Update statistics in the DOM
+            const statNumbers = document.querySelectorAll('.stat-number');
+            if (statNumbers.length >= 4) {
+                statNumbers[0].textContent = stats.total_timesheets || 0;
+                statNumbers[1].textContent = stats.pending_timesheets || 0;
+                statNumbers[2].textContent = stats.approved_timesheets || 0;
+                statNumbers[3].textContent = parseFloat(stats.total_hours || 0).toFixed(1);
+            }
+        }
+    })
+    .catch(error => {
+        console.error('Error refreshing statistics:', error);
+    });
+}
+
+// Auto-refresh statistics after certain actions
+function refreshStatisticsAfterAction() {
+    setTimeout(refreshStatistics, 500); // Small delay to ensure database is updated
+}
+
 // Approve timesheet
 function approveTimesheet(timesheetId) {
     if (!confirm('Are you sure you want to approve this timesheet?')) {
@@ -5631,6 +5733,7 @@ function approveTimesheet(timesheetId) {
         if (data.success) {
             showAlert('success', 'Timesheet approved successfully!');
             refreshSavedTimesheets();
+            refreshStatisticsAfterAction(); // Update statistics after approval
         } else {
             showAlert('error', data.message || 'Failed to approve timesheet');
         }
@@ -5662,6 +5765,7 @@ function rejectTimesheet(timesheetId) {
         if (data.success) {
             showAlert('success', 'Timesheet rejected successfully!');
             refreshSavedTimesheets();
+            refreshStatisticsAfterAction(); // Update statistics after rejection
         } else {
             showAlert('error', data.message || 'Failed to reject timesheet');
         }

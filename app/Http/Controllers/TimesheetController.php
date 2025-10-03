@@ -159,12 +159,26 @@ class TimesheetController extends Controller
                 $attendances = collect([]);
             }
             
-            // Calculate timesheet statistics
+            // Calculate comprehensive timesheet statistics (regular + AI timesheets)
+            $regularTimesheets = $timesheets;
+            $aiTimesheets = collect([]);
+            
+            // Try to get AI timesheets if table exists
+            try {
+                $aiTimesheets = collect(DB::table('ai_generated_timesheets')->get());
+            } catch (\Exception $e) {
+                // AI timesheets table doesn't exist yet
+                \Log::info('AI timesheets table not found, using regular timesheets only');
+            }
+            
             $timesheetStats = [
-                'total_timesheets' => $timesheets->count(),
-                'pending_timesheets' => $timesheets->where('status', 'pending')->count(),
-                'approved_timesheets' => $timesheets->where('status', 'approved')->count(),
-                'total_hours' => $timesheets->where('status', 'approved')->sum('hours_worked')
+                'total_timesheets' => $regularTimesheets->count() + $aiTimesheets->count(),
+                'pending_timesheets' => $regularTimesheets->where('status', 'pending')->count() + 
+                                       $aiTimesheets->where('status', 'pending')->count(),
+                'approved_timesheets' => $regularTimesheets->where('status', 'approved')->count() + 
+                                        $aiTimesheets->whereIn('status', ['approved', 'sent_to_payroll'])->count(),
+                'total_hours' => $regularTimesheets->where('status', 'approved')->sum('hours_worked') + 
+                                $aiTimesheets->whereIn('status', ['approved', 'sent_to_payroll'])->sum('total_hours')
             ];
             
             // Calculate employee statistics
@@ -192,11 +206,27 @@ class TimesheetController extends Controller
                 'employees_with_timesheets' => 0,
                 'departments' => 0
             ];
+            // Try to get AI timesheets even in fallback mode
+            $aiTimesheetCount = 0;
+            $aiPendingCount = 0;
+            $aiApprovedCount = 0;
+            $aiTotalHours = 0;
+            
+            try {
+                $aiTimesheets = DB::table('ai_generated_timesheets')->get();
+                $aiTimesheetCount = $aiTimesheets->count();
+                $aiPendingCount = $aiTimesheets->where('status', 'pending')->count();
+                $aiApprovedCount = $aiTimesheets->whereIn('status', ['approved', 'sent_to_payroll'])->count();
+                $aiTotalHours = $aiTimesheets->whereIn('status', ['approved', 'sent_to_payroll'])->sum('total_hours');
+            } catch (\Exception $e) {
+                // AI timesheets table doesn't exist
+            }
+            
             $timesheetStats = [
-                'total_timesheets' => 0,
-                'pending_timesheets' => 0,
-                'approved_timesheets' => 0,
-                'total_hours' => 0
+                'total_timesheets' => $aiTimesheetCount,
+                'pending_timesheets' => $aiPendingCount,
+                'approved_timesheets' => $aiApprovedCount,
+                'total_hours' => $aiTotalHours
             ];
             
             // Log the actual error for debugging (but don't show to user)
@@ -2228,6 +2258,162 @@ class TimesheetController extends Controller
                     'updated_at' => now()
                 ]);
             }
+        }
+    }
+    
+    /**
+     * Send approved timesheet to payroll (create time entries)
+     */
+    public function sendToPayroll($id)
+    {
+        try {
+            \Log::info('Send to Payroll - Started', ['id' => $id]);
+            
+            $timesheet = DB::table('ai_generated_timesheets')->where('id', $id)->first();
+            
+            if (!$timesheet) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Timesheet not found'
+                ], 404);
+            }
+            
+            if ($timesheet->status !== 'approved') {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Only approved timesheets can be sent to payroll'
+                ], 400);
+            }
+            
+            // Parse weekly data
+            $weeklyData = json_decode($timesheet->weekly_data, true);
+            if (!$weeklyData) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid timesheet data'
+                ], 400);
+            }
+            
+            $entriesCreated = 0;
+            $weekStart = Carbon::parse($timesheet->week_start_date);
+            
+            // Create time entries for each day with data
+            foreach ($weeklyData as $day => $dayData) {
+                if (isset($dayData['total_hours']) && $dayData['total_hours'] > 0) {
+                    $dayDate = $weekStart->copy();
+                    
+                    // Calculate day offset
+                    $dayOffsets = [
+                        'monday' => 0, 'tuesday' => 1, 'wednesday' => 2, 
+                        'thursday' => 3, 'friday' => 4, 'saturday' => 5, 'sunday' => 6
+                    ];
+                    
+                    if (isset($dayOffsets[$day])) {
+                        $dayDate->addDays($dayOffsets[$day]);
+                        
+                        // Check if entry already exists
+                        $existingEntry = DB::table('time_entries')
+                            ->where('employee_id', $timesheet->employee_id)
+                            ->where('work_date', $dayDate->format('Y-m-d'))
+                            ->first();
+                        
+                        if (!$existingEntry) {
+                            DB::table('time_entries')->insert([
+                                'employee_id' => $timesheet->employee_id,
+                                'work_date' => $dayDate->format('Y-m-d'),
+                                'clock_in' => $dayData['clock_in'] ?? '09:00',
+                                'break_duration' => $dayData['break'] ?? '1:00',
+                                'clock_out' => $dayData['clock_out'] ?? '17:00',
+                                'total_hours' => $dayData['total_hours'],
+                                'overtime_hours' => $dayData['overtime'] ?? 0,
+                                'status' => 'approved',
+                                'description' => 'Generated from AI timesheet',
+                                'notes' => 'Auto-generated from AI timesheet ID: ' . $timesheet->id,
+                                'created_at' => now(),
+                                'updated_at' => now()
+                            ]);
+                            
+                            $entriesCreated++;
+                        }
+                    }
+                }
+            }
+            
+            // Update timesheet status to indicate it's been sent to payroll
+            DB::table('ai_generated_timesheets')
+                ->where('id', $id)
+                ->update([
+                    'status' => 'sent_to_payroll',
+                    'updated_at' => now()
+                ]);
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Timesheet sent to payroll successfully',
+                'entries_created' => $entriesCreated
+            ]);
+            
+        } catch (\Exception $e) {
+            \Log::error('Send to Payroll Error: ' . $e->getMessage());
+            \Log::error('Send to Payroll Stack: ' . $e->getTraceAsString());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Error sending to payroll: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
+     * Get real-time timesheet statistics
+     */
+    public function getTimesheetStatistics()
+    {
+        try {
+            // Get regular timesheets
+            $regularTimesheets = collect([]);
+            try {
+                $regularTimesheets = collect(DB::table('time_entries')->get());
+            } catch (\Exception $e) {
+                // time_entries table might not exist
+            }
+            
+            // Get AI timesheets
+            $aiTimesheets = collect([]);
+            try {
+                $aiTimesheets = collect(DB::table('ai_generated_timesheets')->get());
+            } catch (\Exception $e) {
+                // ai_generated_timesheets table might not exist
+            }
+            
+            $stats = [
+                'total_timesheets' => $regularTimesheets->count() + $aiTimesheets->count(),
+                'pending_timesheets' => $regularTimesheets->where('status', 'pending')->count() + 
+                                       $aiTimesheets->where('status', 'pending')->count(),
+                'approved_timesheets' => $regularTimesheets->where('status', 'approved')->count() + 
+                                        $aiTimesheets->whereIn('status', ['approved', 'sent_to_payroll'])->count(),
+                'total_hours' => $regularTimesheets->where('status', 'approved')->sum('hours_worked') + 
+                                $aiTimesheets->whereIn('status', ['approved', 'sent_to_payroll'])->sum('total_hours')
+            ];
+            
+            return response()->json([
+                'success' => true,
+                'statistics' => $stats
+            ]);
+            
+        } catch (\Exception $e) {
+            \Log::error('Get Timesheet Statistics Error: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Error loading statistics: ' . $e->getMessage(),
+                'statistics' => [
+                    'total_timesheets' => 0,
+                    'pending_timesheets' => 0,
+                    'approved_timesheets' => 0,
+                    'total_hours' => 0
+                ]
+            ], 500);
         }
     }
 }
