@@ -700,6 +700,60 @@ Route::get('/test-shift-approval/{id}', function($id) {
     }
 })->name('test.shift.approval');
 
+// Employee setup and testing routes
+Route::get('/setup-employees', function() {
+    try {
+        $command = new \App\Console\Commands\SetupEmployeesTable();
+        $result = $command->handle();
+        
+        return response()->json([
+            'success' => $result === 0,
+            'message' => 'Employees table setup completed',
+            'employees_count' => DB::table('employees')->count()
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Setup failed: ' . $e->getMessage()
+        ]);
+    }
+})->name('setup.employees');
+
+Route::get('/test-employee-add', function() {
+    try {
+        // Test data for employee creation
+        $testData = [
+            'first_name' => 'Test',
+            'last_name' => 'Employee',
+            'email' => 'test.employee' . time() . '@jetlouge.com',
+            'phone' => '+63 912 345 6799',
+            'position' => 'Test Position',
+            'department' => 'Information Technology',
+            'hire_date' => date('Y-m-d'),
+            'salary' => 50000.00,
+            'status' => 'active'
+        ];
+        
+        $employeeId = DB::table('employees')->insertGetId(array_merge($testData, [
+            'online_status' => 'offline',
+            'created_at' => now(),
+            'updated_at' => now()
+        ]));
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'Test employee created successfully',
+            'employee_id' => $employeeId,
+            'test_data' => $testData
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Test failed: ' . $e->getMessage()
+        ]);
+    }
+})->name('test.employee.add');
+
 // Debug route to check attendance data
 Route::get('/debug-attendance', function() {
     $attendances = DB::table('attendances')

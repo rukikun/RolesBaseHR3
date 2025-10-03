@@ -1172,7 +1172,7 @@ setTimeout(function() {
                   </form>
                 @else
                   <span class="text-muted small">
-                    {{ $request->status === 'approved' ? 'Approved' : 'Rejected' }} 
+                    {{ $request->status === 'approved' ? 'Approved' : 'Rejected' }}
                     @if($request->approved_at)
                       on 
                       @if(is_string($request->approved_at))
@@ -1180,9 +1180,6 @@ setTimeout(function() {
                       @else
                         {{ $request->approved_at->format('M d, Y') }}
                       @endif
-                    @endif
-                    @if($request->approver)
-                      by {{ $request->approver->first_name }} {{ $request->approver->last_name }}
                     @endif
                   </span>
                 @endif

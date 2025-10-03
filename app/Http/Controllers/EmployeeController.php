@@ -656,10 +656,6 @@ class EmployeeController extends Controller
 
     public function storeWeb(Request $request)
     {
-        // Log the incoming request data for debugging
-        \Log::info('Employee creation request data: ' . json_encode($request->all()));
-        \Log::info('Hire date received: "' . $request->hire_date . '" (type: ' . gettype($request->hire_date) . ')');
-        
         $validator = Validator::make($request->all(), [
             'first_name' => 'required|string|max:100',
             'last_name' => 'required|string|max:100',
@@ -700,24 +696,10 @@ class EmployeeController extends Controller
             \Illuminate\Support\Facades\Config::set('database.connections.mysql.database', 'hr3systemdb');
             DB::purge('mysql');
             
-            // Prepare employee data with proper date formatting
-            $hireDate = $request->hire_date;
+            // Ensure the employees table exists
+            $this->ensureEmployeesTableExists();
             
-            // Ensure date is in proper format for database
-            if ($hireDate) {
-                try {
-                    // Try to parse the date using Carbon's flexible parsing
-                    $carbonDate = \Carbon\Carbon::parse($hireDate);
-                    $hireDate = $carbonDate->format('Y-m-d');
-                    \Log::info('Date parsed successfully: ' . $request->hire_date . ' -> ' . $hireDate);
-                } catch (\Exception $e) {
-                    \Log::error('Date parsing failed: ' . $e->getMessage() . ' for date: ' . $request->hire_date);
-                    throw new \Exception('Invalid hire date format: ' . $request->hire_date);
-                }
-            } else {
-                throw new \Exception('Hire date is required but was empty');
-            }
-            
+            // Prepare employee data - simplified date handling
             $employeeData = [
                 'first_name' => trim($request->first_name),
                 'last_name' => trim($request->last_name),
@@ -725,7 +707,7 @@ class EmployeeController extends Controller
                 'phone' => $request->phone ? trim($request->phone) : null,
                 'position' => trim($request->position),
                 'department' => trim($request->department),
-                'hire_date' => $hireDate,
+                'hire_date' => $request->hire_date,
                 'salary' => $request->salary ? floatval($request->salary) : 0.00,
                 'status' => $request->status,
                 'online_status' => 'offline',
@@ -733,55 +715,7 @@ class EmployeeController extends Controller
                 'updated_at' => now()
             ];
             
-            // First, ensure the table exists with proper structure
-            try {
-                $tableExists = DB::select("SHOW TABLES LIKE 'employees'");
-                if (empty($tableExists)) {
-                    \Log::info('Creating employees table...');
-                    
-                    // Create the table with full structure
-                    $createTableSQL = "
-                    CREATE TABLE `employees` (
-                      `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-                      `first_name` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
-                      `last_name` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
-                      `email` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
-                      `phone` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-                      `position` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
-                      `department` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
-                      `hire_date` date NOT NULL,
-                      `salary` decimal(10,2) NOT NULL DEFAULT 0.00,
-                      `status` enum('active','inactive','terminated') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'active',
-                      `online_status` enum('online','offline') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'offline',
-                      `last_activity` timestamp NULL DEFAULT NULL,
-                      `password` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-                      `profile_picture` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-                      `remember_token` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-                      `created_at` timestamp NULL DEFAULT NULL,
-                      `updated_at` timestamp NULL DEFAULT NULL,
-                      PRIMARY KEY (`id`),
-                      UNIQUE KEY `employees_email_unique` (`email`),
-                      KEY `employees_status_index` (`status`),
-                      KEY `employees_department_index` (`department`),
-                      KEY `employees_online_status_index` (`online_status`),
-                      KEY `employees_hire_date_index` (`hire_date`)
-                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-                    ";
-                    
-                    DB::statement($createTableSQL);
-                    \Log::info('Employees table created successfully');
-                } else {
-                    \Log::info('Employees table already exists');
-                }
-            } catch (\Exception $e) {
-                \Log::error('Error checking/creating employees table: ' . $e->getMessage());
-                throw new \Exception('Database table setup failed: ' . $e->getMessage());
-            }
-            
-            // Log the data being inserted
-            \Log::info('Attempting to insert employee data: ' . json_encode($employeeData));
-            
-            // Validate required fields one more time
+            // Validate that all required fields are present
             $requiredFields = ['first_name', 'last_name', 'email', 'position', 'department', 'hire_date', 'status'];
             foreach ($requiredFields as $field) {
                 if (empty($employeeData[$field])) {
@@ -789,32 +723,75 @@ class EmployeeController extends Controller
                 }
             }
             
-            // Insert the employee
+            // Insert the employee with explicit field specification
             $employeeId = DB::table('employees')->insertGetId($employeeData);
-            
-            \Log::info('Employee created successfully with ID: ' . $employeeId);
 
             return redirect()->route('employees')->with('success', 'Employee "' . $employeeData['first_name'] . ' ' . $employeeData['last_name'] . '" created successfully!');
             
         } catch (\Exception $e) {
             \Log::error('Employee creation failed: ' . $e->getMessage());
-            \Log::error('Request data: ' . json_encode($request->all()));
             
             // More specific error messages
             $errorMessage = 'Failed to create employee. ';
-            if (strpos($e->getMessage(), 'Duplicate entry') !== false) {
-                $errorMessage .= 'Email address already exists.';
-            } elseif (strpos($e->getMessage(), 'hire_date') !== false) {
-                $errorMessage .= 'Invalid hire date format.';
-            } elseif (strpos($e->getMessage(), 'department') !== false) {
-                $errorMessage .= 'Invalid department selected.';
+            if (strpos($e->getMessage(), 'Duplicate entry') !== false && strpos($e->getMessage(), 'email') !== false) {
+                $errorMessage .= 'This email address is already registered.';
+            } elseif (strpos($e->getMessage(), 'Data too long') !== false) {
+                $errorMessage .= 'One or more fields exceed the maximum length.';
             } else {
-                $errorMessage .= 'Please check all fields and try again.';
+                $errorMessage .= 'Please check all fields and try again. Error: ' . $e->getMessage();
             }
             
             return redirect()->back()
                 ->withInput()
                 ->with('error', $errorMessage);
+        }
+    }
+    
+    /**
+     * Ensure the employees table exists with proper structure
+     */
+    private function ensureEmployeesTableExists()
+    {
+        try {
+            $tableExists = DB::select("SHOW TABLES LIKE 'employees'");
+            if (empty($tableExists)) {
+                \Log::info('Creating employees table...');
+                
+                // Create the table with full structure
+                $createTableSQL = "
+                CREATE TABLE `employees` (
+                  `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+                  `first_name` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
+                  `last_name` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
+                  `email` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
+                  `phone` varchar(20) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+                  `position` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
+                  `department` varchar(100) COLLATE utf8mb4_unicode_ci NOT NULL,
+                  `hire_date` date NOT NULL,
+                  `salary` decimal(10,2) NOT NULL DEFAULT 0.00,
+                  `status` enum('active','inactive','terminated') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'active',
+                  `online_status` enum('online','offline') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'offline',
+                  `last_activity` timestamp NULL DEFAULT NULL,
+                  `password` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+                  `profile_picture` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+                  `remember_token` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+                  `created_at` timestamp NULL DEFAULT NULL,
+                  `updated_at` timestamp NULL DEFAULT NULL,
+                  PRIMARY KEY (`id`),
+                  UNIQUE KEY `employees_email_unique` (`email`),
+                  KEY `employees_status_index` (`status`),
+                  KEY `employees_department_index` (`department`),
+                  KEY `employees_online_status_index` (`online_status`),
+                  KEY `employees_hire_date_index` (`hire_date`)
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+                ";
+                
+                DB::statement($createTableSQL);
+                \Log::info('Employees table created successfully');
+            }
+        } catch (\Exception $e) {
+            \Log::error('Error checking/creating employees table: ' . $e->getMessage());
+            throw new \Exception('Database table setup failed: ' . $e->getMessage());
         }
     }
 

@@ -629,6 +629,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const addForm = document.getElementById('add-employee-form');
     if (addForm) {
         addForm.addEventListener('submit', function(e) {
+            // Clear previous errors
+            clearFormErrors('add-employee-modal');
+            
             if (!validateEmployeeForm('add')) {
                 e.preventDefault();
                 return false;
@@ -636,8 +639,10 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Show loading state
             const submitBtn = document.getElementById('add-employee-btn');
-            submitBtn.disabled = true;
-            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Saving...';
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Saving...';
+            }
         });
     }
     
@@ -645,6 +650,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const editForm = document.getElementById('edit-employee-form');
     if (editForm) {
         editForm.addEventListener('submit', function(e) {
+            // Clear previous errors
+            clearFormErrors('edit-employee-modal');
+            
             if (!validateEmployeeForm('edit')) {
                 e.preventDefault();
                 return false;
@@ -652,10 +660,24 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Show loading state
             const submitBtn = document.getElementById('edit-employee-btn');
-            submitBtn.disabled = true;
-            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Updating...';
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Updating...';
+            }
         });
     }
+    
+    // Auto-open modal if there are validation errors
+    @if($errors->any() && old('_token'))
+        // Check if this was from add employee form
+        @if(!session('edit_employee'))
+            setTimeout(function() {
+                openAddEmployeeModal();
+                // Populate form with old values
+                populateFormWithOldValues('add');
+            }, 100);
+        @endif
+    @endif
 });
 
 // Validate employee form (works for both add and edit)
@@ -739,19 +761,36 @@ function openAddEmployeeModal() {
     const modal = document.getElementById('add-employee-modal');
     if (modal) {
         // Reset form to ensure clean state
-        document.getElementById('add-employee-form').reset();
-        document.getElementById('add_status').value = 'active';
-        document.getElementById('add_hire_date').value = new Date().toISOString().split('T')[0];
+        const form = document.getElementById('add-employee-form');
+        if (form) {
+            form.reset();
+            
+            // Set default values
+            const statusField = document.getElementById('add_status');
+            const hireDateField = document.getElementById('add_hire_date');
+            const submitBtn = document.getElementById('add-employee-btn');
+            
+            if (statusField) statusField.value = 'active';
+            if (hireDateField) hireDateField.value = new Date().toISOString().split('T')[0];
+            
+            // Reset submit button
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = 'Save Employee';
+            }
+        }
         
         // Clear any validation errors
-        modal.querySelectorAll('.text-danger.small').forEach(el => el.remove());
-        modal.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
+        clearFormErrors('add-employee-modal');
         
         modal.style.display = 'flex';
         document.body.style.overflow = 'hidden';
         
         // Focus first input
-        setTimeout(() => document.getElementById('add_first_name').focus(), 100);
+        setTimeout(() => {
+            const firstInput = document.getElementById('add_first_name');
+            if (firstInput) firstInput.focus();
+        }, 100);
     }
 }
 
@@ -878,6 +917,65 @@ function showFieldError(fieldId, message) {
 function isValidEmail(email) {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return emailRegex.test(email);
+}
+
+// Clear form validation errors
+function clearFormErrors(modalId) {
+    const modal = document.getElementById(modalId);
+    if (modal) {
+        modal.querySelectorAll('.text-danger.small').forEach(el => el.remove());
+        modal.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
+    }
+}
+
+// Populate form with old values after validation error
+function populateFormWithOldValues(type) {
+    const prefix = type === 'add' ? 'add_' : 'edit_';
+    
+    @if(old('first_name'))
+        const firstNameField = document.getElementById(prefix + 'first_name');
+        if (firstNameField) firstNameField.value = '{{ old('first_name') }}';
+    @endif
+    
+    @if(old('last_name'))
+        const lastNameField = document.getElementById(prefix + 'last_name');
+        if (lastNameField) lastNameField.value = '{{ old('last_name') }}';
+    @endif
+    
+    @if(old('email'))
+        const emailField = document.getElementById(prefix + 'email');
+        if (emailField) emailField.value = '{{ old('email') }}';
+    @endif
+    
+    @if(old('phone'))
+        const phoneField = document.getElementById(prefix + 'phone');
+        if (phoneField) phoneField.value = '{{ old('phone') }}';
+    @endif
+    
+    @if(old('position'))
+        const positionField = document.getElementById(prefix + 'position');
+        if (positionField) positionField.value = '{{ old('position') }}';
+    @endif
+    
+    @if(old('department'))
+        const departmentField = document.getElementById(prefix + 'department');
+        if (departmentField) departmentField.value = '{{ old('department') }}';
+    @endif
+    
+    @if(old('hire_date'))
+        const hireDateField = document.getElementById(prefix + 'hire_date');
+        if (hireDateField) hireDateField.value = '{{ old('hire_date') }}';
+    @endif
+    
+    @if(old('salary'))
+        const salaryField = document.getElementById(prefix + 'salary');
+        if (salaryField) salaryField.value = '{{ old('salary') }}';
+    @endif
+    
+    @if(old('status'))
+        const statusField = document.getElementById(prefix + 'status');
+        if (statusField) statusField.value = '{{ old('status') }}';
+    @endif
 }
 </script>
 
