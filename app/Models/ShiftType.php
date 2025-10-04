@@ -24,16 +24,17 @@ class ShiftType extends Model
     }
     
     protected $fillable = [
+        'id',
         'name',
         'code',
-        'type',
+        'description',
         'default_start_time',
         'default_end_time',
         'break_duration',
         'hourly_rate',
-        'description',
-        'is_active',
-        'color_code'
+        'color_code',
+        'type',
+        'is_active'
     ];
 
     protected $casts = [

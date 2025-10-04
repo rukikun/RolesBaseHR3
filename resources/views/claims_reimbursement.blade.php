@@ -200,7 +200,7 @@ $totalAmount = $totalAmount ?? 0;
                     <button class="btn btn-sm btn-outline-info" onclick="viewClaimTypeDetails('{{ addslashes($claimType->name ?? '') }}', '{{ addslashes($claimType->code ?? '') }}', {{ $claimType->max_amount ?? 0 }}, '{{ ($claimType->requires_attachment ?? 1) ? 'Yes' : 'No' }}', '{{ ($claimType->auto_approve ?? 0) ? 'Yes' : 'No' }}')">
                       <i class="fas fa-eye"></i>
                     </button>
-                    <form method="POST" action="{{ route('claim-types.delete', $claimType->id) }}" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this claim type?')">
+                    <form method="POST" action="{{ isset($claimType->id) ? route('claim-types.delete', $claimType->id) : '#' }}" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this claim type?')">
                       @csrf
                       @method('DELETE')
                       <button type="submit" class="btn btn-sm btn-outline-danger">
@@ -268,7 +268,7 @@ $totalAmount = $totalAmount ?? 0;
               <td>{{ isset($claim->claim_date) ? date('M d, Y', strtotime($claim->claim_date)) : 'N/A' }}</td>
               <td>{{ isset($claim->description) ? Str::limit($claim->description, 30) : 'N/A' }}</td>
               <td>
-                @if($claim->receipt_path || $claim->attachment_path)
+                @if((isset($claim->receipt_path) && $claim->receipt_path) || (isset($claim->attachment_path) && $claim->attachment_path))
                   <i class="fas fa-paperclip text-success" title="Has attachment"></i>
                 @else
                   <i class="fas fa-times text-muted" title="No attachment"></i>
@@ -291,10 +291,10 @@ $totalAmount = $totalAmount ?? 0;
               </td>
               <td>
                 <div class="btn-group" role="group">
-                  <button type="button" class="btn btn-sm btn-outline-primary" onclick="viewClaimDetails({{ $claim->id ?? 0 }})" title="View">
+                  <button type="button" class="btn btn-sm btn-outline-primary" onclick="viewClaimDetails({{ isset($claim->id) ? $claim->id : 0 }})" title="View">
                     <i class="fas fa-eye"></i>
                   </button>
-                  @if($status === 'pending')
+                  @if($status === 'pending' && isset($claim->id))
                         <form method="POST" action="{{ route('claims.approve', $claim->id) }}" style="display: inline;" onsubmit="return confirm('Are you sure you want to approve this claim?')">
                           @csrf
                           @method('PATCH')
@@ -310,7 +310,7 @@ $totalAmount = $totalAmount ?? 0;
                           </button>
                         </form>
                         @endif
-                        @if($status === 'approved')
+                        @if($status === 'approved' && isset($claim->id))
                         <form method="POST" action="{{ route('claims.pay', $claim->id) }}" style="display: inline;" onsubmit="return confirm('Are you sure you want to mark this claim as paid?')">
                           @csrf
                           @method('PATCH')
@@ -526,7 +526,7 @@ $totalAmount = $totalAmount ?? 0;
                                 <option value="">Select Claim Type</option>
                                 @if(isset($claimTypes) && $claimTypes->count() > 0)
                                     @foreach($claimTypes as $claimType)
-                                        <option value="{{ $claimType->id }}">
+                                        <option value="{{ $claimType->id ?? '' }}">
                                             {{ $claimType->name }} ({{ $claimType->code ?? 'N/A' }})
                                         </option>
                                     @endforeach
@@ -669,17 +669,30 @@ function viewClaimTypeDetails(name, code, maxAmount, requiresAttachment, autoApp
 
 // View claim details
 function viewClaimDetails(claimId) {
+    // Handle case where claimId is 0 or invalid
+    if (!claimId || claimId === 0) {
+        alert('❌ Unable to view claim details - invalid claim ID');
+        return;
+    }
+    
     const claimRow = document.querySelector(`button[onclick="viewClaimDetails(${claimId})"]`)?.closest('tr');
     
     if (claimRow && claimRow.cells.length >= 7) {
-        document.getElementById('view-claim-employee').textContent = claimRow.cells[0].textContent.trim();
-        document.getElementById('view-claim-type').textContent = claimRow.cells[1].textContent.trim();
-        document.getElementById('view-claim-amount').textContent = claimRow.cells[2].textContent.trim();
-        document.getElementById('view-claim-date').textContent = claimRow.cells[3].textContent.trim();
-        document.getElementById('view-claim-description').textContent = claimRow.cells[4].textContent.trim();
-        document.getElementById('view-claim-attachment').textContent = claimRow.cells[5].querySelector('.fa-paperclip') ? 'Yes' : 'No';
-        document.getElementById('view-claim-status').textContent = claimRow.cells[6].querySelector('.badge')?.textContent.trim() || 'Unknown';
-        openWorkingModal('view-claim-modal');
+        try {
+            document.getElementById('view-claim-employee').textContent = claimRow.cells[0]?.textContent?.trim() || 'N/A';
+            document.getElementById('view-claim-type').textContent = claimRow.cells[1]?.textContent?.trim() || 'N/A';
+            document.getElementById('view-claim-amount').textContent = claimRow.cells[2]?.textContent?.trim() || 'N/A';
+            document.getElementById('view-claim-date').textContent = claimRow.cells[3]?.textContent?.trim() || 'N/A';
+            document.getElementById('view-claim-description').textContent = claimRow.cells[4]?.textContent?.trim() || 'N/A';
+            document.getElementById('view-claim-attachment').textContent = claimRow.cells[5]?.querySelector('.fa-paperclip') ? 'Yes' : 'No';
+            document.getElementById('view-claim-status').textContent = claimRow.cells[6]?.querySelector('.badge')?.textContent?.trim() || 'Unknown';
+            openWorkingModal('view-claim-modal');
+        } catch (error) {
+            console.error('Error viewing claim details:', error);
+            alert('❌ Error loading claim details. Please try again.');
+        }
+    } else {
+        alert('❌ Unable to find claim details. Please refresh the page and try again.');
     }
 }
 </script>

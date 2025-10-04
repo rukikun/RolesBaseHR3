@@ -15,6 +15,7 @@ class ClaimType extends Model
     protected $connection = 'mysql';
 
     protected $fillable = [
+        'id',
         'name',
         'code',
         'description',

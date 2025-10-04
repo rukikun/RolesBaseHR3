@@ -10,12 +10,15 @@ class LeaveType extends Model
     use HasFactory;
 
     protected $fillable = [
+        'id',
         'name',
         'code',
         'description',
+        'days_allowed',
         'max_days_per_year',
         'carry_forward',
         'requires_approval',
+        'status',
         'is_active'
     ];
 

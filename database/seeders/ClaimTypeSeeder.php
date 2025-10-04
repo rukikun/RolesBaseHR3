@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use App\Models\ClaimType;
+use Illuminate\Support\Facades\DB;
 
 class ClaimTypeSeeder extends Seeder
 {
@@ -17,70 +18,59 @@ class ClaimTypeSeeder extends Seeder
             [
                 'name' => 'Travel Expenses',
                 'code' => 'TRAVEL',
-                'description' => 'Business travel expenses including flights, hotels, and meals',
-                'max_amount' => 2000.00,
-                'requires_attachment' => true,
-                'auto_approve' => false,
-                'is_active' => true,
+                'description' => 'Business travel related expenses',
+                'max_amount' => 5000.00,
+                'requires_attachment' => 1,
+                'auto_approve' => 0,
+                'is_active' => 1,
             ],
             [
                 'name' => 'Office Supplies',
                 'code' => 'OFFICE',
-                'description' => 'Office supplies and equipment purchases',
-                'max_amount' => 500.00,
-                'requires_attachment' => true,
-                'auto_approve' => true,
-                'is_active' => true,
+                'description' => 'Office supplies and equipment',
+                'max_amount' => 1000.00,
+                'requires_attachment' => 1,
+                'auto_approve' => 0,
+                'is_active' => 1,
             ],
             [
                 'name' => 'Meal Allowance',
                 'code' => 'MEAL',
-                'description' => 'Daily meal allowance for business activities',
-                'max_amount' => 50.00,
-                'requires_attachment' => false,
-                'auto_approve' => true,
-                'is_active' => true,
+                'description' => 'Business meal expenses',
+                'max_amount' => 500.00,
+                'requires_attachment' => 1,
+                'auto_approve' => 0,
+                'is_active' => 1,
             ],
             [
-                'name' => 'Transportation',
-                'code' => 'TRANSPORT',
-                'description' => 'Local transportation costs including taxi, bus, and parking',
-                'max_amount' => 100.00,
-                'requires_attachment' => true,
-                'auto_approve' => true,
-                'is_active' => true,
-            ],
-            [
-                'name' => 'Training & Development',
+                'name' => 'Training Costs',
                 'code' => 'TRAINING',
-                'description' => 'Professional development courses and certifications',
-                'max_amount' => 1500.00,
-                'requires_attachment' => true,
-                'auto_approve' => false,
-                'is_active' => true,
+                'description' => 'Professional development and training',
+                'max_amount' => 2000.00,
+                'requires_attachment' => 1,
+                'auto_approve' => 0,
+                'is_active' => 1,
             ],
             [
                 'name' => 'Medical Expenses',
                 'code' => 'MEDICAL',
-                'description' => 'Work-related medical expenses and health checkups',
-                'max_amount' => 1000.00,
-                'requires_attachment' => true,
-                'auto_approve' => false,
-                'is_active' => true,
-            ],
-            [
-                'name' => 'Phone & Internet',
-                'code' => 'TELECOM',
-                'description' => 'Business phone and internet expenses',
-                'max_amount' => 200.00,
-                'requires_attachment' => true,
-                'auto_approve' => true,
-                'is_active' => true,
+                'description' => 'Medical and health related expenses',
+                'max_amount' => 3000.00,
+                'requires_attachment' => 1,
+                'auto_approve' => 0,
+                'is_active' => 1,
             ],
         ];
 
+        // Clear existing data first
+        DB::table('claim_types')->truncate();
+        
+        // Insert all data
         foreach ($claimTypes as $claimType) {
-            ClaimType::create($claimType);
+            DB::table('claim_types')->insert(array_merge($claimType, [
+                'created_at' => now(),
+                'updated_at' => now()
+            ]));
         }
     }
 }

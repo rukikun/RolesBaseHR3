@@ -18,6 +18,9 @@ class DatabaseSeeder extends Seeder
         $this->call([
             AdminUserSeeder::class,
             HR3SystemSeeder::class,
+            ClaimTypeSeeder::class,
+            LeaveTypeSeeder::class,
+            ShiftTypeSeeder::class,
         ]);
     }
 }
