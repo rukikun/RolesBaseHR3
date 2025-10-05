@@ -812,6 +812,110 @@ function fixCalendarData() {
     });
 }
 
+// Scroll to calendar section with highlighting
+function scrollToCalendarAfterApproval() {
+    setTimeout(function() {
+        const calendarSection = document.getElementById('calendar-section');
+        if (calendarSection) {
+            calendarSection.scrollIntoView({ 
+                behavior: 'smooth', 
+                block: 'start' 
+            });
+            
+            // Add highlight effect
+            calendarSection.style.boxShadow = '0 0 20px rgba(13, 110, 253, 0.5)';
+            calendarSection.style.transition = 'box-shadow 0.3s ease';
+            
+            // Remove highlight after 3 seconds
+            setTimeout(function() {
+                calendarSection.style.boxShadow = '';
+            }, 3000);
+        }
+    }, 500);
+}
+
+// Highlight specific date in calendar
+function highlightApprovedShiftDate(dateString) {
+    if (!dateString) return;
+    
+    setTimeout(function() {
+        // Find the calendar cell for the specific date
+        const dateObj = new Date(dateString);
+        const dayNumber = dateObj.getDate();
+        
+        // Find all calendar cells with the matching day number
+        const calendarCells = document.querySelectorAll('.calendar-cell');
+        calendarCells.forEach(cell => {
+            const dateElement = cell.querySelector('.fw-bold');
+            if (dateElement && parseInt(dateElement.textContent.trim()) === dayNumber) {
+                // Add special highlighting for the approved shift date
+                cell.style.border = '3px solid #28a745';
+                cell.style.backgroundColor = 'rgba(40, 167, 69, 0.1)';
+                cell.style.transition = 'all 0.3s ease';
+                
+                // Remove highlighting after 5 seconds
+                setTimeout(function() {
+                    cell.style.border = '';
+                    cell.style.backgroundColor = '';
+                }, 5000);
+            }
+        });
+    }, 1000);
+}
+
+// Handle approval form submission with loading state
+function handleApprovalSubmit(event, form) {
+    // Add loading state to the button
+    const submitButton = form.querySelector('button[type="submit"]');
+    if (submitButton) {
+        submitButton.disabled = true;
+        submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    }
+    
+    // Allow form submission to continue
+    return true;
+}
+
+// Scroll to shift requests section
+function scrollToShiftRequests() {
+    const shiftRequestsSection = document.getElementById('shift-requests-section');
+    if (shiftRequestsSection) {
+        shiftRequestsSection.scrollIntoView({ 
+            behavior: 'smooth', 
+            block: 'start' 
+        });
+        
+        // Add highlight effect
+        shiftRequestsSection.style.boxShadow = '0 0 15px rgba(13, 110, 253, 0.3)';
+        shiftRequestsSection.style.transition = 'box-shadow 0.3s ease';
+        
+        // Remove highlight after 2 seconds
+        setTimeout(function() {
+            shiftRequestsSection.style.boxShadow = '';
+        }, 2000);
+    }
+}
+
+// Scroll to calendar section (existing function enhanced)
+function scrollToCalendarSection() {
+    const calendarSection = document.getElementById('calendar-section');
+    if (calendarSection) {
+        calendarSection.scrollIntoView({ 
+            behavior: 'smooth', 
+            block: 'start' 
+        });
+        
+        // Add highlight effect
+        calendarSection.style.boxShadow = '0 0 15px rgba(13, 110, 253, 0.3)';
+        calendarSection.style.transition = 'box-shadow 0.3s ease';
+        
+        // Remove highlight after 2 seconds
+        setTimeout(function() {
+            calendarSection.style.boxShadow = '';
+        }, 2000);
+    }
+}
+
 // Initialize page
 document.addEventListener('DOMContentLoaded', function() {
     console.log('Shift schedule management page loaded');
@@ -819,6 +923,16 @@ document.addEventListener('DOMContentLoaded', function() {
     // Auto-show modal if editing shift type
     @if(session('edit_shift_type'))
         openWorkingModal('create-shift-type-modal');
+    @endif
+    
+    // Check if we should scroll to calendar after approval
+    @if(session('scroll_to_calendar'))
+        scrollToCalendarAfterApproval();
+    @endif
+    
+    // Check if we should highlight a specific date
+    @if(session('highlight_date'))
+        highlightApprovedShiftDate('{{ session('highlight_date') }}');
     @endif
     
     // Add click handlers to calendar cells
@@ -1288,7 +1402,7 @@ setTimeout(function() {
 <div class="card mb-4" id="shift-requests-section">
   <div class="card-header d-flex justify-content-between align-items-center">
     <h5 class="card-title mb-0">
-      <i class="fas fa-exchange-alt me-2"></i>Shift Requests
+      <i class="fas fa-exchange-alt me-2"></i>Shift Swap Requests 
     </h5>
     <button class="btn btn-primary" onclick="openWorkingModal('new-shift-request-modal')">
       <i class="fas fa-plus me-2"></i>New Request

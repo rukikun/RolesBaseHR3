@@ -162,7 +162,16 @@ class ShiftRequestController extends Controller
                 $message = 'Shift request approved successfully! Note: A shift assignment for this time slot already exists.';
             }
 
-            return redirect()->back()->with('success', $message);
+            // Get the shift date to determine which month to display in calendar
+            $shiftDate = \Carbon\Carbon::parse($shiftRequest->shift_date);
+            $monthParam = $shiftDate->format('Y-m');
+
+            // Redirect to shift schedule management with calendar scroll intent and correct month
+            return redirect()
+                ->route('shift-schedule-management', ['month' => $monthParam])
+                ->with('success', $message)
+                ->with('scroll_to_calendar', true)
+                ->with('highlight_date', $shiftRequest->shift_date);
 
         } catch (\Exception $e) {
             Log::error('Shift request approval failed: ' . $e->getMessage());

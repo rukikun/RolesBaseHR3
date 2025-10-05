@@ -154,35 +154,46 @@ Route::middleware('auth')->group(function () {
     
     // Weekly timesheet view route
     Route::get('/timesheets/{id}/weekly', [TimesheetController::class, 'getWeeklyTimesheetForModal']);
-    
-    // Clockify Integration API routes - DISABLED for cleaner interface
-    // Route::prefix('clockify')->group(function () {
-    //     Route::get('/test-connection', [ClockifyController::class, 'testConnection']);
-    //     Route::get('/user', [ClockifyController::class, 'getCurrentUser']);
-    //     Route::get('/workspaces', [ClockifyController::class, 'getWorkspaces']);
-    //     Route::post('/timer/start', [ClockifyController::class, 'startTimer']);
-    //     Route::post('/timer/stop', [ClockifyController::class, 'stopTimer']);
-    //     Route::get('/time-entries', [ClockifyController::class, 'getTimeEntries']);
-    //     Route::post('/projects', [ClockifyController::class, 'createProject']);
-    //     Route::get('/users', [ClockifyController::class, 'getWorkspaceUsers']);
-    //     Route::post('/reports/detailed', [ClockifyController::class, 'getDetailedReport']);
-    // });
-    
-    // AI-Powered Features API routes - DISABLED for cleaner interface
-    // Route::prefix('ai')->group(function () {
-    //     Route::get('/test-connections', [AIController::class, 'testConnections']);
-    //     Route::post('/analyze-time-entry', [AIController::class, 'analyzeTimeEntry']);
-    //     Route::get('/time-insights', [AIController::class, 'getTimeInsights']);
-    //     Route::post('/validate-claim', [AIController::class, 'validateClaim']);
-    //     Route::post('/generate-timesheet-summary', [AIController::class, 'generateTimesheetSummary']);
-    //     Route::get('/schedule-suggestions', [AIController::class, 'getScheduleSuggestions']);
-    //     Route::post('/estimate-project-time', [AIController::class, 'estimateProjectTime']);
-    //     Route::post('/generate-smart-reminder', [AIController::class, 'generateSmartReminder']);
-    //     Route::get('/dashboard-data', [AIController::class, 'getDashboardData']);
-    //     Route::post('/timer/start-ai', [AIController::class, 'startAITimer']);
-    //     Route::post('/timer/stop', [AIController::class, 'stopTimer']);
-    //     Route::post('/generate-report', [AIController::class, 'generateAIReport']);
-    // });
+
+    // Claims API routes
+    Route::prefix('claims')->group(function () {
+        Route::get('/', [App\Http\Controllers\Api\ClaimsController::class, 'index']);
+        Route::post('/', [App\Http\Controllers\Api\ClaimsController::class, 'store']);
+        Route::get('/statistics', [App\Http\Controllers\Api\ClaimsController::class, 'statistics']);
+        Route::get('/{id}', [App\Http\Controllers\Api\ClaimsController::class, 'show']);
+        Route::put('/{id}', [App\Http\Controllers\Api\ClaimsController::class, 'update']);
+        Route::delete('/{id}', [App\Http\Controllers\Api\ClaimsController::class, 'destroy']);
+        Route::post('/{id}/approve', [App\Http\Controllers\Api\ClaimsController::class, 'approve']);
+        Route::post('/{id}/reject', [App\Http\Controllers\Api\ClaimsController::class, 'reject']);
+    });
+
+    // Leave Requests API routes
+    Route::prefix('leave-requests')->group(function () {
+        Route::get('/', [App\Http\Controllers\Api\LeaveRequestController::class, 'index']);
+        Route::post('/', [App\Http\Controllers\Api\LeaveRequestController::class, 'store']);
+        Route::get('/statistics', [App\Http\Controllers\Api\LeaveRequestController::class, 'statistics']);
+        Route::get('/balance/{employeeId}', [App\Http\Controllers\Api\LeaveRequestController::class, 'balance']);
+        Route::get('/{id}', [App\Http\Controllers\Api\LeaveRequestController::class, 'show']);
+        Route::put('/{id}', [App\Http\Controllers\Api\LeaveRequestController::class, 'update']);
+        Route::delete('/{id}', [App\Http\Controllers\Api\LeaveRequestController::class, 'destroy']);
+        Route::post('/{id}/approve', [App\Http\Controllers\Api\LeaveRequestController::class, 'approve']);
+        Route::post('/{id}/reject', [App\Http\Controllers\Api\LeaveRequestController::class, 'reject']);
+    });
+
+    // Attendance API routes
+    Route::prefix('attendances')->group(function () {
+        Route::get('/', [App\Http\Controllers\Api\AttendanceController::class, 'index']);
+        Route::post('/', [App\Http\Controllers\Api\AttendanceController::class, 'store']);
+        Route::get('/statistics', [App\Http\Controllers\Api\AttendanceController::class, 'statistics']);
+        Route::get('/status/{employeeId}', [App\Http\Controllers\Api\AttendanceController::class, 'currentStatus']);
+        Route::get('/{id}', [App\Http\Controllers\Api\AttendanceController::class, 'show']);
+        Route::put('/{id}', [App\Http\Controllers\Api\AttendanceController::class, 'update']);
+        Route::delete('/{id}', [App\Http\Controllers\Api\AttendanceController::class, 'destroy']);
+        Route::post('/{id}/clock-out', [App\Http\Controllers\Api\AttendanceController::class, 'clockOut']);
+        Route::post('/{id}/start-break', [App\Http\Controllers\Api\AttendanceController::class, 'startBreak']);
+        Route::post('/{id}/end-break', [App\Http\Controllers\Api\AttendanceController::class, 'endBreak']);
+    });
+
     // Unified HR Module API routes
     Route::prefix('unified-hr')->group(function () {
         Route::get('/stats', [UnifiedHRController::class, 'getUnifiedStats']);
