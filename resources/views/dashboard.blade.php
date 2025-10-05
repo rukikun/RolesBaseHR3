@@ -88,75 +88,112 @@
   </div>
 </div>
 
-<!-- Today's Schedule Section -->
 <div class="dashboard-section mb-4">
   <div class="section-header d-flex justify-content-between align-items-center mb-3">
     <h3 style="color: var(--jetlouge-primary);">Today's Schedule</h3>
     <a href="{{ route('shift-schedule-management') }}#calendar-section" class="btn btn-primary" onclick="scrollToCalendar()">View Full Schedule</a>
   </div>
   <div class="card">
-    <div class="card-body">
+    <div class="card-body shift-cards-container p-2">
       <div class="row">
-        @forelse($todayShifts as $index => $shift)
-        <div class="col-md-4 mb-3">
+        @php
+          // Reorder shifts: Morning first, then Afternoon, then others
+          $reorderedShifts = collect($todayShifts)->sortBy(function($shift) {
+            $name = strtolower($shift['name']);
+            if (str_contains($name, 'morning')) return 1;
+            if (str_contains($name, 'afternoon')) return 2;
+            if (str_contains($name, 'night')) return 3;
+            if (str_contains($name, 'split')) return 4;
+            if (str_contains($name, 'weekend')) return 5;
+            return 6;
+          });
+          
+          // Filter out shifts with no employees (hide empty boxes)
+          $shiftsWithEmployees = $reorderedShifts->filter(function($shift) {
+            return !empty($shift['employees']) && count($shift['employees']) > 0;
+          });
+        @endphp
+        
+        @forelse($shiftsWithEmployees as $index => $shift)
+        @php
+          // Determine responsive column class
+          $totalShifts = $shiftsWithEmployees->count();
+          if ($totalShifts == 1) {
+            $colClass = 'col-12';
+          } elseif ($totalShifts == 2) {
+            $colClass = 'col-lg-6 col-md-12';
+          } elseif ($totalShifts == 3) {
+            $colClass = 'col-lg-4 col-md-6 col-sm-12';
+          } elseif ($totalShifts == 4) {
+            $colClass = 'col-lg-3 col-md-6 col-sm-12';
+          } elseif ($totalShifts == 5) {
+            // First 3 cards: col-lg-4, last 2 cards: col-lg-6 (centered)
+            $colClass = $index < 3 ? 'col-lg-4 col-md-6 col-sm-12' : 'col-lg-6 col-md-6 col-sm-12';
+          } else {
+            $colClass = 'col-lg-4 col-md-6 col-sm-12';
+          }
+        @endphp
+        <div class="{{ $colClass }} mb-3">
           <div class="shift-card-hr p-3 border rounded h-100">
             <div class="text-center mb-3">
-              @if($index == 0)
+              @php
+                $shiftName = strtolower($shift['name']);
+              @endphp
+              @if(str_contains($shiftName, 'morning'))
                 <i class="fas fa-sun text-warning fs-2 mb-2"></i>
-              @elseif($index == 1)
+              @elseif(str_contains($shiftName, 'afternoon'))
                 <i class="fas fa-cloud-sun text-info fs-2 mb-2"></i>
-              @else
+              @elseif(str_contains($shiftName, 'night'))
                 <i class="fas fa-moon text-dark fs-2 mb-2"></i>
+              @elseif(str_contains($shiftName, 'split'))
+                <i class="fas fa-clock text-secondary fs-2 mb-2"></i>
+              @elseif(str_contains($shiftName, 'weekend'))
+                <i class="fas fa-calendar-alt text-success fs-2 mb-2"></i>
+              @else
+                <i class="fas fa-briefcase text-primary fs-2 mb-2"></i>
               @endif
               <h5 class="mb-1">{{ $shift['name'] }}</h5>
               <p class="text-muted mb-2 small">{{ $shift['time_range'] }}</p>
               <span class="badge bg-primary">{{ $shift['employee_count'] }} employees</span>
             </div>
             
-            @if(!empty($shift['employees']))
-              <div class="employee-list-hr">
-                <h6 class="text-muted mb-2 small fw-bold">
-                  Assigned Employees:
-                  @if(count($shift['employees']) > 2)
-                    <small class="text-info ms-1">(Scroll to see all {{ count($shift['employees']) }})</small>
-                  @endif
-                </h6>
-                <div class="employee-list-container" data-employee-count="{{ count($shift['employees']) }}">
-                  @foreach($shift['employees'] as $employee)
-                    <div class="employee-item-hr d-flex align-items-center mb-2 p-2 bg-light rounded">
-                      <div class="employee-avatar-hr me-2">
-                        @if($employee['avatar'])
-                          <img src="{{ asset('storage/' . $employee['avatar']) }}" alt="{{ $employee['name'] }}" class="rounded-circle" style="width: 28px; height: 28px; object-fit: cover;">
-                        @else
-                          <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center" style="width: 28px; height: 28px; font-size: 11px; font-weight: 600;">
-                            {{ substr($employee['name'], 0, 1) }}
-                          </div>
-                        @endif
-                      </div>
-                      <div class="employee-info-hr flex-grow-1">
-                        <div class="employee-name-hr small fw-bold text-truncate">{{ $employee['name'] }}</div>
-                        @if(!empty($employee['position']))
-                          <div class="employee-position-hr text-muted" style="font-size: 10px;">{{ $employee['position'] }}</div>
-                        @endif
-                        @if(!empty($employee['specific_time']))
-                          <div class="employee-specific-time text-info" style="font-size: 9px; font-weight: 500;">{{ $employee['specific_time'] }}</div>
-                        @endif
-                      </div>
+            <div class="employee-list-hr">
+              <h6 class="text-muted mb-2 small fw-bold">
+                Assigned Employees:
+                @if(count($shift['employees']) > 2)
+                  <small class="text-info ms-1">(Scroll to see all {{ count($shift['employees']) }})</small>
+                @endif
+              </h6>
+              <div class="employee-list-container" data-employee-count="{{ count($shift['employees']) }}">
+                @foreach($shift['employees'] as $employee)
+                  <div class="employee-item-hr d-flex align-items-center mb-2 p-2 bg-light rounded">
+                    <div class="employee-avatar-hr me-2">
+                      @if($employee['avatar'])
+                        <img src="{{ asset('storage/' . $employee['avatar']) }}" alt="{{ $employee['name'] }}" class="rounded-circle" style="width: 28px; height: 28px; object-fit: cover;">
+                      @else
+                        <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center" style="width: 28px; height: 28px; font-size: 11px; font-weight: 600;">
+                          {{ substr($employee['name'], 0, 1) }}
+                        </div>
+                      @endif
                     </div>
-                  @endforeach
-                  @if(count($shift['employees']) > 2)
-                    <div class="scroll-indicator text-center text-muted small py-1">
-                      <i class="fas fa-chevron-down"></i> Scroll for more
+                    <div class="employee-info-hr flex-grow-1">
+                      <div class="employee-name-hr small fw-bold text-truncate">{{ $employee['name'] }}</div>
+                      @if(!empty($employee['position']))
+                        <div class="employee-position-hr text-muted" style="font-size: 10px;">{{ $employee['position'] }}</div>
+                      @endif
+                      @if(!empty($employee['specific_time']))
+                        <div class="employee-specific-time text-info" style="font-size: 9px; font-weight: 500;">{{ $employee['specific_time'] }}</div>
+                      @endif
                     </div>
-                  @endif
-                </div>
+                  </div>
+                @endforeach
+                @if(count($shift['employees']) > 2)
+                  <div class="scroll-indicator text-center text-muted small py-1">
+                    <i class="fas fa-chevron-down"></i> Scroll for more
+                  </div>
+                @endif
               </div>
-            @else
-              <div class="text-center text-muted small">
-                <i class="fas fa-user-slash mb-1"></i>
-                <div>No employees assigned</div>
-              </div>
-            @endif
+            </div>
           </div>
         </div>
         @empty
@@ -264,7 +301,7 @@
         <i class="fas fa-users text-success fs-1 mb-3"></i>
         <h5>Employees</h5>
         <p class="text-muted">Manage employee records</p>
-        <a href="{{ route('employees') }}" class="btn btn-success">View Employees</a>
+        <a href="{{ route('employees.index') }}" class="btn btn-success">View Employees</a>
       </div>
     </div>
   </div>
@@ -634,6 +671,61 @@ document.addEventListener('DOMContentLoaded', function() {
   border-bottom: 2px solid #dee2e6;
   font-weight: 600;
   color: #495057;
+}
+
+/* Improved shift card alignment - Fill available space */
+.shift-cards-container .row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: stretch;
+  align-items: stretch;
+  margin: 0;
+}
+
+.shift-cards-container .row > div {
+  display: flex;
+  margin-bottom: 1rem;
+  padding: 0 0.5rem;
+}
+
+/* Remove extra margins and ensure full width coverage */
+.shift-cards-container {
+  padding: 0;
+}
+
+.shift-card-hr {
+  width: 100%;
+  min-height: 280px;
+  margin: 0.25rem;
+  flex: 1;
+}
+
+/* Responsive card layout */
+@media (min-width: 992px) {
+  .shift-cards-container .row {
+    justify-content: center;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 991px) {
+  .shift-cards-container .row {
+    justify-content: flex-start;
+  }
+  
+  .shift-card-hr {
+    min-height: 260px;
+  }
+}
+
+@media (max-width: 767px) {
+  .shift-cards-container .row {
+    justify-content: center;
+  }
+  
+  .shift-card-hr {
+    min-height: 240px;
+    margin: 0.125rem;
+  }
 }
 
 /* Responsive adjustments */

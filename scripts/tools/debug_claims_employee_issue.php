@@ -12,7 +12,7 @@ echo "=== DEBUGGING CLAIMS EMPLOYEE ISSUE ===\n\n";
 try {
     // Test database connection
     echo "1. Testing database connection...\n";
-    $pdo = new PDO('mysql:host=localhost;dbname=hr3systemdb', 'root', '');
+    $pdo = new PDO('mysql:host=localhost;dbname=hr3_hr3systemdb', 'root', '');
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     echo "✅ Database connection successful\n\n";
     

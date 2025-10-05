@@ -25,7 +25,7 @@ header('Content-Type: text/html; charset=utf-8');
     try {
         // XAMPP MySQL connection settings
         $host = '127.0.0.1';
-        $dbname = 'hr3systemdb';
+        $dbname = 'hr3_hr3systemdb';
         $username = 'root';
         $password = '';
         $charset = 'utf8mb4';

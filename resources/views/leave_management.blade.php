@@ -1332,7 +1332,7 @@ function viewLeaveRequestDetails(requestId) {
 @endpush
 
 <style>
-/* Working Modal Centering */
+/* Working Modal Centering - Enhanced */
 .working-modal {
   display: none !important;
   position: fixed !important;
@@ -1344,12 +1344,13 @@ function viewLeaveRequestDetails(requestId) {
   z-index: 9999 !important;
   align-items: center !important;
   justify-content: center !important;
+  overflow-y: auto !important;
+  padding: 20px !important;
 }
 
 .working-modal-dialog {
   max-width: 600px !important;
   width: 90% !important;
-  margin: 0 !important;
 }
 
 .working-modal-content {

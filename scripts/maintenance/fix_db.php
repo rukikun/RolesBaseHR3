@@ -5,7 +5,7 @@ $username = 'root';
 $password = '';
 
 // Try both possible database names
-$databases = ['hr3systemdb', 'hr_system'];
+$databases = ['hr3_hr3systemdb', 'hr_system'];
 
 foreach ($databases as $dbname) {
     try {

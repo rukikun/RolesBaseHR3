@@ -3,7 +3,7 @@
 
 try {
     // Test database connection
-    $pdo = new PDO('mysql:host=localhost;dbname=hr3systemdb', 'root', '');
+    $pdo = new PDO('mysql:host=localhost;dbname=hr3_hr3systemdb', 'root', '');
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     
     echo "✅ Database connection successful\n";
@@ -48,7 +48,7 @@ try {
 
 echo "\n🔍 Issues to check:\n";
 echo "1. Make sure XAMPP MySQL is running\n";
-echo "2. Database 'hr3systemdb' exists\n";
+echo "2. Database 'hr3_hr3systemdb' exists\n";
 echo "3. Employees table has data with proper password hashes\n";
 echo "4. Laravel authentication guard is properly configured\n";
 echo "5. Route redirects are correct\n";

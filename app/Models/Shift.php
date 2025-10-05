@@ -18,21 +18,22 @@ class Shift extends Model
         'employee_id',
         'shift_type_id',
         'shift_date',
-        'date', // Keep for backward compatibility
         'start_time',
         'end_time',
         'location',
         'break_duration',
         'notes',
-        'status'
+        'status',
+        'is_active'
     ];
     
     public function __construct(array $attributes = [])
     {
         parent::__construct($attributes);
         
-        // Ensure we're using hr3systemdb
-        Config::set('database.connections.mysql.database', 'hr3systemdb');
+        // Ensure we're using the correct database from config
+        $database = config('database.connections.mysql.database', 'hr3_hr3systemdb');
+        Config::set('database.connections.mysql.database', $database);
         DB::purge('mysql');
     }
     
@@ -40,7 +41,9 @@ class Shift extends Model
     protected $table = 'shifts';
 
     protected $casts = [
-        'is_active' => 'boolean'
+        'shift_date' => 'date',
+        'is_active' => 'boolean',
+        'break_duration' => 'integer'
     ];
 
     // Relationships

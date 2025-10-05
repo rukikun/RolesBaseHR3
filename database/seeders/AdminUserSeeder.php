@@ -19,8 +19,8 @@ class AdminUserSeeder extends Seeder
             'email' => 'admin@jetlouge.com',
             'password' => Hash::make('password123'),
             'phone' => '+1234567890',
-            'role' => 'super_admin',
-            'is_active' => true,
+            'role' => 'admin',
+            'email_verified_at' => now(),
         ]);
 
         // Create additional admin roles for testing
@@ -29,8 +29,8 @@ class AdminUserSeeder extends Seeder
             'email' => 'hr.manager@jetlouge.com',
             'password' => Hash::make('password123'),
             'phone' => '+1234567891',
-            'role' => 'hr_manager',
-            'is_active' => true,
+            'role' => 'hr',
+            'email_verified_at' => now(),
         ]);
 
         User::create([
@@ -38,8 +38,8 @@ class AdminUserSeeder extends Seeder
             'email' => 'hr.scheduler@jetlouge.com',
             'password' => Hash::make('password123'),
             'phone' => '+1234567892',
-            'role' => 'hr_scheduler',
-            'is_active' => true,
+            'role' => 'hr',
+            'email_verified_at' => now(),
         ]);
 
         User::create([
@@ -47,8 +47,8 @@ class AdminUserSeeder extends Seeder
             'email' => 'attendance.admin@jetlouge.com',
             'password' => Hash::make('password123'),
             'phone' => '+1234567893',
-            'role' => 'attendance_admin',
-            'is_active' => true,
+            'role' => 'hr',
+            'email_verified_at' => now(),
         ]);
     }
 }

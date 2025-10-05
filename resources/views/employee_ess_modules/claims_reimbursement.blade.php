@@ -124,9 +124,16 @@
         </thead>
         <tbody>
           @php
-            // Direct database connection for claims (like leave_management.blade.php)
+            // Direct database connection for claims using config
             try {
-                $pdo = new PDO('mysql:host=localhost;dbname=hr3systemdb', 'root', '');
+                $host = config('database.connections.mysql.host', '127.0.0.1');
+                $port = config('database.connections.mysql.port', '3306');
+                $database = config('database.connections.mysql.database', 'hr3_hr3systemdb');
+                $username = config('database.connections.mysql.username', 'root');
+                $password = config('database.connections.mysql.password', '');
+                
+                $dsn = "mysql:host={$host};port={$port};dbname={$database}";
+                $pdo = new PDO($dsn, $username, $password);
                 $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
                 
                 // Auto-create claims table if not exists
@@ -259,9 +266,16 @@
                         <select class="form-select" id="claim-type-id" name="claim_type_id" required>
                             <option value="">Select Claim Type</option>
                             @php
-                                // Get claim types directly from database for modal
+                                // Get claim types directly from database for modal using config
                                 try {
-                                    $pdo = new PDO('mysql:host=localhost;dbname=hr3systemdb', 'root', '');
+                                    $host = config('database.connections.mysql.host', '127.0.0.1');
+                                    $port = config('database.connections.mysql.port', '3306');
+                                    $database = config('database.connections.mysql.database', 'hr3_hr3systemdb');
+                                    $username = config('database.connections.mysql.username', 'root');
+                                    $password = config('database.connections.mysql.password', '');
+                                    
+                                    $dsn = "mysql:host={$host};port={$port};dbname={$database}";
+                                    $pdo = new PDO($dsn, $username, $password);
                                     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
                                     $stmt = $pdo->query("SELECT * FROM claim_types WHERE is_active = 1 ORDER BY name");
                                     $modalClaimTypes = $stmt->fetchAll(PDO::FETCH_OBJ);

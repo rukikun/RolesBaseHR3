@@ -281,7 +281,7 @@
                             </ul>
                         </div>
                         
-                        <a href="/admin/login" class="portal-btn admin">
+                        <a href="{{ route('admin.login') }}" class="portal-btn admin">
                             <i class="bi bi-gear-fill"></i>
                             Admin Login
                         </a>

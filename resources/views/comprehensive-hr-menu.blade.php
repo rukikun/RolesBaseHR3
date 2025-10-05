@@ -114,7 +114,7 @@
             </a>
           </div>
           <div class="col-md-6">
-            <a href="{{ route('shifts.index') }}" class="btn btn-outline-primary w-100 text-start">
+            <a href="{{ route('shift-schedule-management') }}" class="btn btn-outline-primary w-100 text-start">
               <i class="fas fa-calendar-week me-2"></i>Shift Management
             </a>
           </div>
@@ -233,22 +233,22 @@
         
         <div class="row g-3">
           <div class="col-md-6">
-            <a href="{{ route('employees') }}" class="btn btn-outline-info w-100 text-start">
+            <a href="{{ route('employees.index') }}" class="btn btn-outline-info w-100 text-start">
               <i class="fas fa-list me-2"></i>Employee Directory
             </a>
           </div>
           <div class="col-md-6">
-            <a href="{{ route('employees') }}" class="btn btn-outline-info w-100 text-start">
+            <a href="{{ route('employees.create') }}" class="btn btn-outline-info w-100 text-start">
               <i class="fas fa-user-plus me-2"></i>Add Employee
             </a>
           </div>
           <div class="col-md-6">
-            <a href="{{ route('employees') }}?tab=profiles" class="btn btn-outline-info w-100 text-start">
+            <a href="{{ route('employees.index') }}?tab=profiles" class="btn btn-outline-info w-100 text-start">
               <i class="fas fa-id-card me-2"></i>Employee Profiles
             </a>
           </div>
           <div class="col-md-6">
-            <a href="{{ route('employees') }}?tab=reports" class="btn btn-outline-info w-100 text-start">
+            <a href="{{ route('employees.index') }}?tab=reports" class="btn btn-outline-info w-100 text-start">
               <i class="fas fa-chart-line me-2"></i>Employee Reports
             </a>
           </div>

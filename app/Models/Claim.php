@@ -13,28 +13,35 @@ class Claim extends Model
 
     // Explicitly specify the database connection
     protected $connection = 'mysql';
+    protected $table = 'claims';
     
     protected $fillable = [
         'employee_id',
-        'claim_type_id', 
+        'claim_type_id',
         'amount',
         'claim_date',
         'description',
+        'business_purpose',
         'receipt_path',
-        'attachment_path',
+        'receipt_metadata',
         'status',
-        'rejection_reason',
+        'approved_by',
         'approved_at',
-        'paid_at',
-        'approved_by'
+        'rejection_reason',
+        'approved_amount',
+        'reference_number',
+        'payment_date',
+        'payment_method',
+        'notes'
     ];
     
     public function __construct(array $attributes = [])
     {
         parent::__construct($attributes);
         
-        // Ensure we're using hr3systemdb
-        Config::set('database.connections.mysql.database', 'hr3systemdb');
+        // Ensure we're using the correct database from config
+        $database = config('database.connections.mysql.database', 'hr3_hr3systemdb');
+        Config::set('database.connections.mysql.database', $database);
         DB::purge('mysql');
     }
 

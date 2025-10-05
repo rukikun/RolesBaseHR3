@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Hash;
 
 // Database configuration
 $host = '127.0.0.1';
-$dbname = 'hr3systemdb';
+$dbname = 'hr3_hr3systemdb';
 $username = 'root';
 $password = '';
 

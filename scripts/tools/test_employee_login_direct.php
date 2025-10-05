@@ -2,7 +2,7 @@
 
 // Direct database test for employee login
 $host = 'localhost';
-$dbname = 'hr3systemdb';
+$dbname = 'hr3_hr3systemdb';
 $username = 'root';
 $password = '';
 

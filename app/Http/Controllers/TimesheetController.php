@@ -4,11 +4,12 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\Employee;
-use App\Models\EmployeeTimesheet;
 use App\Models\Shift;
 use App\Models\ShiftType;
 use App\Models\LeaveRequest;
-use App\Models\ClaimReimbursement;
+use App\Models\LeaveType;
+use App\Models\Claim;
+use App\Models\ClaimType;
 use App\Models\Attendance;
 use App\Models\EmployeeTimesheetDetail;
 use App\Models\AIGeneratedTimesheet;
@@ -30,6 +31,7 @@ class TimesheetController extends Controller
         try {
             // Get employees using Eloquent model
             $employees = Employee::orderBy('first_name')->orderBy('last_name')->get();
+            \Log::info('TimesheetController: Retrieved ' . $employees->count() . ' employees');
             
             // Get timesheets using TimeEntry model with relationships
             $timesheets = TimeEntry::with('employee')
@@ -37,12 +39,7 @@ class TimesheetController extends Controller
                 ->orderBy('created_at', 'desc')
                 ->get()
                 ->map(function ($timesheet) {
-                    // Add computed properties for blade template compatibility
-                    $timesheet->employee_name = $timesheet->employee 
-                        ? $timesheet->employee->first_name . ' ' . $timesheet->employee->last_name
-                        : 'Unknown Employee';
-                    
-                    // Calculate total hours if clock times are available
+                    // Calculate total hours if clock times are available (but don't save computed properties)
                     if ($timesheet->clock_in_time && $timesheet->clock_out_time && !$timesheet->hours_worked) {
                         $clockIn = \Carbon\Carbon::createFromFormat('H:i:s', $timesheet->clock_in_time);
                         $clockOut = \Carbon\Carbon::createFromFormat('H:i:s', $timesheet->clock_out_time);
@@ -55,11 +52,17 @@ class TimesheetController extends Controller
                         $totalMinutes = $clockOut->diffInMinutes($clockIn) - ($timesheet->break_duration * 60 ?? 0);
                         $calculatedHours = round($totalMinutes / 60, 2);
                         
-                        // Update the timesheet with calculated hours
-                        $timesheet->hours_worked = max(0, min(8, $calculatedHours));
-                        $timesheet->overtime_hours = max(0, $calculatedHours - 8);
-                        $timesheet->save();
+                        // Update only the hours fields (not computed properties)
+                        $timesheet->update([
+                            'hours_worked' => max(0, min(8, $calculatedHours)),
+                            'overtime_hours' => max(0, $calculatedHours - 8)
+                        ]);
                     }
+                    
+                    // Add computed properties for blade template compatibility (after saving)
+                    $timesheet->employee_name = $timesheet->employee 
+                        ? $timesheet->employee->first_name . ' ' . $timesheet->employee->last_name
+                        : 'Unknown Employee';
                     
                     // Format clock times for display
                     $timesheet->clock_in = $timesheet->formatted_clock_in ?? $timesheet->clock_in_time;
@@ -68,38 +71,43 @@ class TimesheetController extends Controller
                     return $timesheet;
                 });
             
-            // Get shifts with employee and shift type data (fallback to raw query if needed)
+            // Get shifts with employee and shift type data using Eloquent relationships
             try {
-                $shifts = DB::table('shifts as s')
-                    ->leftJoin('employees as e', 's.employee_id', '=', 'e.id')
-                    ->leftJoin('shift_types as st', 's.shift_type_id', '=', 'st.id')
-                    ->select(
-                        's.*',
-                        DB::raw("CONCAT(COALESCE(e.first_name, ''), ' ', COALESCE(e.last_name, '')) as employee_name"),
-                        'st.name as shift_type_name'
-                    )
-                    ->orderBy('s.shift_date', 'desc')
-                    ->get();
+                $shifts = Shift::with(['employee', 'shiftType'])
+                    ->orderBy('shift_date', 'desc')
+                    ->get()
+                    ->map(function ($shift) {
+                        // Add computed properties for blade template compatibility
+                        $shift->employee_name = $shift->employee 
+                            ? $shift->employee->first_name . ' ' . $shift->employee->last_name
+                            : 'Unknown Employee';
+                        $shift->shift_type_name = $shift->shiftType 
+                            ? $shift->shiftType->name 
+                            : 'Unknown Shift Type';
+                        return $shift;
+                    });
             } catch (\Exception $e) {
                 $shifts = collect([]);
             }
             
-            // Get leave requests using the same logic as LeaveController for consistency
+            // Get leave requests using Eloquent relationships
             try {
-                // Try using the same approach as LeaveController
-                $leaveRequests = DB::table('leave_requests as lr')
-                    ->leftJoin('employees as e', 'lr.employee_id', '=', 'e.id')
-                    ->leftJoin('leave_types as lt', 'lr.leave_type_id', '=', 'lt.id')
-                    ->select(
-                        'lr.*',
-                        'e.first_name',
-                        'e.last_name', 
-                        DB::raw("CONCAT(COALESCE(e.first_name, 'Employee'), ' ', COALESCE(e.last_name, CONCAT('ID:', lr.employee_id))) as employee_name"),
-                        DB::raw("COALESCE(lt.name, CONCAT('Type ID:', lr.leave_type_id)) as leave_type_name"),
-                        'lt.code as leave_type_code'
-                    )
-                    ->orderBy('lr.created_at', 'desc')
-                    ->get();
+                $leaveRequests = LeaveRequest::with(['employee', 'leaveType'])
+                    ->orderBy('created_at', 'desc')
+                    ->get()
+                    ->map(function ($leaveRequest) {
+                        // Add computed properties for blade template compatibility
+                        $leaveRequest->employee_name = $leaveRequest->employee 
+                            ? $leaveRequest->employee->first_name . ' ' . $leaveRequest->employee->last_name
+                            : 'Employee ID:' . $leaveRequest->employee_id;
+                        $leaveRequest->leave_type_name = $leaveRequest->leaveType 
+                            ? $leaveRequest->leaveType->name 
+                            : 'Type ID:' . $leaveRequest->leave_type_id;
+                        $leaveRequest->leave_type_code = $leaveRequest->leaveType 
+                            ? $leaveRequest->leaveType->code 
+                            : null;
+                        return $leaveRequest;
+                    });
                     
                 \Log::info('Timesheet - Retrieved ' . $leaveRequests->count() . ' leave requests for integration');
             } catch (\Exception $e) {
@@ -107,54 +115,57 @@ class TimesheetController extends Controller
                 $leaveRequests = collect([]);
             }
             
-            // Get leave types for the modal dropdown
+            // Get leave types for the modal dropdown using Eloquent
             try {
-                $leaveTypes = DB::table('leave_types')
-                    ->where('is_active', 1)
+                $leaveTypes = LeaveType::where('is_active', true)
                     ->orderBy('name')
                     ->get();
             } catch (\Exception $e) {
                 $leaveTypes = collect([]);
             }
             
-            // Get claim types for the modal dropdown
+            // Get claim types for the modal dropdown using Eloquent
             try {
-                $claimTypes = DB::table('claim_types')
-                    ->where('is_active', 1)
+                $claimTypes = ClaimType::where('is_active', true)
                     ->orderBy('name')
                     ->get();
             } catch (\Exception $e) {
                 $claimTypes = collect([]);
             }
             
-            // Get claims with employee and claim type data (fallback to raw query if needed)
+            // Get claims with employee and claim type data using Eloquent relationships
             try {
-                $claims = DB::table('claims as c')
-                    ->leftJoin('employees as e', 'c.employee_id', '=', 'e.id')
-                    ->leftJoin('claim_types as ct', 'c.claim_type_id', '=', 'ct.id')
-                    ->select(
-                        'c.*',
-                        DB::raw("CONCAT(COALESCE(e.first_name, ''), ' ', COALESCE(e.last_name, '')) as employee_name"),
-                        'ct.name as claim_type_name'
-                    )
-                    ->orderBy('c.claim_date', 'desc')
-                    ->get();
+                $claims = Claim::with(['employee', 'claimType'])
+                    ->orderBy('claim_date', 'desc')
+                    ->get()
+                    ->map(function ($claim) {
+                        // Add computed properties for blade template compatibility
+                        $claim->employee_name = $claim->employee 
+                            ? $claim->employee->first_name . ' ' . $claim->employee->last_name
+                            : 'Unknown Employee';
+                        $claim->claim_type_name = $claim->claimType 
+                            ? $claim->claimType->name 
+                            : 'Unknown Claim Type';
+                        return $claim;
+                    });
             } catch (\Exception $e) {
                 $claims = collect([]);
             }
             
-            // Get attendance records with employee data
+            // Get attendance records with employee data using Eloquent relationships
             try {
-                $attendances = DB::table('attendances as a')
-                    ->leftJoin('employees as e', 'a.employee_id', '=', 'e.id')
-                    ->select(
-                        'a.*',
-                        DB::raw("CONCAT(COALESCE(e.first_name, ''), ' ', COALESCE(e.last_name, '')) as employee_name")
-                    )
-                    ->orderBy('a.date', 'desc')
-                    ->orderBy('a.clock_in_time', 'desc')
+                $attendances = Attendance::with('employee')
+                    ->orderBy('date', 'desc')
+                    ->orderBy('clock_in_time', 'desc')
                     ->limit(100) // Limit to recent records for performance
-                    ->get();
+                    ->get()
+                    ->map(function ($attendance) {
+                        // Add computed properties for blade template compatibility
+                        $attendance->employee_name = $attendance->employee 
+                            ? $attendance->employee->first_name . ' ' . $attendance->employee->last_name
+                            : 'Unknown Employee';
+                        return $attendance;
+                    });
             } catch (\Exception $e) {
                 $attendances = collect([]);
             }
@@ -163,12 +174,13 @@ class TimesheetController extends Controller
             $regularTimesheets = $timesheets;
             $aiTimesheets = collect([]);
             
-            // Try to get AI timesheets if table exists
+            // Try to get AI timesheets using Eloquent model
             try {
-                $aiTimesheets = collect(DB::table('ai_generated_timesheets')->get());
+                $aiTimesheets = AIGeneratedTimesheet::all();
             } catch (\Exception $e) {
                 // AI timesheets table doesn't exist yet
                 \Log::info('AI timesheets table not found, using regular timesheets only');
+                $aiTimesheets = collect([]);
             }
             
             $timesheetStats = [
@@ -192,6 +204,7 @@ class TimesheetController extends Controller
             return view('timesheet_management', compact('employees', 'timesheets', 'shifts', 'leaveRequests', 'claims', 'attendances', 'leaveTypes', 'claimTypes', 'employeeStats', 'timesheetStats'));
         } catch (\Exception $e) {
             // If there's a database error, return empty arrays
+            \Log::error('TimesheetController exception: ' . $e->getMessage());
             $employees = collect([]);
             $timesheets = collect([]);
             $shifts = collect([]);

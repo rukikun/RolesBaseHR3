@@ -122,9 +122,16 @@
         </thead>
         <tbody>
           @php
-            // Direct database connection for leave requests (like leave_management.blade.php)
+            // Direct database connection for leave requests using config
             try {
-                $pdo = new PDO('mysql:host=localhost;dbname=hr3systemdb', 'root', '');
+                $host = config('database.connections.mysql.host', '127.0.0.1');
+                $port = config('database.connections.mysql.port', '3306');
+                $database = config('database.connections.mysql.database', 'hr3_hr3systemdb');
+                $username = config('database.connections.mysql.username', 'root');
+                $password = config('database.connections.mysql.password', '');
+                
+                $dsn = "mysql:host={$host};port={$port};dbname={$database}";
+                $pdo = new PDO($dsn, $username, $password);
                 $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
                 
                 // Auto-create leave_requests table if not exists
@@ -261,9 +268,16 @@
                         <select class="form-select" id="leave-type-id" name="leave_type_id" required onchange="updateLeaveTypeInfo()">
                             <option value="">Select Leave Type</option>
                             @php
-                                // Get leave types with balance info from database
+                                // Get leave types with balance info from database using config
                                 try {
-                                    $pdo = new PDO('mysql:host=localhost;dbname=hr3systemdb', 'root', '');
+                                    $host = config('database.connections.mysql.host', '127.0.0.1');
+                                    $port = config('database.connections.mysql.port', '3306');
+                                    $database = config('database.connections.mysql.database', 'hr3_hr3systemdb');
+                                    $username = config('database.connections.mysql.username', 'root');
+                                    $password = config('database.connections.mysql.password', '');
+                                    
+                                    $dsn = "mysql:host={$host};port={$port};dbname={$database}";
+                                    $pdo = new PDO($dsn, $username, $password);
                                     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
                                     
                                     // Get leave types and calculate available days

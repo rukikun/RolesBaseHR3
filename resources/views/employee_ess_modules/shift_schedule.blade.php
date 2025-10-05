@@ -125,9 +125,16 @@
             </thead>
             <tbody>
               @php
-                // Direct database connection for shifts (like leave_management.blade.php)
+                // Direct database connection for shifts using config
                 try {
-                    $pdo = new PDO('mysql:host=localhost;dbname=hr3systemdb', 'root', '');
+                    $host = config('database.connections.mysql.host', '127.0.0.1');
+                    $port = config('database.connections.mysql.port', '3306');
+                    $database = config('database.connections.mysql.database', 'hr3_hr3systemdb');
+                    $username = config('database.connections.mysql.username', 'root');
+                    $password = config('database.connections.mysql.password', '');
+                    
+                    $dsn = "mysql:host={$host};port={$port};dbname={$database}";
+                    $pdo = new PDO($dsn, $username, $password);
                     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
                     
                     // Auto-create shifts table if not exists
@@ -287,7 +294,14 @@
                                     <option value="">Select Shift Type</option>
                                     @php
                                         try {
-                                            $pdo = new PDO("mysql:host=127.0.0.1;dbname=hr3systemdb", "root", "");
+                                            $host = config('database.connections.mysql.host', '127.0.0.1');
+                                            $port = config('database.connections.mysql.port', '3306');
+                                            $database = config('database.connections.mysql.database', 'hr3_hr3systemdb');
+                                            $username = config('database.connections.mysql.username', 'root');
+                                            $password = config('database.connections.mysql.password', '');
+                                            
+                                            $dsn = "mysql:host={$host};port={$port};dbname={$database}";
+                                            $pdo = new PDO($dsn, $username, $password);
                                             $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
                                             
                                             // Check if shift_types table exists

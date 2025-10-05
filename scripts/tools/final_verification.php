@@ -7,7 +7,7 @@ echo "===================================\n\n";
 try {
     // 1. Test direct database connection
     echo "1. Testing Database Connection...\n";
-    $pdo = new PDO('mysql:host=localhost;dbname=hr3systemdb', 'root', '');
+    $pdo = new PDO('mysql:host=localhost;dbname=hr3_hr3systemdb', 'root', '');
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     echo "   [OK] Database connection successful\n";
     
@@ -145,7 +145,7 @@ try {
     echo "❌ Database error: " . $e->getMessage() . "\n";
     echo "\nPlease ensure:\n";
     echo "1. XAMPP MySQL is running\n";
-    echo "2. Database 'hr3systemdb' exists\n";
+    echo "2. Database 'hr3_hr3systemdb' exists\n";
     echo "3. Run the setup scripts first\n";
 } catch (Exception $e) {
     echo "❌ General error: " . $e->getMessage() . "\n";

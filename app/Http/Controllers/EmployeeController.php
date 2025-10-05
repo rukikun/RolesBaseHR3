@@ -586,7 +586,7 @@ class EmployeeController extends Controller
     // Web-based methods for server-side handling
     public function create()
     {
-        return redirect()->route('employees')->with('info', 'Please use the Add Employee button to create new employees.');
+        return redirect()->route('employees.index')->with('info', 'Please use the Add Employee button to create new employees.');
     }
 
     // View employee details
@@ -596,7 +596,7 @@ class EmployeeController extends Controller
             $employee = DB::table('employees')->where('id', $id)->first();
             
             if (!$employee) {
-                return redirect()->route('employees')->with('error', 'Employee not found.');
+                return redirect()->route('employees.index')->with('error', 'Employee not found.');
             }
 
             // Get additional employee data
@@ -631,7 +631,7 @@ class EmployeeController extends Controller
                 'timesheetCount' => $timesheetCount
             ]);
         } catch (\Exception $e) {
-            return redirect()->route('employees')->with('error', 'Error loading employee details.');
+            return redirect()->route('employees.index')->with('error', 'Error loading employee details.');
         }
     }
 
@@ -642,15 +642,15 @@ class EmployeeController extends Controller
             $employee = DB::table('employees')->where('id', $id)->first();
             
             if (!$employee) {
-                return redirect()->route('employees')->with('error', 'Employee not found.');
+                return redirect()->route('employees.index')->with('error', 'Employee not found.');
             }
 
             // Store employee data in session for modal population
             session(['edit_employee' => $employee]);
 
-            return redirect()->route('employees')->with('success', 'Employee loaded for editing.');
+            return redirect()->route('employees.index')->with('success', 'Employee loaded for editing.');
         } catch (\Exception $e) {
-            return redirect()->route('employees')->with('error', 'Error loading employee for editing.');
+            return redirect()->route('employees.index')->with('error', 'Error loading employee for editing.');
         }
     }
 
@@ -726,7 +726,7 @@ class EmployeeController extends Controller
             // Insert the employee with explicit field specification
             $employeeId = DB::table('employees')->insertGetId($employeeData);
 
-            return redirect()->route('employees')->with('success', 'Employee "' . $employeeData['first_name'] . ' ' . $employeeData['last_name'] . '" created successfully!');
+            return redirect()->route('employees.index')->with('success', 'Employee "' . $employeeData['first_name'] . ' ' . $employeeData['last_name'] . '" created successfully!');
             
         } catch (\Exception $e) {
             \Log::error('Employee creation failed: ' . $e->getMessage());
@@ -838,10 +838,10 @@ class EmployeeController extends Controller
             );
 
             if ($affected === 0) {
-                return redirect()->route('employees')->with('error', 'Employee not found');
+                return redirect()->route('employees.index')->with('error', 'Employee not found');
             }
 
-            return redirect()->route('employees')->with('success', 'Employee updated successfully!');
+            return redirect()->route('employees.index')->with('success', 'Employee updated successfully!');
         } catch (\Exception $e) {
             return redirect()->back()
                 ->withErrors(['error' => 'Error updating employee: ' . $e->getMessage()])
@@ -857,12 +857,12 @@ class EmployeeController extends Controller
             $affected = DB::table('employees')->where('id', $id)->delete();
 
             if ($affected === 0) {
-                return redirect()->route('employees')->with('error', 'Employee not found');
+                return redirect()->route('employees.index')->with('error', 'Employee not found');
             }
 
-            return redirect()->route('employees')->with('success', 'Employee deleted successfully!');
+            return redirect()->route('employees.index')->with('success', 'Employee deleted successfully!');
         } catch (\Exception $e) {
-            return redirect()->route('employees')->with('error', 'Error deleting employee: ' . $e->getMessage());
+            return redirect()->route('employees.index')->with('error', 'Error deleting employee: ' . $e->getMessage());
         }
     }
 

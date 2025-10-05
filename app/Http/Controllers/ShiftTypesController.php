@@ -3,17 +3,18 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use App\Traits\DatabaseConnectionTrait;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class ShiftTypesController extends Controller
 {
+    use DatabaseConnectionTrait;
     public function index()
     {
         try {
             // Direct PDO connection to ensure data retrieval
-            $pdo = new \PDO('mysql:host=localhost;dbname=hr3systemdb', 'root', '');
-            $pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
+            $pdo = $this->getPDOConnection();
             
             $stmt = $pdo->query("SELECT * FROM shift_types ORDER BY name");
             $shiftTypes = $stmt->fetchAll(\PDO::FETCH_OBJ);
@@ -40,8 +41,7 @@ class ShiftTypesController extends Controller
     public function store(Request $request)
     {
         try {
-            $pdo = new \PDO('mysql:host=localhost;dbname=hr3systemdb', 'root', '');
-            $pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
+            $pdo = $this->getPDOConnection();
             
             $stmt = $pdo->prepare("INSERT INTO shift_types (name, description, default_start_time, default_end_time, color_code, type, break_duration, hourly_rate, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())");
             
@@ -72,8 +72,7 @@ class ShiftTypesController extends Controller
     public function update(Request $request, $id)
     {
         try {
-            $pdo = new \PDO('mysql:host=localhost;dbname=hr3systemdb', 'root', '');
-            $pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
+            $pdo = $this->getPDOConnection();
             
             $stmt = $pdo->prepare("UPDATE shift_types SET name = ?, description = ?, default_start_time = ?, default_end_time = ?, color_code = ?, type = ?, break_duration = ?, hourly_rate = ?, updated_at = NOW() WHERE id = ?");
             
@@ -104,8 +103,7 @@ class ShiftTypesController extends Controller
     public function destroy($id)
     {
         try {
-            $pdo = new \PDO('mysql:host=localhost;dbname=hr3systemdb', 'root', '');
-            $pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
+            $pdo = $this->getPDOConnection();
             
             $stmt = $pdo->prepare("DELETE FROM shift_types WHERE id = ?");
             $result = $stmt->execute([$id]);

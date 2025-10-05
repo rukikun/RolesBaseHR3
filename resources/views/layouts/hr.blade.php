@@ -101,7 +101,7 @@
         </a>
       </li>
       <li class="nav-item">
-        <a href="{{ route('timesheet.index') }}" class="nav-link text-dark {{ request()->routeIs('timesheet.*') ? 'active' : '' }}">
+        <a href="{{ route('timesheet-management') }}" class="nav-link text-dark {{ request()->routeIs('timesheet-management') ? 'active' : '' }}">
           <i class="fas fa-clock me-2"></i> Timesheet
         </a>
       </li>
@@ -111,17 +111,17 @@
         </a>
       </li>
       <li class="nav-item">
-        <a href="{{ route('leave.index') }}" class="nav-link text-dark {{ request()->routeIs('leave.*') ? 'active' : '' }}">
+        <a href="{{ route('leave-management') }}" class="nav-link text-dark {{ request()->routeIs('leave-management') ? 'active' : '' }}">
           <i class="fas fa-umbrella-beach me-2"></i> Leave Management
         </a>
       </li>
       <li class="nav-item">
-        <a href="{{ route('claims.index') }}" class="nav-link text-dark {{ request()->routeIs('claims.*') ? 'active' : '' }}">
+        <a href="{{ route('claims-reimbursement') }}" class="nav-link text-dark {{ request()->routeIs('claims-reimbursement') ? 'active' : '' }}">
           <i class="fas fa-file-invoice-dollar me-2"></i> Claims & Reimbursement
         </a>
       </li>
       <li class="nav-item">
-        <a href="{{ route('employees') }}" class="nav-link text-dark {{ request()->routeIs('employees.*') ? 'active' : '' }}">
+        <a href="{{ route('employees.index') }}" class="nav-link text-dark {{ request()->routeIs('employees.*') ? 'active' : '' }}">
           <i class="bi bi-people me-2"></i> Employees
         </a>
       </li>

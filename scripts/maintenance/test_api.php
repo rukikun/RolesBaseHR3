@@ -3,7 +3,7 @@
 header('Content-Type: application/json');
 
 try {
-    $pdo = new PDO('mysql:host=127.0.0.1;dbname=hr3systemdb', 'root', '');
+    $pdo = new PDO('mysql:host=127.0.0.1;dbname=hr3_hr3systemdb', 'root', '');
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     
     // Check if data exists

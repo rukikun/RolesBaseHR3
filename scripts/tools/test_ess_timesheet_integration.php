@@ -24,7 +24,7 @@ try {
     // Test 1: Check if time_entries table exists with proper columns
     echo "1. Testing database schema...\n";
     
-    $pdo = new PDO('mysql:host=localhost;dbname=hr3systemdb', 'root', '');
+    $pdo = new PDO('mysql:host=localhost;dbname=hr3_hr3systemdb', 'root', '');
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     
     // Check table structure

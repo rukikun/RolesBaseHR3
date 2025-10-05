@@ -26,7 +26,7 @@ header('Content-Type: text/html; charset=utf-8');
         // XAMPP MySQL connection settings
         $host = '127.0.0.1';
         $port = '3306';
-        $dbname = 'hr3systemdb';
+        $dbname = 'hr3_hr3systemdb';
         $username = 'root';
         $password = ''; // XAMPP default - no password
         $charset = 'utf8mb4';
@@ -46,7 +46,7 @@ header('Content-Type: text/html; charset=utf-8');
         
         // Create database if it doesn't exist
         $pdo->exec("CREATE DATABASE IF NOT EXISTS hr3systemdb");
-        echo "<p class='success'>✅ Database 'hr3systemdb' created/verified</p>";
+        echo "<p class='success'>✅ Database 'hr3_hr3systemdb' created/verified</p>";
         
         // Now connect to the specific database
         $dsn = "mysql:host={$host};dbname={$dbname};charset={$charset}";

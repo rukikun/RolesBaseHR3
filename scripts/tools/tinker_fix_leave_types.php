@@ -98,7 +98,7 @@ foreach ($results as $type) {
 }
 
 // Check auto-increment status
-$autoIncrement = DB::select("SELECT AUTO_INCREMENT FROM information_schema.TABLES WHERE TABLE_SCHEMA = 'hr3systemdb' AND TABLE_NAME = 'leave_types'");
+$autoIncrement = DB::select("SELECT AUTO_INCREMENT FROM information_schema.TABLES WHERE TABLE_SCHEMA = 'hr3_hr3systemdb' AND TABLE_NAME = 'leave_types'");
 echo "📈 Next auto-increment ID: " . $autoIncrement[0]->AUTO_INCREMENT . "\n";
 
 echo "\n🎉 Leave types table fixed successfully!\n";

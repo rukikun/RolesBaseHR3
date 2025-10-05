@@ -1,7 +1,7 @@
 <?php
 // Browser-accessible setup for shift requests table
 $host = 'localhost';
-$dbname = 'hr3systemdb';
+$dbname = 'hr3_hr3systemdb';
 $username = 'root';
 $password = '';
 

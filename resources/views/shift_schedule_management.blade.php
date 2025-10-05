@@ -574,7 +574,60 @@ function editShiftTypeForm(id, name, code, startTime, endTime, duration, breakDu
     openWorkingModal('create-shift-type-modal');
 }
 
-// View shift type details function - REMOVED (replaced with modal version below)
+// View shift type details function
+function viewShiftTypeDetails(id) {
+    const row = document.querySelector(`button[onclick="viewShiftTypeDetails(${id})"]`)?.closest('tr');
+    if (row && row.cells.length >= 6) {
+        document.getElementById('view-shift-type-name').textContent = row.cells[0].textContent.trim();
+        document.getElementById('view-shift-type-code').textContent = row.cells[1].textContent.trim();
+        document.getElementById('view-shift-type-start-time').textContent = row.cells[2].textContent.trim();
+        document.getElementById('view-shift-type-end-time').textContent = row.cells[3].textContent.trim();
+        document.getElementById('view-shift-type-break').textContent = row.cells[4].textContent.trim();
+        document.getElementById('view-shift-type-status').textContent = row.cells[5].textContent.trim();
+        document.getElementById('view-shift-type-duration').textContent = '8 hours'; // Default
+        openWorkingModal('view-shift-type-modal');
+    }
+}
+
+// View shift assignment details function
+function viewShiftAssignmentDetails(employeeId, date) {
+    // This function is called from calendar shift items
+    @if(isset($calendarShifts))
+        const dayShifts = @json($calendarShifts);
+        const dateShifts = dayShifts[date] || [];
+        const shift = dateShifts.find(s => s.employee_id == employeeId);
+        
+        if (shift) {
+            document.getElementById('view-shift-employee-name').textContent = 
+                (shift.first_name || 'Unknown') + ' ' + (shift.last_name || 'Employee');
+            document.getElementById('view-shift-type-name-assignment').textContent = shift.shift_type_name || 'N/A';
+            document.getElementById('view-shift-date').textContent = new Date(date).toLocaleDateString();
+            document.getElementById('view-shift-time-range').textContent = 
+                (shift.start_time ? shift.start_time.substring(0,5) : '00:00') + ' - ' + 
+                (shift.end_time ? shift.end_time.substring(0,5) : '00:00');
+            document.getElementById('view-shift-location').textContent = shift.location || 'Main Office';
+            document.getElementById('view-shift-status').textContent = shift.status || 'Scheduled';
+            document.getElementById('view-shift-notes').textContent = shift.notes || 'No notes available';
+            
+            openWorkingModal('view-shift-assignment-modal');
+        }
+    @endif
+}
+
+// View shift request details function
+function viewShiftRequestDetails(id) {
+    const row = document.querySelector(`button[onclick="viewShiftRequestDetails(${id})"]`)?.closest('tr');
+    if (row && row.cells.length >= 7) {
+        document.getElementById('view-request-employee-name').textContent = row.cells[0].textContent.trim();
+        document.getElementById('view-request-shift-type').textContent = row.cells[1].textContent.trim();
+        document.getElementById('view-request-date').textContent = row.cells[2].textContent.trim();
+        document.getElementById('view-request-time').textContent = row.cells[3].textContent.trim();
+        document.getElementById('view-request-location').textContent = row.cells[4].textContent.trim();
+        document.getElementById('view-request-notes').textContent = row.cells[5].textContent.trim();
+        document.getElementById('view-request-status').textContent = row.cells[6].textContent.trim();
+        openWorkingModal('view-shift-request-modal');
+    }
+}
 
 // Open create shift modal with selected date
 function openCreateShiftModal(selectedDate) {
@@ -601,6 +654,38 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
+    // Ensure time inputs always send 24-hour format
+    function ensureTimeFormat(timeInput) {
+        if (timeInput) {
+            timeInput.addEventListener('change', function() {
+                let timeValue = this.value;
+                console.log('Time input changed:', timeValue);
+                
+                // If the value contains AM/PM, convert it
+                if (timeValue.includes('AM') || timeValue.includes('PM')) {
+                    try {
+                        const date = new Date('1970-01-01 ' + timeValue);
+                        const hours = date.getHours().toString().padStart(2, '0');
+                        const minutes = date.getMinutes().toString().padStart(2, '0');
+                        this.value = hours + ':' + minutes;
+                        console.log('Converted time to:', this.value);
+                    } catch (e) {
+                        console.error('Error converting time:', e);
+                    }
+                }
+            });
+        }
+    }
+    
+    ensureTimeFormat(startTimeInput);
+    ensureTimeFormat(endTimeInput);
+    
+    // Apply to all time inputs on the page
+    const allTimeInputs = document.querySelectorAll('input[type="time"]');
+    allTimeInputs.forEach(timeInput => {
+        ensureTimeFormat(timeInput);
+    });
+    
     // Debug: Check employee dropdown options
     const employeeSelect = document.getElementById('shift-assignment-employee');
     if (employeeSelect) {
@@ -612,6 +697,60 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('Employee dropdown not found!');
     }
 });
+
+// Form validation function
+function validateShiftForm(form) {
+    console.log('Validating shift form...');
+    
+    // Get time inputs
+    const startTimeInput = form.querySelector('input[name="start_time"]');
+    const endTimeInput = form.querySelector('input[name="end_time"]');
+    const dateInput = form.querySelector('input[name="shift_date"]');
+    
+    if (startTimeInput && endTimeInput) {
+        let startTime = startTimeInput.value;
+        let endTime = endTimeInput.value;
+        
+        console.log('Original times:', startTime, endTime);
+        
+        // Convert any AM/PM format to 24-hour format
+        if (startTime.includes('AM') || startTime.includes('PM')) {
+            try {
+                const date = new Date('1970-01-01 ' + startTime);
+                startTime = date.getHours().toString().padStart(2, '0') + ':' + date.getMinutes().toString().padStart(2, '0');
+                startTimeInput.value = startTime;
+            } catch (e) {
+                console.error('Error converting start time:', e);
+            }
+        }
+        
+        if (endTime.includes('AM') || endTime.includes('PM')) {
+            try {
+                const date = new Date('1970-01-01 ' + endTime);
+                endTime = date.getHours().toString().padStart(2, '0') + ':' + date.getMinutes().toString().padStart(2, '0');
+                endTimeInput.value = endTime;
+            } catch (e) {
+                console.error('Error converting end time:', e);
+            }
+        }
+        
+        console.log('Converted times:', startTime, endTime);
+    }
+    
+    // Validate date is not in the past (optional client-side validation)
+    if (dateInput && dateInput.value) {
+        const selectedDateStr = dateInput.value; // Format: YYYY-MM-DD
+        const todayStr = new Date().toISOString().split('T')[0]; // Format: YYYY-MM-DD
+        
+        // Compare date strings directly to avoid timezone issues
+        if (selectedDateStr < todayStr) {
+            alert('Please select today or a future date.');
+            return false;
+        }
+    }
+    
+    return true;
+}
 
 // Calendar cell click handler
 function handleCalendarCellClick(event, date) {
@@ -635,6 +774,43 @@ document.addEventListener('keydown', function(e) {
 });
 
 // Functions will be made globally available after they are defined
+
+// Fix calendar data function
+function fixCalendarData() {
+    const button = document.getElementById('fix-calendar-btn');
+    if (button) {
+        button.disabled = true;
+        button.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Fixing...';
+    }
+    
+    fetch('/fix-shift-calendar', {
+        method: 'GET',
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert('✅ Calendar data fixed successfully!\n\n' + data.details.join('\n'));
+            // Reload the page to show corrected data
+            window.location.reload();
+        } else {
+            alert('❌ Error fixing calendar data:\n' + data.message);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('❌ Network error while fixing calendar data');
+    })
+    .finally(() => {
+        if (button) {
+            button.disabled = false;
+            button.innerHTML = '<i class="fas fa-tools me-2"></i>Fix Calendar Data';
+        }
+    });
+}
 
 // Initialize page
 document.addEventListener('DOMContentLoaded', function() {
@@ -724,6 +900,7 @@ setTimeout(function() {
   <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
 </div>
 @endif
+
 
 
 @if(isset($errors) && $errors->any())
@@ -1023,7 +1200,26 @@ setTimeout(function() {
                 
                 <!-- Shifts for this day -->
                 @php
-                  $dayShifts = isset($calendarShifts) && is_array($calendarShifts) ? ($calendarShifts[$day->format('Y-m-d')] ?? []) : [];
+                  $dayKey = $day->format('Y-m-d');
+                  $dayShifts = [];
+                  
+                  if (isset($calendarShifts) && is_array($calendarShifts) && isset($calendarShifts[$dayKey])) {
+                      $dayShifts = $calendarShifts[$dayKey];
+                      
+                      // Remove any duplicate shifts (safety check)
+                      $uniqueShifts = [];
+                      $seenShifts = [];
+                      
+                      foreach ($dayShifts as $shift) {
+                          $shiftKey = ($shift['employee_id'] ?? 0) . '-' . ($shift['shift_type_id'] ?? 0) . '-' . ($shift['start_time'] ?? '');
+                          if (!in_array($shiftKey, $seenShifts)) {
+                              $uniqueShifts[] = $shift;
+                              $seenShifts[] = $shiftKey;
+                          }
+                      }
+                      
+                      $dayShifts = $uniqueShifts;
+                  }
                 @endphp
                 
                 @if(count($dayShifts) > 0)
@@ -1031,7 +1227,7 @@ setTimeout(function() {
                     <div class="shift-item mb-1 p-1 rounded position-relative" style="background-color: #e3f2fd; border-left: 3px solid #2196f3; font-size: 10px;" 
                          data-shift-id="{{ $shift['id'] ?? 0 }}">
                       <!-- Shift Info (clickable for details) -->
-                      <div onclick="viewShiftDetails({{ $shift['employee_id'] ?? 0 }}, '{{ $day->format('Y-m-d') }}')" style="cursor: pointer;">
+                      <div onclick="viewShiftAssignmentDetails({{ $shift['employee_id'] ?? 0 }}, '{{ $day->format('Y-m-d') }}')" style="cursor: pointer;">
                         <div class="fw-bold text-primary">{{ $shift['employee_initials'] ?? 'UN' }}</div>
                         <div class="text-muted" style="font-size: 9px;">
                           {{ isset($shift['start_time']) ? date('H:i', strtotime($shift['start_time'])) : '' }}-{{ isset($shift['end_time']) ? date('H:i', strtotime($shift['end_time'])) : '' }}
@@ -1055,7 +1251,7 @@ setTimeout(function() {
                         @endif
                         
                         <!-- Delete Form with Fade Effect -->
-                        <form method="POST" action="{{ route('shifts.destroy', $shift['id'] ?? 0) }}" style="display: inline;" 
+                        <form method="POST" action="{{ route('admin.shifts.destroy', $shift['id'] ?? 0) }}" style="display: inline;" 
                               onsubmit="event.stopPropagation(); return handleShiftDelete(this, '{{ addslashes($shift['employee_name'] ?? 'Unknown') }}', '{{ $day->format('Y-m-d') }}')">
                           @csrf
                           @method('DELETE')
@@ -1114,6 +1310,11 @@ setTimeout(function() {
           </tr>
         </thead>
         <tbody id="shift-requests-tbody">
+          <!-- DEBUG: Check if shiftRequests data exists -->
+          @if(config('app.debug'))
+            <!-- Debug info: {{ isset($shiftRequests) ? $shiftRequests->count() : 'shiftRequests not set' }} shift requests found -->
+          @endif
+          
           @forelse($shiftRequests ?? collect() as $request)
             <tr>
               <td>
@@ -1157,32 +1358,37 @@ setTimeout(function() {
                 </span>
               </td>
               <td>
-                @if($request->status === 'pending')
-                  <form method="POST" action="{{ route('shift-requests.approve', $request->id) }}" class="d-inline" onsubmit="handleApprovalSubmit(event, this)">
-                    @csrf
-                    <button type="submit" class="btn btn-sm btn-success me-1" title="Approve" onclick="return confirm('Approve this shift request? This will automatically add the shift to the schedule calendar.')">
-                      <i class="fas fa-check"></i>
-                    </button>
-                  </form>
-                  <form method="POST" action="{{ route('shift-requests.reject', $request->id) }}" class="d-inline">
-                    @csrf
-                    <button type="submit" class="btn btn-sm btn-danger" title="Reject" onclick="return confirm('Reject this shift request?')">
-                      <i class="fas fa-times"></i>
-                    </button>
-                  </form>
-                @else
-                  <span class="text-muted small">
-                    {{ $request->status === 'approved' ? 'Approved' : 'Rejected' }}
-                    @if($request->approved_at)
-                      on 
-                      @if(is_string($request->approved_at))
-                        {{ \Carbon\Carbon::parse($request->approved_at)->format('M d, Y') }}
-                      @else
-                        {{ $request->approved_at->format('M d, Y') }}
+                <div class="btn-group" role="group">
+                  <button class="btn btn-sm btn-outline-info" onclick="viewShiftRequestDetails({{ $request->id }})" title="View">
+                    <i class="fas fa-eye"></i>
+                  </button>
+                  @if($request->status === 'pending')
+                    <form method="POST" action="{{ route('shift-requests.approve', $request->id) }}" class="d-inline" onsubmit="handleApprovalSubmit(event, this)">
+                      @csrf
+                      <button type="submit" class="btn btn-sm btn-success" title="Approve" onclick="return confirm('Approve this shift request? This will automatically add the shift to the schedule calendar.')">
+                        <i class="fas fa-check"></i>
+                      </button>
+                    </form>
+                    <form method="POST" action="{{ route('shift-requests.reject', $request->id) }}" class="d-inline">
+                      @csrf
+                      <button type="submit" class="btn btn-sm btn-danger" title="Reject" onclick="return confirm('Reject this shift request?')">
+                        <i class="fas fa-times"></i>
+                      </button>
+                    </form>
+                  @else
+                    <span class="text-muted small ms-2">
+                      {{ $request->status === 'approved' ? 'Approved' : 'Rejected' }}
+                      @if($request->approved_at)
+                        on 
+                        @if(is_string($request->approved_at))
+                          {{ \Carbon\Carbon::parse($request->approved_at)->format('M d, Y') }}
+                        @else
+                          {{ $request->approved_at->format('M d, Y') }}
+                        @endif
                       @endif
-                    @endif
-                  </span>
-                @endif
+                    </span>
+                  @endif
+                </div>
               </td>
             </tr>
           @empty
@@ -1277,7 +1483,7 @@ setTimeout(function() {
                 <h5 class="working-modal-title">Assign Employee to Shift</h5>
                 <button type="button" class="working-modal-close" onclick="closeWorkingModal('create-shift-modal')">&times;</button>
             </div>
-            <form method="POST" action="{{ route('shifts.store') }}">
+            <form method="POST" action="{{ route('admin.shifts.store') }}">
                 @csrf
                 <div class="working-modal-body">
                     <div class="mb-3">
@@ -1302,9 +1508,16 @@ setTimeout(function() {
                                 if(isset($employees) && $employees->count() > 0) {
                                     $displayEmployees = $employees;
                                 } else {
-                                    // Fallback: Direct database query
+                                    // Fallback: Direct database query using config
                                     try {
-                                        $pdo = new PDO('mysql:host=localhost;dbname=hr3systemdb', 'root', '');
+                                        $host = config('database.connections.mysql.host', '127.0.0.1');
+                                        $port = config('database.connections.mysql.port', '3306');
+                                        $database = config('database.connections.mysql.database', 'hr3_hr3systemdb');
+                                        $username = config('database.connections.mysql.username', 'root');
+                                        $password = config('database.connections.mysql.password', '');
+                                        
+                                        $dsn = "mysql:host={$host};port={$port};dbname={$database}";
+                                        $pdo = new PDO($dsn, $username, $password);
                                         $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
                                         $stmt = $pdo->query("SELECT id, first_name, last_name FROM employees WHERE status = 'active' ORDER BY first_name");
                                         $displayEmployees = collect($stmt->fetchAll(PDO::FETCH_OBJ));
@@ -1352,13 +1565,13 @@ setTimeout(function() {
                         <div class="col-md-6">
                             <div class="mb-3">
                                 <label for="shift-assignment-start-time" class="form-label">Start Time</label>
-                                <input type="time" class="form-control" id="shift-assignment-start-time" name="start_time" value="{{ old('start_time') }}" required>
+                                <input type="time" class="form-control" id="shift-assignment-start-time" name="start_time" value="{{ old('start_time', '08:00') }}" required>
                             </div>
                         </div>
                         <div class="col-md-6">
                             <div class="mb-3">
                                 <label for="shift-assignment-end-time" class="form-label">End Time</label>
-                                <input type="time" class="form-control" id="shift-assignment-end-time" name="end_time" value="{{ old('end_time') }}" required>
+                                <input type="time" class="form-control" id="shift-assignment-end-time" name="end_time" value="{{ old('end_time', '16:00') }}" required>
                             </div>
                         </div>
                     </div>
@@ -1376,6 +1589,150 @@ setTimeout(function() {
                     <button type="submit" class="btn btn-primary">Assign Employee</button>
                 </div>
             </form>
+        </div>
+    </div>
+</div>
+
+<!-- View Shift Type Details Modal -->
+<div class="working-modal" id="view-shift-type-modal" style="display: none;">
+    <div class="working-modal-backdrop" onclick="closeWorkingModal('view-shift-type-modal')"></div>
+    <div class="working-modal-dialog">
+        <div class="working-modal-content">
+            <div class="working-modal-header">
+                <h5 class="working-modal-title">Shift Type Details</h5>
+                <button type="button" class="working-modal-close" onclick="closeWorkingModal('view-shift-type-modal')">&times;</button>
+            </div>
+            <div class="working-modal-body">
+                <table class="table table-borderless">
+                    <tr>
+                        <th width="30%">Name:</th>
+                        <td id="view-shift-type-name"></td>
+                    </tr>
+                    <tr>
+                        <th>Code:</th>
+                        <td id="view-shift-type-code"></td>
+                    </tr>
+                    <tr>
+                        <th>Start Time:</th>
+                        <td id="view-shift-type-start-time"></td>
+                    </tr>
+                    <tr>
+                        <th>End Time:</th>
+                        <td id="view-shift-type-end-time"></td>
+                    </tr>
+                    <tr>
+                        <th>Duration:</th>
+                        <td id="view-shift-type-duration"></td>
+                    </tr>
+                    <tr>
+                        <th>Break Duration:</th>
+                        <td id="view-shift-type-break"></td>
+                    </tr>
+                    <tr>
+                        <th>Status:</th>
+                        <td id="view-shift-type-status"></td>
+                    </tr>
+                </table>
+            </div>
+            <div class="working-modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeWorkingModal('view-shift-type-modal')">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- View Shift Assignment Details Modal -->
+<div class="working-modal" id="view-shift-assignment-modal" style="display: none;">
+    <div class="working-modal-backdrop" onclick="closeWorkingModal('view-shift-assignment-modal')"></div>
+    <div class="working-modal-dialog">
+        <div class="working-modal-content">
+            <div class="working-modal-header">
+                <h5 class="working-modal-title">Shift Assignment Details</h5>
+                <button type="button" class="working-modal-close" onclick="closeWorkingModal('view-shift-assignment-modal')">&times;</button>
+            </div>
+            <div class="working-modal-body">
+                <table class="table table-borderless">
+                    <tr>
+                        <th width="30%">Employee:</th>
+                        <td id="view-shift-employee-name"></td>
+                    </tr>
+                    <tr>
+                        <th>Shift Type:</th>
+                        <td id="view-shift-type-name-assignment"></td>
+                    </tr>
+                    <tr>
+                        <th>Date:</th>
+                        <td id="view-shift-date"></td>
+                    </tr>
+                    <tr>
+                        <th>Time:</th>
+                        <td id="view-shift-time-range"></td>
+                    </tr>
+                    <tr>
+                        <th>Location:</th>
+                        <td id="view-shift-location"></td>
+                    </tr>
+                    <tr>
+                        <th>Status:</th>
+                        <td id="view-shift-status"></td>
+                    </tr>
+                    <tr>
+                        <th>Notes:</th>
+                        <td id="view-shift-notes"></td>
+                    </tr>
+                </table>
+            </div>
+            <div class="working-modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeWorkingModal('view-shift-assignment-modal')">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- View Shift Request Details Modal -->
+<div class="working-modal" id="view-shift-request-modal" style="display: none;">
+    <div class="working-modal-backdrop" onclick="closeWorkingModal('view-shift-request-modal')"></div>
+    <div class="working-modal-dialog">
+        <div class="working-modal-content">
+            <div class="working-modal-header">
+                <h5 class="working-modal-title">Shift Request Details</h5>
+                <button type="button" class="working-modal-close" onclick="closeWorkingModal('view-shift-request-modal')">&times;</button>
+            </div>
+            <div class="working-modal-body">
+                <table class="table table-borderless">
+                    <tr>
+                        <th width="30%">Employee:</th>
+                        <td id="view-request-employee-name"></td>
+                    </tr>
+                    <tr>
+                        <th>Shift Type:</th>
+                        <td id="view-request-shift-type"></td>
+                    </tr>
+                    <tr>
+                        <th>Date:</th>
+                        <td id="view-request-date"></td>
+                    </tr>
+                    <tr>
+                        <th>Time:</th>
+                        <td id="view-request-time"></td>
+                    </tr>
+                    <tr>
+                        <th>Location:</th>
+                        <td id="view-request-location"></td>
+                    </tr>
+                    <tr>
+                        <th>Status:</th>
+                        <td id="view-request-status"></td>
+                    </tr>
+                    <tr>
+                        <th>Notes:</th>
+                        <td id="view-request-notes"></td>
+                    </tr>
+                </table>
+            </div>
+            <div class="working-modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeWorkingModal('view-shift-request-modal')">Close</button>
+            </div>
         </div>
     </div>
 </div>
@@ -1462,14 +1819,14 @@ setTimeout(function() {
                     <div class="row">
                         <div class="col-md-6">
                             <div class="mb-3">
-                                <label for="start_time" class="form-label">Start Time</label>
-                                <input type="time" class="form-control" name="start_time" value="08:00" required>
+                                <label for="shift-request-start-time" class="form-label">Start Time</label>
+                                <input type="time" class="form-control" id="shift-request-start-time" name="start_time" value="08:00" required>
                             </div>
                         </div>
                         <div class="col-md-6">
                             <div class="mb-3">
-                                <label for="end_time" class="form-label">End Time</label>
-                                <input type="time" class="form-control" name="end_time" value="16:00" required>
+                                <label for="shift-request-end-time" class="form-label">End Time</label>
+                                <input type="time" class="form-control" id="shift-request-end-time" name="end_time" value="16:00" required>
                             </div>
                         </div>
                     </div>
@@ -2069,11 +2426,7 @@ function initializeShiftDropdowns() {
 
 // REMOVED - Session edit handling moved to main script block
 
-// Open create shift modal with date - using global function
-function openCreateShiftModal(date) {
-    document.getElementById('shift-assignment-date').value = date;
-    openWorkingModal('create-shift-modal');
-}
+// Duplicate function removed - using the one defined in main script section
 
 // Old edit shift function removed - replaced with working version below
 

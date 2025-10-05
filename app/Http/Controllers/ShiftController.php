@@ -12,9 +12,11 @@ use App\Models\ShiftType;
 use App\Models\Shift;
 use App\Models\Employee;
 use App\Models\ShiftRequest;
+use App\Traits\DatabaseConnectionTrait;
 
 class ShiftController extends Controller
 {
+    use DatabaseConnectionTrait;
     public function index()
     {
         try {
@@ -36,26 +38,35 @@ class ShiftController extends Controller
             // Get employees with guaranteed fallback
             $employees = collect();
             
-            // Always try PDO first for reliability
+            // Get employees - try Eloquent first, then PDO fallback
             try {
-                $pdo = new \PDO('mysql:host=localhost;dbname=hr3systemdb', 'root', '');
-                $pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
-                
-                $stmt = $pdo->query("SELECT id, first_name, last_name FROM employees WHERE status = 'active' ORDER BY first_name");
-                $employeeData = $stmt->fetchAll(\PDO::FETCH_OBJ);
-                $employees = collect($employeeData);
-                Log::info('Loaded ' . $employees->count() . ' employees via PDO');
-                
-                // If no employees found, create sample ones
-                if ($employees->count() == 0) {
-                    Log::info('No employees found, creating sample employees...');
+                $employees = Employee::where('status', 'active')->orderBy('first_name')->get();
+                Log::info('Loaded ' . $employees->count() . ' employees via Eloquent');
+            } catch (\Exception $e) {
+                Log::info('Eloquent failed, trying PDO for employees');
+                try {
+                    $pdo = $this->getPDOConnection();
+                    
+                    $stmt = $pdo->query("SELECT id, first_name, last_name FROM employees WHERE status = 'active' ORDER BY first_name");
+                    $employeeData = $stmt->fetchAll(\PDO::FETCH_OBJ);
+                    $employees = collect($employeeData);
+                    Log::info('Loaded ' . $employees->count() . ' employees via PDO');
+                } catch (\Exception $e2) {
+                    Log::error('Both Eloquent and PDO failed for employees: ' . $e2->getMessage());
+                    $employees = collect();
+                }
+            }
+            
+            // Only create sample employees if absolutely none exist
+            if ($employees->isEmpty()) {
+                Log::info('No employees found, creating minimal sample data...');
+                try {
+                    $pdo = $this->getPDOConnection();
                     
                     $sampleEmployees = [
                         ['John', 'Doe'],
                         ['Jane', 'Smith'], 
-                        ['Mike', 'Johnson'],
-                        ['Sarah', 'Wilson'],
-                        ['David', 'Brown']
+                        ['Mike', 'Johnson']
                     ];
                     
                     foreach ($sampleEmployees as $emp) {
@@ -66,19 +77,11 @@ class ShiftController extends Controller
                     $stmt = $pdo->query("SELECT id, first_name, last_name FROM employees WHERE status = 'active' ORDER BY first_name");
                     $employeeData = $stmt->fetchAll(\PDO::FETCH_OBJ);
                     $employees = collect($employeeData);
-                    Log::info('After creating samples: ' . $employees->count() . ' employees');
+                    Log::info('Created and loaded ' . $employees->count() . ' sample employees');
+                } catch (\Exception $e) {
+                    Log::error('Failed to create sample employees: ' . $e->getMessage());
+                    $employees = collect();
                 }
-                
-            } catch (\Exception $e) {
-                Log::error('PDO employee query failed: ' . $e->getMessage());
-                
-                // Last resort: create static collection
-                $employees = collect([
-                    (object)['id' => 1, 'first_name' => 'John', 'last_name' => 'Doe'],
-                    (object)['id' => 2, 'first_name' => 'Jane', 'last_name' => 'Smith'],
-                    (object)['id' => 3, 'first_name' => 'Mike', 'last_name' => 'Johnson']
-                ]);
-                Log::info('Using static employee collection: ' . $employees->count() . ' employees');
             }
 
             // Get current date and handle month parameter
@@ -97,20 +100,39 @@ class ShiftController extends Controller
             $calendarShifts = [];
             
             try {
-                // Get shifts with relationships for the specified month
+                // Get shifts with relationships for the specified month - ensure no duplicates
                 $shifts = Shift::with(['employee', 'shiftType'])
                     ->whereMonth('shift_date', $currentDate->month)
                     ->whereYear('shift_date', $currentDate->year)
+                    ->where('id', '>', 0) // Exclude any invalid IDs
                     ->orderBy('shift_date')
                     ->orderBy('start_time')
                     ->get();
                 
-                // Group shifts by date for calendar display
-                $calendarShifts = $shifts->groupBy(function ($shift) {
-                    return $shift->shift_date;
-                })->map(function ($dayShifts) {
-                    return $dayShifts->map(function ($shift) {
-                        return [
+                \Log::info('Raw shifts loaded: ' . $shifts->count());
+                
+                // Group shifts by date for calendar display - prevent duplicates
+                $calendarShifts = [];
+                foreach ($shifts as $shift) {
+                    $dateKey = $shift->shift_date instanceof Carbon ? $shift->shift_date->format('Y-m-d') : $shift->shift_date;
+                    
+                    if (!isset($calendarShifts[$dateKey])) {
+                        $calendarShifts[$dateKey] = [];
+                    }
+                    
+                    // Check for duplicate shift on same date for same employee
+                    $isDuplicate = false;
+                    foreach ($calendarShifts[$dateKey] as $existingShift) {
+                        if ($existingShift['employee_id'] == $shift->employee_id && 
+                            $existingShift['shift_type_id'] == $shift->shift_type_id &&
+                            $existingShift['start_time'] == $shift->start_time) {
+                            $isDuplicate = true;
+                            break;
+                        }
+                    }
+                    
+                    if (!$isDuplicate) {
+                        $calendarShifts[$dateKey][] = [
                             'id' => $shift->id,
                             'employee_id' => $shift->employee_id,
                             'shift_type_id' => $shift->shift_type_id,
@@ -122,16 +144,16 @@ class ShiftController extends Controller
                             'location' => $shift->location ?? 'Main Office',
                             'notes' => $shift->notes,
                             'status' => $shift->status,
-                            'shift_date' => $shift->shift_date
+                            'shift_date' => $dateKey
                         ];
-                    })->toArray();
-                })->toArray();
+                    }
+                }
                 
-                \Log::info('Loaded ' . $shifts->count() . ' shifts for calendar display');
+                \Log::info('Calendar shifts processed: ' . array_sum(array_map('count', $calendarShifts)) . ' total shifts across ' . count($calendarShifts) . ' days');
                 
             } catch (\Exception $e) {
                 \Log::warning('Failed to load shifts with Eloquent: ' . $e->getMessage());
-                $calendarShifts = $this->getCalendarShifts($currentDate);
+                $calendarShifts = $this->getCalendarShiftsFallback($currentDate);
             }
 
             // Get shift requests with fallback
@@ -155,28 +177,31 @@ class ShiftController extends Controller
             // Calculate statistics
             $weeklyHours = 0;
             try {
-                // Calculate weekly hours from current week shifts
+                // Calculate weekly hours from current week shifts in calendar data
                 $startOfWeek = Carbon::now()->startOfWeek();
                 $endOfWeek = Carbon::now()->endOfWeek();
-                $weeklyHours = $shifts->filter(function ($shift) use ($startOfWeek, $endOfWeek) {
-                    $shiftDate = is_string($shift->shift_date) ? Carbon::parse($shift->shift_date) : $shift->shift_date;
-                    return $shiftDate->between($startOfWeek, $endOfWeek);
-                })->sum(function ($shift) {
-                    // Calculate hours from start and end time
-                    if ($shift->start_time && $shift->end_time) {
-                        $start = Carbon::parse($shift->start_time);
-                        $end = Carbon::parse($shift->end_time);
-                        return $end->diffInHours($start);
+                
+                foreach ($calendarShifts as $date => $dayShifts) {
+                    $shiftDate = Carbon::parse($date);
+                    if ($shiftDate->between($startOfWeek, $endOfWeek)) {
+                        foreach ($dayShifts as $shift) {
+                            if (isset($shift['start_time']) && isset($shift['end_time'])) {
+                                $start = Carbon::parse($shift['start_time']);
+                                $end = Carbon::parse($shift['end_time']);
+                                $weeklyHours += $end->diffInHours($start);
+                            } else {
+                                $weeklyHours += 8; // Default 8 hours
+                            }
+                        }
                     }
-                    return 8; // Default 8 hours
-                });
+                }
             } catch (\Exception $e) {
                 $weeklyHours = 40; // Default fallback
             }
             
             $stats = [
                 'total_shift_types' => $shiftTypes->count(),
-                'active_shifts' => $shifts->count(),
+                'active_shifts' => is_object($shifts) ? $shifts->count() : array_sum(array_map('count', $calendarShifts)),
                 'pending_requests' => $shiftRequests->where('status', 'pending')->count(),
                 'total_employees' => $employees->count(),
                 'weekly_hours' => $weeklyHours
@@ -189,17 +214,25 @@ class ShiftController extends Controller
             \Log::info('=== SHIFT SCHEDULE VIEW DATA ===');
             \Log::info('Shift Types count: ' . $shiftTypes->count());
             \Log::info('Employees count: ' . $employees->count());
-            \Log::info('Shifts count: ' . $shifts->count());
+            \Log::info('Calendar Shifts count: ' . array_sum(array_map('count', $calendarShifts)));
             \Log::info('Shift Requests count: ' . $shiftRequests->count());
             
             if ($employees->count() > 0) {
                 \Log::info('First employee: ' . json_encode($employees->first()));
             }
             
+            // Convert calendar shifts back to a collection for consistency
+            $shiftsCollection = collect();
+            foreach ($calendarShifts as $date => $dayShifts) {
+                foreach ($dayShifts as $shift) {
+                    $shiftsCollection->push((object)$shift);
+                }
+            }
+
             return view('shift_schedule_management', compact(
                 'shiftTypes', 
                 'employees', 
-                'shifts', 
+                'shiftsCollection', 
                 'shiftRequests', 
                 'calendarShifts', 
                 'displayMonth',
@@ -213,14 +246,16 @@ class ShiftController extends Controller
             return view('shift_schedule_management', [
                 'shiftTypes' => collect(),
                 'employees' => collect(),
-                'shifts' => collect(),
+                'shiftsCollection' => collect(),
                 'shiftRequests' => collect(),
-                'calendarData' => [],
+                'calendarShifts' => [],
+                'displayMonth' => Carbon::now(),
                 'stats' => [
                     'total_shift_types' => 0,
                     'active_shifts' => 0,
                     'pending_requests' => 0,
-                    'total_employees' => 0
+                    'total_employees' => 0,
+                    'weekly_hours' => 0
                 ]
             ]);
         }
@@ -229,8 +264,7 @@ class ShiftController extends Controller
     private function getShiftTypesFallback()
     {
         try {
-            $pdo = new \PDO('mysql:host=localhost;dbname=hr3systemdb', 'root', '');
-            $pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
+            $pdo = $this->getPDOConnection();
             
             $stmt = $pdo->query("SELECT * FROM shift_types WHERE is_active = 1 ORDER BY name");
             $results = $stmt->fetchAll(\PDO::FETCH_ASSOC);
@@ -244,8 +278,7 @@ class ShiftController extends Controller
     private function getShiftRequestsFallback()
     {
         try {
-            $pdo = new \PDO('mysql:host=localhost;dbname=hr3systemdb', 'root', '');
-            $pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
+            $pdo = $this->getPDOConnection();
             
             $stmt = $pdo->query("
                 SELECT sr.*, 
@@ -345,8 +378,7 @@ class ShiftController extends Controller
         ];
 
         try {
-            $pdo = new \PDO('mysql:host=localhost;dbname=hr3systemdb', 'root', '');
-            $pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
+            $pdo = $this->getPDOConnection();
             
             // Create table if it doesn't exist
             $pdo->exec("
@@ -389,8 +421,7 @@ class ShiftController extends Controller
     private function createSampleShiftRequests()
     {
         try {
-            $pdo = new \PDO('mysql:host=localhost;dbname=hr3systemdb', 'root', '');
-            $pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
+            $pdo = $this->getPDOConnection();
             
             // Check if shift_requests table exists
             $stmt = $pdo->query("SHOW TABLES LIKE 'shift_requests'");
@@ -445,7 +476,7 @@ class ShiftController extends Controller
         }
     }
 
-    private function getCalendarShifts($date)
+    private function getCalendarShiftsFallback($date)
     {
         $startOfMonth = $date->copy()->startOfMonth();
         $endOfMonth = $date->copy()->endOfMonth();
@@ -504,8 +535,7 @@ class ShiftController extends Controller
         }
 
         try {
-            $pdo = new \PDO('mysql:host=localhost;dbname=hr3systemdb', 'root', '');
-            $pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
+            $pdo = $this->getPDOConnection();
             
             $stmt = $pdo->prepare("
                 INSERT INTO shift_types (name, code, default_start_time, default_end_time, break_duration, color_code, is_active) 
@@ -550,8 +580,7 @@ class ShiftController extends Controller
         }
 
         try {
-            $pdo = new \PDO('mysql:host=localhost;dbname=hr3systemdb', 'root', '');
-            $pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
+            $pdo = $this->getPDOConnection();
             
             $stmt = $pdo->prepare("
                 UPDATE shift_types 
@@ -581,8 +610,7 @@ class ShiftController extends Controller
     public function deleteShiftTypeWeb($id)
     {
         try {
-            $pdo = new \PDO('mysql:host=localhost;dbname=hr3systemdb', 'root', '');
-            $pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
+            $pdo = $this->getPDOConnection();
             $stmt = $pdo->prepare("UPDATE shift_types SET is_active = 0, updated_at = NOW() WHERE id = ?");
             $stmt->execute([$id]);
             
@@ -603,8 +631,46 @@ class ShiftController extends Controller
     // Store shift assignment via web form
     public function storeShiftWeb(Request $request)
     {
-        \Log::info('=== SHIFT ASSIGNMENT SUBMISSION ===');
+        \Log::info('=== SHIFT ASSIGNMENT SUBMISSION (storeShiftWeb method called) ===');
         \Log::info('Request data: ' . json_encode($request->all()));
+        \Log::info('Start time received: ' . $request->start_time);
+        \Log::info('End time received: ' . $request->end_time);
+        \Log::info('Request URL: ' . $request->url());
+        \Log::info('Request method: ' . $request->method());
+        
+        // Convert time format if needed - simplified approach
+        $startTime = $request->start_time;
+        $endTime = $request->end_time;
+        
+        // Simple time format conversion
+        if (!empty($startTime)) {
+            if (strpos($startTime, 'AM') !== false || strpos($startTime, 'PM') !== false) {
+                $startTime = date('H:i', strtotime($startTime));
+            } elseif (preg_match('/^\d{1,2}:\d{2}$/', $startTime)) {
+                // Already in correct format, just ensure 2-digit hours
+                $parts = explode(':', $startTime);
+                $startTime = str_pad($parts[0], 2, '0', STR_PAD_LEFT) . ':' . $parts[1];
+            }
+        }
+        
+        if (!empty($endTime)) {
+            if (strpos($endTime, 'AM') !== false || strpos($endTime, 'PM') !== false) {
+                $endTime = date('H:i', strtotime($endTime));
+            } elseif (preg_match('/^\d{1,2}:\d{2}$/', $endTime)) {
+                // Already in correct format, just ensure 2-digit hours
+                $parts = explode(':', $endTime);
+                $endTime = str_pad($parts[0], 2, '0', STR_PAD_LEFT) . ':' . $parts[1];
+            }
+        }
+        
+        \Log::info('Converted start time: ' . $startTime);
+        \Log::info('Converted end time: ' . $endTime);
+        
+        // Update request with converted times
+        $request->merge([
+            'start_time' => $startTime,
+            'end_time' => $endTime
+        ]);
         
         $validator = Validator::make($request->all(), [
             'employee_id' => 'required|integer',
@@ -614,7 +680,22 @@ class ShiftController extends Controller
             'end_time' => 'required',
             'location' => 'nullable|string|max:255',
             'notes' => 'nullable|string|max:1000'
+        ], [
+            'shift_date.date' => 'Please provide a valid date.',
+            'start_time.required' => 'The start time is required.',
+            'end_time.required' => 'The end time is required.',
         ]);
+        
+        // Additional validation after time conversion - simplified
+        if (!$validator->fails()) {
+            // Just ensure we have some time value
+            if (empty($startTime) || $startTime === '00:00') {
+                $validator->errors()->add('start_time', 'Please provide a valid start time.');
+            }
+            if (empty($endTime) || $endTime === '00:00') {
+                $validator->errors()->add('end_time', 'Please provide a valid end time.');
+            }
+        }
 
         if ($validator->fails()) {
             \Log::error('Shift assignment validation failed: ' . json_encode($validator->errors()));
@@ -654,7 +735,7 @@ class ShiftController extends Controller
                 \Log::warning('Eloquent shift creation failed: ' . $eloquentError->getMessage());
                 
                 // Fallback to direct PDO insertion
-                $pdo = new \PDO('mysql:host=localhost;dbname=hr3systemdb', 'root', '');
+                $pdo = $this->getPDOConnection();
                 $pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
                 
                 $stmt = $pdo->prepare("
@@ -719,7 +800,7 @@ class ShiftController extends Controller
                 \Log::warning('Eloquent shift deletion failed: ' . $eloquentError->getMessage());
                 
                 // Fallback to direct PDO deletion
-                $pdo = new \PDO('mysql:host=localhost;dbname=hr3systemdb', 'root', '');
+                $pdo = $this->getPDOConnection();
                 $pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
                 
                 // Get shift info before deletion
@@ -759,15 +840,40 @@ class ShiftController extends Controller
     // Store shift request via web form
     public function storeShiftRequestWeb(Request $request)
     {
+        \Log::info('=== SHIFT REQUEST SUBMISSION ===');
+        \Log::info('Request data: ' . json_encode($request->all()));
+        
+        // Convert time format if needed
+        $startTime = $request->start_time;
+        $endTime = $request->end_time;
+        
+        // Handle potential 12-hour format conversion
+        if (strpos($startTime, 'AM') !== false || strpos($startTime, 'PM') !== false) {
+            $startTime = date('H:i', strtotime($startTime));
+        }
+        if (strpos($endTime, 'AM') !== false || strpos($endTime, 'PM') !== false) {
+            $endTime = date('H:i', strtotime($endTime));
+        }
+        
+        // Update request with converted times
+        $request->merge([
+            'start_time' => $startTime,
+            'end_time' => $endTime
+        ]);
+        
         $validator = Validator::make($request->all(), [
             'employee_id' => 'required|integer',
             'shift_type_id' => 'required|integer',
-            'shift_date' => 'required|date|after_or_equal:today',
+            'shift_date' => 'required|date',
             'start_time' => 'required|date_format:H:i',
             'end_time' => 'required|date_format:H:i',
             'hours' => 'required|numeric|min:0.5|max:24',
             'location' => 'required|string|max:255',
             'notes' => 'nullable|string|max:1000'
+        ], [
+            'shift_date.date' => 'Please provide a valid date.',
+            'start_time.date_format' => 'The start time must be in HH:MM format (e.g., 08:00).',
+            'end_time.date_format' => 'The end time must be in HH:MM format (e.g., 16:00).',
         ]);
 
         if ($validator->fails()) {
@@ -1089,11 +1195,15 @@ class ShiftController extends Controller
         try {
             $validator = Validator::make($request->all(), [
                 'shift_date' => 'required|date',
-                'start_time' => 'required',
-                'end_time' => 'required',
+                'start_time' => 'required|date_format:H:i',
+                'end_time' => 'required|date_format:H:i',
                 'status' => 'required|in:scheduled,in_progress,completed,cancelled',
                 'location' => 'nullable|string|max:255',
                 'notes' => 'nullable|string|max:1000'
+            ], [
+                'shift_date.date' => 'Please provide a valid date.',
+                'start_time.date_format' => 'The start time must be in HH:MM format (e.g., 08:00).',
+                'end_time.date_format' => 'The end time must be in HH:MM format (e.g., 16:00).',
             ]);
 
             if ($validator->fails()) {

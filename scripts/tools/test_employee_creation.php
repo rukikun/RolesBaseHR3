@@ -18,7 +18,7 @@ try {
     echo "=====================================\n\n";
     
     // Set database connection
-    Config::set('database.connections.mysql.database', 'hr3systemdb');
+    Config::set('database.connections.mysql.database', 'hr3_hr3systemdb');
     DB::purge('mysql');
     
     // Test 1: Check if employees table exists

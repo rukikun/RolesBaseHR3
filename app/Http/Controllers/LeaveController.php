@@ -1,19 +1,22 @@
 <?php
 
 namespace App\Http\Controllers;
-
 use App\Models\LeaveRequest;
 use App\Models\LeaveType;
 use App\Models\LeaveBalance;
 use App\Models\Employee;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Carbon\Carbon;
+use App\Traits\DatabaseConnectionTrait;
 
 class LeaveController extends Controller
 {
+    use DatabaseConnectionTrait;
+
     public function index()
     {
         try {
@@ -45,7 +48,7 @@ class LeaveController extends Controller
                 
                 // Fallback to raw PDO queries with table creation
                 try {
-                    $pdo = new \PDO('mysql:host=localhost;dbname=hr3systemdb', 'root', '');
+                    $pdo = $this->getPDOConnection();
                     $pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
                     
                     // Auto-create leave_types table if not exists
@@ -373,8 +376,7 @@ class LeaveController extends Controller
 
             // Direct PDO insertion with fallback
             try {
-                $pdo = new \PDO('mysql:host=localhost;dbname=hr3systemdb', 'root', '');
-                $pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
+                $pdo = $this->getPDOConnection();
                 
                 $stmt = $pdo->prepare("INSERT INTO leave_requests (employee_id, leave_type_id, start_date, end_date, days_requested, reason, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 'pending', NOW(), NOW())");
                 $stmt->execute([
@@ -434,8 +436,7 @@ class LeaveController extends Controller
         try {
             // Direct PDO insertion with fallback
             try {
-                $pdo = new \PDO('mysql:host=localhost;dbname=hr3systemdb', 'root', '');
-                $pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
+                $pdo = $this->getPDOConnection();
                 
                 $stmt = $pdo->prepare("INSERT INTO leave_types (name, code, description, max_days_per_year, carry_forward, requires_approval, is_active, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 1, NOW(), NOW())");
                 $stmt->execute([
@@ -479,8 +480,7 @@ class LeaveController extends Controller
         try {
             // Direct PDO deletion with fallback
             try {
-                $pdo = new \PDO('mysql:host=localhost;dbname=hr3systemdb', 'root', '');
-                $pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
+                $pdo = $this->getPDOConnection();
                 
                 $stmt = $pdo->prepare("DELETE FROM leave_requests WHERE id = ?");
                 $stmt->execute([$id]);
@@ -507,8 +507,7 @@ class LeaveController extends Controller
         try {
             // Direct PDO update with fallback
             try {
-                $pdo = new \PDO('mysql:host=localhost;dbname=hr3systemdb', 'root', '');
-                $pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
+                $pdo = $this->getPDOConnection();
                 
                 $stmt = $pdo->prepare("UPDATE leave_requests SET status = 'approved', approved_at = NOW(), updated_at = NOW() WHERE id = ?");
                 $stmt->execute([$id]);
@@ -541,8 +540,7 @@ class LeaveController extends Controller
         try {
             // Direct PDO update with fallback
             try {
-                $pdo = new \PDO('mysql:host=localhost;dbname=hr3systemdb', 'root', '');
-                $pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
+                $pdo = $this->getPDOConnection();
                 
                 $stmt = $pdo->prepare("UPDATE leave_requests SET status = 'rejected', updated_at = NOW() WHERE id = ?");
                 $stmt->execute([$id]);
@@ -574,8 +572,7 @@ class LeaveController extends Controller
         try {
             // Direct PDO deletion with fallback
             try {
-                $pdo = new \PDO('mysql:host=localhost;dbname=hr3systemdb', 'root', '');
-                $pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
+                $pdo = $this->getPDOConnection();
                 
                 $stmt = $pdo->prepare("DELETE FROM leave_types WHERE id = ?");
                 $stmt->execute([$id]);

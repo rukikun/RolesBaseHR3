@@ -5,10 +5,11 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Carbon\Carbon;
+use App\Traits\DatabaseConnectionTrait;
 
 class Attendance extends Model
 {
-    use HasFactory;
+    use HasFactory, DatabaseConnectionTrait;
 
     protected $table = 'attendances';
     
@@ -21,10 +22,10 @@ class Attendance extends Model
         'break_end_time',
         'total_hours',
         'overtime_hours',
-        'status',
         'location',
         'ip_address',
-        'notes'
+        'notes',
+        'status'
     ];
 
     protected $casts = [

@@ -3,7 +3,7 @@
 
 try {
     // Connect to database
-    $pdo = new PDO('mysql:host=localhost;dbname=hr3systemdb', 'root', '');
+    $pdo = new PDO('mysql:host=localhost;dbname=hr3_hr3systemdb', 'root', '');
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     
     echo "✅ Connected to database\n";
@@ -140,7 +140,7 @@ try {
     echo "❌ Database error: " . $e->getMessage() . "\n";
     echo "\nPlease ensure:\n";
     echo "1. XAMPP MySQL is running\n";
-    echo "2. Database 'hr3systemdb' exists\n";
+    echo "2. Database 'hr3_hr3systemdb' exists\n";
     echo "3. You have proper database permissions\n";
 }
 ?>

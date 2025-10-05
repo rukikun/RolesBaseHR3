@@ -124,9 +124,16 @@
         </thead>
         <tbody>
           @php
-            // Direct database connection for time entries (like leave_management.blade.php)
+            // Direct database connection for time entries using config
             try {
-                $pdo = new PDO('mysql:host=localhost;dbname=hr3systemdb', 'root', '');
+                $host = config('database.connections.mysql.host', '127.0.0.1');
+                $port = config('database.connections.mysql.port', '3306');
+                $database = config('database.connections.mysql.database', 'hr3_hr3systemdb');
+                $username = config('database.connections.mysql.username', 'root');
+                $password = config('database.connections.mysql.password', '');
+                
+                $dsn = "mysql:host={$host};port={$port};dbname={$database}";
+                $pdo = new PDO($dsn, $username, $password);
                 $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
                 
                 // Auto-create time_entries table if not exists

@@ -10,8 +10,12 @@ class AIGeneratedTimesheet extends Model
 {
     use HasFactory;
 
+    protected $table = 'ai_generated_timesheets';
+
     protected $fillable = [
         'employee_id',
+        'employee_name',
+        'department',
         'week_start_date',
         'weekly_data',
         'total_hours',
@@ -21,9 +25,6 @@ class AIGeneratedTimesheet extends Model
         'generated_at',
         'approved_by',
         'approved_at',
-        'rejected_by',
-        'rejected_at',
-        'rejection_reason',
         'notes'
     ];
 
@@ -33,13 +34,12 @@ class AIGeneratedTimesheet extends Model
         'week_start_date' => 'date',
         'generated_at' => 'datetime',
         'approved_at' => 'datetime',
-        'rejected_at' => 'datetime',
         'total_hours' => 'decimal:2',
         'overtime_hours' => 'decimal:2'
     ];
 
     /**
-     * Relationship with Employee
+     * Relationship to Employee model
      */
     public function employee()
     {
@@ -47,350 +47,11 @@ class AIGeneratedTimesheet extends Model
     }
 
     /**
-     * Relationship with approver
+     * Relationship to approver (Employee)
      */
     public function approver()
     {
         return $this->belongsTo(Employee::class, 'approved_by');
-    }
-
-    /**
-     * Scope for current week
-     */
-    public function scopeCurrentWeek($query)
-    {
-        $weekStart = Carbon::now()->startOfWeek(Carbon::MONDAY);
-        return $query->where('week_start_date', $weekStart->format('Y-m-d'));
-    }
-
-    /**
-     * Scope for pending status
-     */
-    public function scopePending($query)
-    {
-        return $query->where('status', 'pending');
-    }
-    /**
-     * Generate AI timesheet - Ultra simple version that always works
-     */
-    public static function generateForEmployee($employeeId, $weekStartDate = null)
-    {
-        // Always return success - no exceptions thrown
-        \Log::info('AI Timesheet - Simple generation for employee: ' . $employeeId);
-        
-        // Get employee safely
-        $employee = (object) [
-            'id' => $employeeId,
-            'first_name' => 'Employee',
-            'last_name' => '#' . $employeeId,
-            'department' => 'General'
-        ];
-        
-        try {
-            $realEmployee = Employee::find($employeeId);
-            if ($realEmployee) {
-                $employee = $realEmployee;
-            }
-        } catch (\Exception $e) {
-            // Ignore errors, use default
-        }
-
-        // Get ANY attendance records for this employee (not limited to current week)
-        $attendances = collect([]);
-        try {
-            $attendances = \DB::table('attendances')
-                ->where('employee_id', $employeeId)
-                ->orderBy('date', 'desc')
-                ->limit(10)
-                ->get();
-        } catch (\Exception $e) {
-            // Ignore database errors
-        }
-
-        // Create simple weekly data - always show current week
-        $weekStart = Carbon::now()->startOfWeek(Carbon::MONDAY);
-        $weeklyData = [];
-        $totalHours = 0;
-        $days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-
-        // Create attendance lookup
-        $attendanceByDate = [];
-        foreach ($attendances as $att) {
-            $attendanceByDate[$att->date] = $att;
-        }
-
-        foreach ($days as $index => $day) {
-            $currentDate = $weekStart->copy()->addDays($index);
-            $dateKey = $currentDate->format('Y-m-d');
-            $dateStr = $currentDate->format('m/d/y');
-            
-            // Check if we have attendance for this date
-            $attendance = $attendanceByDate[$dateKey] ?? null;
-            
-            if ($attendance && isset($attendance->clock_in_time) && isset($attendance->clock_out_time)) {
-                try {
-                    $clockIn = Carbon::parse($attendance->clock_in_time);
-                    $clockOut = Carbon::parse($attendance->clock_out_time);
-                    $hours = max(0, $clockOut->diffInHours($clockIn));
-                    $totalHours += $hours;
-                    
-                    $weeklyData[$day] = [
-                        'date' => $dateStr,
-                        'time_in' => $clockIn->format('g:i A'),
-                        'time_out' => $clockOut->format('g:i A'),
-                        'total_hours' => $hours . ' hrs.',
-                        'overtime' => $hours > 8 ? ($hours - 8) . ' hrs.' : '0 hrs.'
-                    ];
-                } catch (\Exception $e) {
-                    // If time parsing fails, show dashes
-                    $weeklyData[$day] = [
-                        'date' => $dateStr,
-                        'time_in' => '--',
-                        'time_out' => '--',
-                        'total_hours' => '--',
-                        'overtime' => '--'
-                    ];
-                }
-            } else {
-                // No attendance data
-                $weeklyData[$day] = [
-                    'date' => $dateStr,
-                    'time_in' => '--',
-                    'time_out' => '--',
-                    'total_hours' => '--',
-                    'overtime' => '--'
-                ];
-            }
-        }
-
-        // Simple insights
-        $daysWorked = 0;
-        foreach ($weeklyData as $data) {
-            if ($data['time_in'] !== '--') {
-                $daysWorked++;
-            }
-        }
-        
-        $insights = ["📋 Week view: {$daysWorked} days with attendance data"];
-        if ($totalHours > 0) {
-            $insights[] = "⏱️ Total hours: {$totalHours}";
-        }
-
-        // Always return valid object
-        return (object) [
-            'id' => 'ai-' . $employeeId . '-' . time(),
-            'employee_id' => $employeeId,
-            'employee' => $employee,
-            'week_start_date' => $weekStart,
-            'weekly_data' => $weeklyData,
-            'total_hours' => $totalHours,
-            'overtime_hours' => max(0, $totalHours - 40),
-            'ai_insights' => $insights,
-            'status' => 'generated',
-            'generated_at' => now()
-        ];
-    }
-
-    /**
-     * Calculate time variation based on attendance history
-     */
-    private static function calculateTimeVariation($attendanceHistory, $day)
-    {
-        // Analyze historical patterns for this day of week
-        $dayAttendances = $attendanceHistory->filter(function($attendance) use ($day) {
-            return Carbon::parse($attendance->date)->format('l') === $day;
-        });
-
-        if ($dayAttendances->isEmpty()) {
-            // Default variation: ±15 minutes
-            return [
-                'start' => rand(-15, 15),
-                'end' => rand(-15, 15)
-            ];
-        }
-
-        // Calculate average variation from scheduled times
-        // This is a simplified version - in reality, you'd compare against scheduled shift times
-        return [
-            'start' => rand(-10, 10), // More accurate based on history
-            'end' => rand(-10, 10)
-        ];
-    }
-
-    /**
-     * Get employee's typical work pattern
-     */
-    private static function getEmployeePattern($employee, $attendanceHistory)
-    {
-        // Default patterns based on department or role
-        $patterns = [
-            'IT' => ['start_time' => '09:00:00', 'end_time' => '18:00:00'],
-            'Marketing' => ['start_time' => '08:30:00', 'end_time' => '17:30:00'],
-            'HR' => ['start_time' => '08:00:00', 'end_time' => '17:00:00'],
-            'Finance' => ['start_time' => '08:00:00', 'end_time' => '17:00:00'],
-            'Operations' => ['start_time' => '07:00:00', 'end_time' => '16:00:00']
-        ];
-
-        return $patterns[$employee->department] ?? $patterns['HR'];
-    }
-
-    /**
-     * Calculate work hours between two times
-     */
-    private static function calculateWorkHours($startTime, $endTime)
-    {
-        $start = Carbon::createFromFormat('H:i:s', $startTime);
-        $end = Carbon::createFromFormat('H:i:s', $endTime);
-        
-        if ($end->lt($start)) {
-            $end->addDay(); // Handle overnight shifts
-        }
-        
-        $totalMinutes = $end->diffInMinutes($start) - 60; // Subtract 1 hour break
-        return max(0, $totalMinutes / 60);
-    }
-
-    /**
-     * Add minutes to time string
-     */
-    private static function addMinutesToTime($timeStr, $minutes)
-    {
-        $time = Carbon::createFromFormat('H:i:s', $timeStr);
-        return $time->addMinutes($minutes)->format('H:i:s');
-    }
-
-    /**
-     * Format time in 12-hour format
-     */
-    private static function formatTime12Hour($timeStr)
-    {
-        return Carbon::createFromFormat('H:i:s', $timeStr)->format('h:i A');
-    }
-
-    /**
-     * Generate AI insights
-     */
-    private static function generateInsights($totalHours, $overtimeHours, $employee, $weeklyData)
-    {
-        $insights = [];
-        
-        // Count days with actual attendance data (not dashes)
-        $daysWorked = 0;
-        foreach ($weeklyData as $day => $data) {
-            if ($data['time_in'] !== '--' && $data['time_out'] !== '--') {
-                $daysWorked++;
-            }
-        }
-        
-        $insights[] = "📋 Full week view with " . $daysWorked . " day(s) of actual attendance records";
-        
-        if ($totalHours > 0) {
-            $insights[] = "⏱️ Total recorded hours: " . number_format($totalHours, 1) . " hours";
-        }
-        
-        if ($overtimeHours > 0) {
-            $insights[] = "⚠️ Overtime recorded: " . number_format($overtimeHours, 1) . " hours over 8hrs/day";
-        }
-        
-        if ($daysWorked < 5) {
-            $insights[] = "ℹ️ Partial attendance: " . $daysWorked . " day(s) with clock-in/out records out of 7 days shown";
-        }
-        
-        if ($daysWorked > 0) {
-            $insights[] = "📊 Average daily hours (worked days): " . number_format($totalHours / $daysWorked, 1) . " hours";
-        } else {
-            $insights[] = "ℹ️ No attendance records found for this week";
-        }
-        
-        // Check for consistent patterns (only if there are worked days)
-        if ($daysWorked > 1) {
-            $dailyHours = [];
-            foreach ($weeklyData as $day => $data) {
-                if ($data['time_in'] !== '--' && $data['time_out'] !== '--') {
-                    $hours = (float) str_replace(' hrs.', '', $data['total_hours']);
-                    $dailyHours[] = $hours;
-                }
-            }
-            
-            if (count($dailyHours) > 1) {
-                $variance = self::calculateVariance($dailyHours);
-                if ($variance < 0.5) {
-                    $insights[] = "✅ Consistent schedule pattern detected";
-                } else {
-                    $insights[] = "📈 Variable schedule detected - consider standardizing hours";
-                }
-            }
-        }
-        
-        // Department-specific insights
-        if ($employee->department === 'IT' && $overtimeHours > 5) {
-            $insights[] = "💻 High IT overtime - consider workload distribution";
-        }
-        
-        return $insights;
-    }
-
-    /**
-     * Calculate variance of an array
-     */
-    private static function calculateVariance($values)
-    {
-        if (empty($values) || count($values) < 2) {
-            return 0;
-        }
-        
-        $mean = array_sum($values) / count($values);
-        $variance = array_sum(array_map(function($x) use ($mean) {
-            return pow($x - $mean, 2);
-        }, $values)) / count($values);
-        
-        return sqrt($variance);
-    }
-
-    /**
-     * Add minutes to a time string
-     */
-    private static function addMinutesToTime($timeStr, $minutes)
-    {
-        try {
-            $time = Carbon::createFromFormat('H:i:s', $timeStr);
-            $time->addMinutes($minutes);
-            return $time->format('H:i:s');
-        } catch (\Exception $e) {
-            return $timeStr; // Return original if parsing fails
-        }
-    }
-
-    /**
-     * Calculate work hours between two times
-     */
-    private static function calculateWorkHours($startTime, $endTime)
-    {
-        try {
-            $start = Carbon::createFromFormat('H:i:s', $startTime);
-            $end = Carbon::createFromFormat('H:i:s', $endTime);
-            
-            // Handle overnight shifts
-            if ($end->lt($start)) {
-                $end->addDay();
-            }
-            
-            return $end->diffInMinutes($start) / 60;
-        } catch (\Exception $e) {
-            return 8; // Default 8 hours if calculation fails
-        }
-    }
-
-    /**
-     * Format time to 12-hour format
-     */
-    private static function formatTime12Hour($timeStr)
-    {
-        try {
-            return Carbon::createFromFormat('H:i:s', $timeStr)->format('h:i A');
-        } catch (\Exception $e) {
-            return $timeStr; // Return original if parsing fails
-        }
     }
 
     /**
@@ -419,67 +80,45 @@ class AIGeneratedTimesheet extends Model
     }
 
     /**
-     * Generate fallback timesheet when database table doesn't exist
+     * Get formatted weekly data
      */
-    public static function generateFallbackTimesheet($employee, $weekStart, $weeklyData = null, $totalHours = null, $overtimeHours = null, $insights = null)
+    public function getFormattedWeeklyDataAttribute()
     {
-        // If data is provided, use it; otherwise generate default data
-        if ($weeklyData === null) {
-            // Generate weekly data without saving to database
-            $weeklyData = [];
-            $totalHours = 0;
-            $overtimeHours = 0;
-            $days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'];
-
-        // Get employee pattern
-        $pattern = self::getEmployeePattern($employee, collect([]));
-
-        foreach ($days as $index => $day) {
-            $currentDate = $weekStart->copy()->addDays($index);
-            $dateStr = $currentDate->format('m/d/y');
-            
-            // Add realistic variations
-            $startVariation = rand(-15, 15);
-            $endVariation = rand(-15, 15);
-            
-            $actualStartTime = self::addMinutesToTime($pattern['start_time'], $startVariation);
-            $actualEndTime = self::addMinutesToTime($pattern['end_time'], $endVariation);
-
-            // Calculate hours
-            $dayHours = self::calculateWorkHours($actualStartTime, $actualEndTime);
-            $regularHours = min($dayHours, 8);
-            $dayOvertime = max(0, $dayHours - 8);
-            
-            $totalHours += $regularHours;
-            $overtimeHours += $dayOvertime;
-
-            $weeklyData[$day] = [
-                'date' => $dateStr,
-                'time_in' => self::formatTime12Hour($actualStartTime),
-                'break' => '12:00 PM - 1:00 PM',
-                'time_out' => self::formatTime12Hour($actualEndTime),
-                'total_hours' => number_format($regularHours, 1) . ' hrs.',
-                'overtime' => $dayOvertime > 0 ? number_format($dayOvertime, 1) . ' hrs.' : '0 hrs.'
-            ];
-        }
-        
-        // Generate AI insights if not provided
-        if ($insights === null) {
-            $insights = self::generateInsights($totalHours, $overtimeHours, $employee, $weeklyData);
+        if (!$this->weekly_data) {
+            return [];
         }
 
-        // Return a mock object with the same structure
-        return (object) [
-            'id' => 'fallback-' . $employee->id,
-            'employee_id' => $employee->id,
-            'employee' => $employee,
-            'week_start_date' => $weekStart,
-            'weekly_data' => $weeklyData,
-            'total_hours' => $totalHours,
-            'overtime_hours' => $overtimeHours,
-            'ai_insights' => $insights,
-            'generated_at' => now(),
-            'status' => 'generated'
-        ];
+        return $this->weekly_data;
+    }
+
+    /**
+     * Generate AI insights based on timesheet data
+     */
+    public static function generateInsights($totalHours, $overtimeHours, $employee = null, $weeklyData = [])
+    {
+        $insights = [];
+
+        // Total hours analysis
+        if ($totalHours >= 40) {
+            $insights[] = "✅ Full-time schedule maintained ({$totalHours} hours)";
+        } else {
+            $insights[] = "⚠️ Below full-time threshold ({$totalHours}/40 hours)";
+        }
+
+        // Overtime analysis
+        if ($overtimeHours > 0) {
+            $insights[] = "💰 Overtime detected: {$overtimeHours} hours";
+        }
+
+        // Schedule consistency
+        if (count($weeklyData) >= 5) {
+            $insights[] = "📅 Consistent 5-day work schedule";
+        }
+
+        // Average daily hours
+        $avgDaily = count($weeklyData) > 0 ? round($totalHours / count($weeklyData), 1) : 0;
+        $insights[] = "📊 Average daily hours: {$avgDaily}";
+
+        return $insights;
     }
 }

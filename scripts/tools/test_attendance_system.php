@@ -23,7 +23,7 @@ try {
     // Test 1: Database Connection and Table Existence
     echo "1. Testing Database Connection...\n";
     
-    $pdo = new PDO('mysql:host=127.0.0.1;dbname=hr3systemdb', 'root', '');
+    $pdo = new PDO('mysql:host=127.0.0.1;dbname=hr3_hr3systemdb', 'root', '');
     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
     
     // Check if attendances table exists
@@ -224,7 +224,7 @@ try {
     if ($e instanceof PDOException) {
         echo "\nDatabase connection failed. Please ensure:\n";
         echo "1. MySQL is running\n";
-        echo "2. Database 'hr3systemdb' exists\n";
+        echo "2. Database 'hr3_hr3systemdb' exists\n";
         echo "3. Database credentials are correct\n";
     }
 }

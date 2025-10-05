@@ -10,20 +10,26 @@ use Exception;
 class TimeEntry extends Model
 {
     use HasFactory;
-
+    
+    protected $table = 'time_entries';
+    
     protected $fillable = [
         'employee_id',
         'work_date',
         'clock_in_time',
         'clock_out_time',
-        'hours_worked',
+        'regular_hours',
         'overtime_hours',
-        'break_duration',
+        'break_hours',
+        'project',
         'description',
-        'notes',
+        'location',
+        'ip_address',
         'status',
         'approved_by',
-        'approved_at'
+        'approved_at',
+        'rejection_reason',
+        'notes'
     ];
 
     protected $casts = [

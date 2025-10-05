@@ -6,6 +6,13 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
+use App\Models\Employee;
+use App\Models\TimeEntry;
+use App\Models\LeaveRequest;
+use App\Models\Claim;
+use App\Models\Shift;
+use App\Models\ShiftType;
+use App\Models\Attendance;
 
 class HRDashboardController extends Controller
 {
@@ -39,16 +46,10 @@ class HRDashboardController extends Controller
     {
         try {
             return [
-                'total_employees' => DB::table('employees')->where('status', 'active')->count(),
-                'pending_timesheets' => DB::table('time_entries')
-                    ->where('status', 'pending')
-                    ->count(),
-                'leave_requests' => DB::table('leave_requests')
-                    ->where('status', 'pending')
-                    ->count(),
-                'active_claims' => DB::table('claims')
-                    ->whereIn('status', ['pending', 'approved'])
-                    ->count()
+                'total_employees' => Employee::where('status', 'active')->count(),
+                'pending_timesheets' => TimeEntry::where('status', 'pending')->count(),
+                'leave_requests' => LeaveRequest::where('status', 'pending')->count(),
+                'active_claims' => Claim::whereIn('status', ['pending', 'approved'])->count()
             ];
         } catch (\Exception $e) {
             return [
@@ -63,38 +64,36 @@ class HRDashboardController extends Controller
     private function getEmployeeStats()
     {
         try {
-            // Try to get present count from attendance logs first
+            // Try to get present count from attendance logs first using Eloquent
             $presentToday = 0;
             try {
-                $presentToday = DB::table('attendances')
-                    ->join('employees', 'attendances.employee_id', '=', 'employees.id')
-                    ->where('employees.status', 'active')
-                    ->whereDate('attendances.date', today())  // Use 'date' column
-                    ->whereNotNull('attendances.clock_in_time')
-                    ->distinct('employees.id')
+                $presentToday = Attendance::whereHas('employee', function($query) {
+                        $query->where('status', 'active');
+                    })
+                    ->whereDate('date', today())
+                    ->whereNotNull('clock_in_time')
+                    ->distinct('employee_id')
                     ->count();
             } catch (\Exception $e) {
                 // Fallback to time_entries if attendances doesn't exist
-                $presentToday = DB::table('time_entries')
-                    ->join('employees', 'time_entries.employee_id', '=', 'employees.id')
-                    ->where('employees.status', 'active')
-                    ->whereDate('time_entries.work_date', today())
-                    ->whereNotNull('time_entries.clock_in_time')
-                    ->distinct('employees.id')
+                $presentToday = TimeEntry::whereHas('employee', function($query) {
+                        $query->where('status', 'active');
+                    })
+                    ->whereDate('work_date', today())
+                    ->whereNotNull('clock_in_time')
+                    ->distinct('employee_id')
                     ->count();
             }
             
             return [
-                'active_employees' => DB::table('employees')
-                    ->where('status', 'active')
-                    ->count(),
+                'active_employees' => Employee::where('status', 'active')->count(),
                 'present_today' => $presentToday,
-                'on_leave_today' => DB::table('leave_requests')
-                    ->join('employees', 'leave_requests.employee_id', '=', 'employees.id')
-                    ->where('employees.status', 'active')
-                    ->where('leave_requests.status', 'approved')
-                    ->whereDate('leave_requests.start_date', '<=', today())
-                    ->whereDate('leave_requests.end_date', '>=', today())
+                'on_leave_today' => LeaveRequest::whereHas('employee', function($query) {
+                        $query->where('status', 'active');
+                    })
+                    ->where('status', 'approved')
+                    ->whereDate('start_date', '<=', today())
+                    ->whereDate('end_date', '>=', today())
                     ->count()
             ];
         } catch (\Exception $e) {
@@ -109,57 +108,63 @@ class HRDashboardController extends Controller
     private function getTodayShifts()
     {
         try {
-            // Get shift types with employee assignments
-            $shiftTypes = DB::table('shift_types')
-                ->where('is_active', 1)
+            // Get shift types with employee assignments using Eloquent
+            $shiftTypes = ShiftType::where('is_active', true)
                 ->orderBy('name')
                 ->get();
 
             $shifts = collect();
             
             foreach ($shiftTypes as $shiftType) {
-                // First try today's assignments - DO NOT remove duplicates to show all assignments
-                $employees = DB::table('shifts')
-                    ->join('employees', 'shifts.employee_id', '=', 'employees.id')
-                    ->where('shifts.shift_type_id', $shiftType->id)
-                    ->whereDate('shifts.shift_date', today())
-                    ->where('employees.status', 'active')
-                    ->select(
-                        'employees.id',
-                        'employees.first_name',
-                        'employees.last_name',
-                        'employees.position',
-                        'employees.profile_picture',
-                        'shifts.id as shift_id',
-                        'shifts.shift_date',
-                        'shifts.start_time',
-                        'shifts.end_time'
-                    )
-                    ->orderBy('shifts.start_time')
+                // First try today's assignments using Eloquent relationships
+                $todayShifts = Shift::with('employee')
+                    ->where('shift_type_id', $shiftType->id)
+                    ->whereDate('shift_date', today())
+                    ->whereHas('employee', function($query) {
+                        $query->where('status', 'active');
+                    })
+                    ->orderBy('start_time')
                     ->get();
+
+                $employees = $todayShifts->map(function($shift) {
+                    return (object) [
+                        'id' => $shift->employee->id,
+                        'first_name' => $shift->employee->first_name,
+                        'last_name' => $shift->employee->last_name,
+                        'position' => $shift->employee->position,
+                        'profile_picture' => $shift->employee->profile_picture,
+                        'shift_id' => $shift->id,
+                        'shift_date' => $shift->shift_date,
+                        'start_time' => $shift->start_time,
+                        'end_time' => $shift->end_time
+                    ];
+                });
                 
-                // If no employees found for today, get the most recent assignments for this specific shift type
+                // If no employees found for today, get the most recent assignments using Eloquent
                 if ($employees->isEmpty()) {
-                    $employees = DB::table('shifts')
-                        ->join('employees', 'shifts.employee_id', '=', 'employees.id')
-                        ->where('shifts.shift_type_id', $shiftType->id)
-                        ->where('employees.status', 'active')
-                        ->select(
-                            'employees.id',
-                            'employees.first_name',
-                            'employees.last_name',
-                            'employees.position',
-                            'employees.profile_picture',
-                            'shifts.id as shift_id',
-                            'shifts.shift_date',
-                            'shifts.start_time',
-                            'shifts.end_time'
-                        )
-                        ->orderBy('shifts.shift_date', 'desc')
-                        ->orderBy('shifts.start_time')
-                        ->limit(20) // Increased limit to show more assignments
+                    $recentShifts = Shift::with('employee')
+                        ->where('shift_type_id', $shiftType->id)
+                        ->whereHas('employee', function($query) {
+                            $query->where('status', 'active');
+                        })
+                        ->orderBy('shift_date', 'desc')
+                        ->orderBy('start_time')
+                        ->limit(20)
                         ->get();
-                        // DO NOT use unique('id') here - we want to show all shift assignments
+
+                    $employees = $recentShifts->map(function($shift) {
+                        return (object) [
+                            'id' => $shift->employee->id,
+                            'first_name' => $shift->employee->first_name,
+                            'last_name' => $shift->employee->last_name,
+                            'position' => $shift->employee->position,
+                            'profile_picture' => $shift->employee->profile_picture,
+                            'shift_id' => $shift->id,
+                            'shift_date' => $shift->shift_date,
+                            'start_time' => $shift->start_time,
+                            'end_time' => $shift->end_time
+                        ];
+                    });
                 }
 
                 try {
@@ -446,26 +451,26 @@ class HRDashboardController extends Controller
                 \Log::info('Total attendances in table: ' . $totalAttendances);
                 
                 if ($totalAttendances > 0) {
-                    // Get recent attendances with employee info
-                    // Based on your DB screenshot, the date column is 'date', not 'attendance_date'
-                    $attendances = DB::table('attendances')
-                        ->join('employees', 'attendances.employee_id', '=', 'employees.id')
-                        ->select(
-                            'attendances.id',
-                            'attendances.employee_id',
-                            'attendances.date as attendance_date',  // Use 'date' column from your DB
-                            'attendances.clock_in_time',
-                            'attendances.clock_out_time',
-                            'attendances.total_hours as stored_total_hours', // Use stored total_hours
-                            'attendances.status',
-                            'employees.first_name',
-                            'employees.last_name',
-                            'employees.profile_picture'
-                        )
-                        ->orderBy('attendances.date', 'desc')
-                        ->orderBy('attendances.id', 'desc')
+                    // Get recent attendances with employee info using Eloquent
+                    $attendances = Attendance::with('employee')
+                        ->orderBy('date', 'desc')
+                        ->orderBy('id', 'desc')
                         ->limit(3)
-                        ->get();
+                        ->get()
+                        ->map(function($attendance) {
+                            return (object) [
+                                'id' => $attendance->id,
+                                'employee_id' => $attendance->employee_id,
+                                'attendance_date' => $attendance->date,
+                                'clock_in_time' => $attendance->clock_in_time,
+                                'clock_out_time' => $attendance->clock_out_time,
+                                'stored_total_hours' => $attendance->total_hours,
+                                'status' => $attendance->status,
+                                'first_name' => $attendance->employee->first_name ?? 'Unknown',
+                                'last_name' => $attendance->employee->last_name ?? 'Employee',
+                                'profile_picture' => $attendance->employee->profile_picture ?? null
+                            ];
+                        });
                     
                     \Log::info('Found ' . $attendances->count() . ' attendance records with employee data');
                     

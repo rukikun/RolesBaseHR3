@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\Hash;
 
 // Database connection
 $host = 'localhost';
-$dbname = 'hr3systemdb';
+$dbname = 'hr3_hr3systemdb';
 $username = 'root';
 $password = '';
 

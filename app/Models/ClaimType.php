@@ -13,15 +13,20 @@ class ClaimType extends Model
 
     // Explicitly specify the database connection
     protected $connection = 'mysql';
+    protected $table = 'claim_types';
 
     protected $fillable = [
-        'id',
         'name',
         'code',
         'description',
         'max_amount',
         'requires_attachment',
         'auto_approve',
+        'auto_approve_limit',
+        'approval_levels',
+        'approval_rules',
+        'category',
+        'color_code',
         'is_active'
     ];
     
@@ -29,8 +34,9 @@ class ClaimType extends Model
     {
         parent::__construct($attributes);
         
-        // Ensure we're using hr3systemdb
-        Config::set('database.connections.mysql.database', 'hr3systemdb');
+        // Ensure we're using the correct database from config
+        $database = config('database.connections.mysql.database', 'hr3_hr3systemdb');
+        Config::set('database.connections.mysql.database', $database);
         DB::purge('mysql');
     }
 

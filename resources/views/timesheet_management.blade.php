@@ -1613,9 +1613,16 @@
                                 if(isset($employees) && $employees->count() > 0) {
                                     $displayEmployees = $employees;
                                 } else {
-                                    // Fallback: Direct database query
+                                    // Fallback: Direct database query using config
                                     try {
-                                        $pdo = new PDO('mysql:host=localhost;dbname=hr3systemdb', 'root', '');
+                                        $host = config('database.connections.mysql.host', '127.0.0.1');
+                                        $port = config('database.connections.mysql.port', '3306');
+                                        $database = config('database.connections.mysql.database', 'hr3_hr3systemdb');
+                                        $username = config('database.connections.mysql.username', 'root');
+                                        $password = config('database.connections.mysql.password', '');
+                                        
+                                        $dsn = "mysql:host={$host};port={$port};dbname={$database}";
+                                        $pdo = new PDO($dsn, $username, $password);
                                         $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
                                         $stmt = $pdo->query("SELECT id, first_name, last_name FROM employees WHERE status = 'active' ORDER BY first_name");
                                         $displayEmployees = collect($stmt->fetchAll(PDO::FETCH_OBJ));
@@ -1654,9 +1661,16 @@
                                 if(isset($shiftTypes) && $shiftTypes->count() > 0) {
                                     $displayShiftTypes = $shiftTypes;
                                 } else {
-                                    // Fallback: Direct database query
+                                    // Fallback: Direct database query using config
                                     try {
-                                        $pdo = new PDO('mysql:host=localhost;dbname=hr3systemdb', 'root', '');
+                                        $host = config('database.connections.mysql.host', '127.0.0.1');
+                                        $port = config('database.connections.mysql.port', '3306');
+                                        $database = config('database.connections.mysql.database', 'hr3_hr3systemdb');
+                                        $username = config('database.connections.mysql.username', 'root');
+                                        $password = config('database.connections.mysql.password', '');
+                                        
+                                        $dsn = "mysql:host={$host};port={$port};dbname={$database}";
+                                        $pdo = new PDO($dsn, $username, $password);
                                         $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
                                         $stmt = $pdo->query("SELECT id, name, default_start_time, default_end_time FROM shift_types WHERE status = 'active' ORDER BY name");
                                         $displayShiftTypes = collect($stmt->fetchAll(PDO::FETCH_OBJ));

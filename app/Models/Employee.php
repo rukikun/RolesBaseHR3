@@ -6,10 +6,11 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Contracts\Auth\Authenticatable as AuthenticatableContract;
+use App\Traits\DatabaseConnectionTrait;
 
 class Employee extends Authenticatable implements AuthenticatableContract
 {
-    use HasFactory;
+    use HasFactory, DatabaseConnectionTrait;
 
     protected $connection = 'mysql';
     protected $table = 'employees';
@@ -20,7 +21,8 @@ class Employee extends Authenticatable implements AuthenticatableContract
         
         // Ensure we're using the correct database
         try {
-            \Illuminate\Support\Facades\Config::set('database.connections.mysql.database', 'hr3systemdb');
+            $database = config('database.connections.mysql.database', 'hr3_hr3systemdb');
+            \Illuminate\Support\Facades\Config::set('database.connections.mysql.database', $database);
             \Illuminate\Support\Facades\DB::purge('mysql');
         } catch (\Exception $e) {
             // Ignore connection setup errors during model instantiation
@@ -28,6 +30,7 @@ class Employee extends Authenticatable implements AuthenticatableContract
     }
 
     protected $fillable = [
+        'employee_id',
         'first_name',
         'last_name',
         'email',
@@ -40,7 +43,14 @@ class Employee extends Authenticatable implements AuthenticatableContract
         'online_status',
         'last_activity',
         'password',
-        'profile_picture'
+        'profile_picture',
+        'address',
+        'date_of_birth',
+        'gender',
+        'emergency_contact_name',
+        'emergency_contact_phone',
+        'bank_account_number',
+        'tax_id'
     ];
 
     protected $hidden = [
@@ -52,6 +62,7 @@ class Employee extends Authenticatable implements AuthenticatableContract
         'salary' => 'decimal:2',
         'last_activity' => 'datetime',
         'hire_date' => 'date',
+        'date_of_birth' => 'date',
         'password' => 'hashed',
     ];
 

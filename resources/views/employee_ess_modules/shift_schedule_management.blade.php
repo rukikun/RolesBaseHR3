@@ -285,7 +285,14 @@
                 } catch(Exception $e) {
                   // Fallback to raw query if model fails
                   try {
-                    $pdo = new PDO('mysql:host=localhost;dbname=hr3systemdb', 'root', '');
+                    $host = config('database.connections.mysql.host', '127.0.0.1');
+                    $port = config('database.connections.mysql.port', '3306');
+                    $database = config('database.connections.mysql.database', 'hr3_hr3systemdb');
+                    $username = config('database.connections.mysql.username', 'root');
+                    $password = config('database.connections.mysql.password', '');
+                    
+                    $dsn = "mysql:host={$host};port={$port};dbname={$database}";
+                    $pdo = new PDO($dsn, $username, $password);
                     $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
                     $stmt = $pdo->prepare("SELECT * FROM shift_types WHERE status = 'active' ORDER BY name ASC");
                     $stmt->execute();

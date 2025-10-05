@@ -6,43 +6,47 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Config;
+use App\Traits\DatabaseConnectionTrait;
 
 class ShiftType extends Model
 {
-    protected $table = 'shift_types';
+    use DatabaseConnectionTrait;
     
-    // Explicitly specify the database connection
+    protected $table = 'shift_types';
     protected $connection = 'mysql';
     
     public function __construct(array $attributes = [])
     {
         parent::__construct($attributes);
         
-        // Ensure we're using hr3systemdb
-        Config::set('database.connections.mysql.database', 'hr3systemdb');
+        // Ensure we're using the correct database from config
+        $database = config('database.connections.mysql.database', 'hr3_hr3systemdb');
+        Config::set('database.connections.mysql.database', $database);
         DB::purge('mysql');
     }
-    
+
     protected $fillable = [
-        'id',
         'name',
         'code',
         'description',
         'default_start_time',
         'default_end_time',
-        'break_duration',
-        'hourly_rate',
+        'duration_hours',
+        'break_duration_minutes',
         'color_code',
         'type',
+        'hourly_rate',
         'is_active'
     ];
 
     protected $casts = [
-        'is_active' => 'boolean',
         'hourly_rate' => 'decimal:2',
-        'break_duration' => 'integer'
+        'is_active' => 'boolean',
+        'duration_hours' => 'integer',
+        'break_duration_minutes' => 'integer'
     ];
 
+    // Relationships
     public function shifts(): HasMany
     {
         return $this->hasMany(Shift::class);
@@ -58,20 +62,41 @@ class ShiftType extends Model
         return $this->hasMany(ShiftRequest::class, 'requested_shift_id');
     }
 
+    // Scopes
     public function scopeActive($query)
     {
         return $query->where('is_active', true);
     }
 
-    // Accessor for start_time (for backward compatibility)
+    public function scopeByType($query, $type)
+    {
+        return $query->where('type', $type);
+    }
+
+    // Accessors for backward compatibility
     public function getStartTimeAttribute()
     {
         return $this->default_start_time;
     }
 
-    // Accessor for end_time (for backward compatibility)
     public function getEndTimeAttribute()
     {
         return $this->default_end_time;
+    }
+
+    public function getBreakDurationAttribute()
+    {
+        return $this->break_duration_minutes;
+    }
+
+    // Helper methods
+    public function getDurationInMinutes()
+    {
+        return $this->duration_hours * 60;
+    }
+
+    public function getFormattedDuration()
+    {
+        return $this->duration_hours . 'h ' . ($this->break_duration_minutes / 60) . 'h break';
     }
 }

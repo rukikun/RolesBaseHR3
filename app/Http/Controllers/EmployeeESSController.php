@@ -38,11 +38,20 @@ class EmployeeESSController extends Controller
             // Get recent requests
             $recentRequests = $this->getRecentRequests($employee->id);
             
+            // Get attendance logs for dashboard
+            $attendanceLogs = $this->getAttendanceLogsForDashboard($employee->id);
+            
+            // Ensure attendanceLogs is always a collection
+            if (!$attendanceLogs) {
+                $attendanceLogs = collect([]);
+            }
+            
             return view('employee_ess_modules.employee_dashboard', compact(
                 'employee',
                 'notifications',
                 'upcomingTrainingsList',
-                'recentRequests'
+                'recentRequests',
+                'attendanceLogs'
             ) + $stats);
             
         } catch (\Exception $e) {
@@ -54,6 +63,7 @@ class EmployeeESSController extends Controller
                 'notifications' => collect([]),
                 'upcomingTrainingsList' => [],
                 'recentRequests' => [],
+                'attendanceLogs' => collect([]),
                 'pendingLeaveRequests' => 0,
                 'attendanceRate' => 0,
                 'latestPayslip' => 0,
@@ -2280,7 +2290,31 @@ class EmployeeESSController extends Controller
     }
 
     /**
-     * Get attendance log for employee dashboard
+     * Get attendance logs for dashboard view (server-side rendering)
+     */
+    private function getAttendanceLogsForDashboard($employeeId)
+    {
+        try {
+            // Ensure we always return a collection
+            $logs = Attendance::where('employee_id', $employeeId)
+                ->orderBy('date', 'desc')
+                ->limit(10)
+                ->get();
+                
+            \Log::info('ESS Attendance Logs: Found ' . $logs->count() . ' records for employee ' . $employeeId);
+            
+            return $logs;
+        } catch (\Exception $e) {
+            \Log::error('ESS Attendance Logs Dashboard Error: ' . $e->getMessage());
+            \Log::error('Stack trace: ' . $e->getTraceAsString());
+            
+            // Return empty collection as fallback
+            return collect([]);
+        }
+    }
+
+    /**
+     * Get attendance log for employee dashboard (AJAX)
      */
     public function getAttendanceLog(Request $request)
     {
