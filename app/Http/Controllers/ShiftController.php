@@ -168,11 +168,8 @@ class ShiftController extends Controller
                 \Log::info('Loaded shift requests via fallback: ' . $shiftRequests->count());
             }
             
-            // If still empty, create sample data
-            if ($shiftRequests->isEmpty()) {
-                $this->createSampleShiftRequests();
-                $shiftRequests = $this->getShiftRequestsFallback();
-            }
+            // No automatic sample data creation for shift requests
+            // $shiftRequests will remain empty if no data exists in database
 
             // Calculate statistics
             $weeklyHours = 0;
@@ -420,13 +417,15 @@ class ShiftController extends Controller
     
     private function createSampleShiftRequests()
     {
+        // REMOVED: No longer automatically creates sample shift request data
+        // This method is kept for backward compatibility but does not insert sample data
         try {
             $pdo = $this->getPDOConnection();
             
-            // Check if shift_requests table exists
+            // Only create the table structure if it doesn't exist, but no sample data
             $stmt = $pdo->query("SHOW TABLES LIKE 'shift_requests'");
             if ($stmt->rowCount() == 0) {
-                // Create the table
+                // Create the table structure only
                 $pdo->exec("
                     CREATE TABLE shift_requests (
                         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -449,30 +448,13 @@ class ShiftController extends Controller
                         INDEX idx_shift_date (shift_date)
                     )
                 ");
-                Log::info('Created shift_requests table');
+                Log::info('Created shift_requests table structure (no sample data)');
             }
             
-            // Insert sample data
-            $sampleRequests = [
-                [1, 1, '2024-10-05', '09:00:00', '17:00:00', 8.00, 'Main Office', 'Regular morning shift request', 'pending'],
-                [2, 2, '2024-10-06', '14:00:00', '22:00:00', 8.00, 'Branch Office', 'Evening shift request', 'pending'],
-                [3, 3, '2024-10-07', '22:00:00', '06:00:00', 8.00, 'Main Office', 'Night shift request', 'approved'],
-                [1, 1, '2024-10-08', '08:00:00', '16:00:00', 8.00, 'Remote', 'Work from home request', 'rejected'],
-                [2, 2, '2024-10-09', '10:00:00', '18:00:00', 8.00, 'Main Office', 'Flexible hours request', 'pending']
-            ];
-            
-            $stmt = $pdo->prepare("
-                INSERT IGNORE INTO shift_requests (employee_id, shift_type_id, shift_date, start_time, end_time, hours, location, notes, status, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
-            ");
-            
-            foreach ($sampleRequests as $request) {
-                $stmt->execute($request);
-            }
-            
-            Log::info('Created sample shift requests');
+            // REMOVED: No longer inserting sample data automatically
+            Log::info('Shift requests table ready (no sample data created)');
         } catch (\Exception $e) {
-            Log::error('Error creating sample shift requests: ' . $e->getMessage());
+            Log::error('Error setting up shift requests table: ' . $e->getMessage());
         }
     }
 

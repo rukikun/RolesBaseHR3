@@ -259,25 +259,36 @@
                   </tr>
                 </thead>
                 <tbody id="attendanceLog">
-                  @if(isset($attendanceLogs) && count($attendanceLogs) > 0)
-                    @foreach($attendanceLogs as $log)
-                      <tr>
-                        <td>{{ $log->date ? $log->date->format('M d, Y') : '--' }}</td>
-                        <td>{{ $log->clock_in_time ? $log->clock_in_time->format('h:i A') : '--' }}</td>
-                        <td>{{ $log->clock_out_time ? $log->clock_out_time->format('h:i A') : '--' }}</td>
-                        <td>
-                          {{ $log->total_hours > 0 ? number_format($log->total_hours, 2) : '0.00' }}
-                          @if($log->overtime_hours > 0)
-                            <small class="text-warning">(+{{ number_format($log->overtime_hours, 2) }} OT)</small>
-                          @endif
-                        </td>
-                      </tr>
-                    @endforeach
-                  @else
+                  @forelse($attendanceLogs as $log)
                     <tr>
-                      <td colspan="4" class="text-center text-muted">No attendance records found</td>
+                      <td>
+                        @if($log->date)
+                          {{ \Carbon\Carbon::parse($log->date)->format('M d, Y') }}
+                        @else
+                          --
+                        @endif
+                      </td>
+                      <td>
+                        {{ $log->formatted_clock_in ?? ($log->clock_in_time ? \Carbon\Carbon::parse($log->clock_in_time)->format('h:i A') : '--') }}
+                      </td>
+                      <td>
+                        {{ $log->formatted_clock_out ?? ($log->clock_out_time ? \Carbon\Carbon::parse($log->clock_out_time)->format('h:i A') : '--') }}
+                      </td>
+                      <td>
+                        <span class="fw-bold">{{ number_format($log->total_hours ?? 0, 2) }}</span>
+                        @if(($log->overtime_hours ?? 0) > 0)
+                          <br><small class="text-warning">+{{ number_format($log->overtime_hours, 2) }} OT</small>
+                        @endif
+                      </td>
                     </tr>
-                  @endif
+                  @empty
+                    <tr>
+                      <td colspan="4" class="text-center text-muted py-3">
+                        <i class="bi bi-calendar-x me-2"></i>
+                        No attendance records found
+                      </td>
+                    </tr>
+                  @endforelse
                 </tbody>
               </table>
             </div>
@@ -895,8 +906,8 @@
           document.getElementById('clockInBtn').disabled = true;
           document.getElementById('clockOutBtn').disabled = false;
           showNotification('Clocked in successfully!', 'success');
-          // Refresh page to update attendance logs
-          setTimeout(() => location.reload(), 2000);
+          // Refresh attendance logs without page reload
+          setTimeout(() => refreshAttendanceLogs(), 1000);
         } else {
           showNotification('Error clocking in: ' + (data.message || 'Unknown error'), 'error');
         }
@@ -940,8 +951,8 @@
           document.getElementById('clockOutBtn').disabled = true;
           document.getElementById('todayHours').textContent = '0:00';
           showNotification('Clocked out successfully at ' + (data.data?.clock_out_time || 'now'), 'success');
-          // Refresh page to update attendance logs
-          setTimeout(() => location.reload(), 2000);
+          // Refresh attendance logs without page reload
+          setTimeout(() => refreshAttendanceLogs(), 1000);
         } else {
           console.error('Clock-out failed:', data.message);
           showNotification('Error clocking out: ' + (data.message || 'Unknown error'), 'error');
@@ -953,7 +964,56 @@
       });
     }
     
-    // Attendance logs are now loaded server-side via foreach in the view
+    // Function to refresh attendance logs dynamically
+    function refreshAttendanceLogs() {
+      fetch('/employee/attendance-log', {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+        }
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success && data.data) {
+          updateAttendanceTable(data.data);
+        }
+      })
+      .catch(error => {
+        console.error('Error refreshing attendance logs:', error);
+      });
+    }
+    
+    // Function to update attendance table with new data
+    function updateAttendanceTable(attendanceData) {
+      const tbody = document.getElementById('attendanceLog');
+      if (!tbody) return;
+      
+      if (attendanceData.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="4" class="text-center text-muted py-3">
+              <i class="bi bi-calendar-x me-2"></i>
+              No attendance records found
+            </td>
+          </tr>
+        `;
+        return;
+      }
+      
+      tbody.innerHTML = attendanceData.map(log => `
+        <tr>
+          <td>${log.date}</td>
+          <td>${log.clock_in}</td>
+          <td>${log.clock_out}</td>
+          <td>
+            <span class="fw-bold">${log.hours}</span>
+            ${log.status === 'clocked_out' && parseFloat(log.hours) > 8 ? 
+              `<br><small class="text-warning">+${(parseFloat(log.hours) - 8).toFixed(2)} OT</small>` : ''}
+          </td>
+        </tr>
+      `).join('');
+    }
     
     function showNotification(message, type = 'info') {
       // Create notification element
