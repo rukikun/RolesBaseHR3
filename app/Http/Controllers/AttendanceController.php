@@ -49,13 +49,13 @@ class AttendanceController extends Controller
                 'total_hours_today' => Attendance::today()->sum('total_hours'),
             ];
 
-            return view('attendance_management', compact('employees', 'attendances', 'attendanceStats'));
+            return view('attendance.management', compact('employees', 'attendances', 'attendanceStats'));
             
         } catch (\Exception $e) {
             \Log::error('Error in AttendanceController@index: ' . $e->getMessage());
             
             // Fallback with empty data
-            return view('attendance_management', [
+            return view('attendance.management', [
                 'employees' => collect([]),
                 'attendances' => collect([]),
                 'attendanceStats' => [

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use App\Models\User;
+use App\Models\UserActivity;
 
 class AuthController extends Controller
 {
@@ -32,6 +33,21 @@ class AuthController extends Controller
             // Get the authenticated user from users table
             $user = Auth::guard('web')->user();
             
+            // Update last login timestamp
+            try {
+                $user->update(['last_login' => now()]);
+                
+                // Log login activity
+                UserActivity::log('login', 'User logged in successfully', [
+                    'user_agent' => $request->userAgent(),
+                    'ip_address' => $request->ip(),
+                    'login_method' => 'web_form'
+                ]);
+            } catch (\Exception $e) {
+                // Continue login even if activity logging fails
+                \Log::error('Login activity logging failed: ' . $e->getMessage());
+            }
+            
             // Redirect based on user role - all admin users go to HR dashboard
             if ($user->role === 'admin' || $user->role === 'hr') {
                 return redirect()->intended(route('dashboard'));
@@ -51,6 +67,14 @@ class AuthController extends Controller
      */
     public function logout(Request $request)
     {
+        // Log logout activity before logging out
+        if (Auth::check()) {
+            UserActivity::log('logout', 'User logged out', [
+                'user_agent' => $request->userAgent(),
+                'ip_address' => $request->ip()
+            ]);
+        }
+        
         Auth::guard('web')->logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();

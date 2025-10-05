@@ -49,38 +49,56 @@ class EmployeesController extends Controller
                 
                 // Fallback to raw PDO queries with table creation
                 try {
-                    $pdo = new \PDO('mysql:host=localhost;dbname=hr3systemdb', 'root', '');
+                    // Use environment database configuration
+                    $dbName = env('DB_DATABASE', 'hr3_hr3systemdb');
+                    $dbHost = env('DB_HOST', '127.0.0.1');
+                    $dbUser = env('DB_USERNAME', 'root');
+                    $dbPass = env('DB_PASSWORD', '');
+                    
+                    $pdo = new \PDO("mysql:host={$dbHost};dbname={$dbName}", $dbUser, $dbPass);
                     $pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
                     
-                    // Auto-create employees table if not exists
+                    // Auto-create employees table if not exists with proper structure
                     $pdo->exec("CREATE TABLE IF NOT EXISTS employees (
-                        id INT AUTO_INCREMENT PRIMARY KEY,
-                        employee_id VARCHAR(50) NULL,
+                        id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
                         first_name VARCHAR(100) NOT NULL,
                         last_name VARCHAR(100) NOT NULL,
                         email VARCHAR(255) NOT NULL UNIQUE,
                         phone VARCHAR(20) NULL,
-                        position VARCHAR(100) NULL,
-                        department VARCHAR(100) NULL,
-                        hire_date DATE NULL,
+                        position VARCHAR(100) NOT NULL,
+                        department VARCHAR(100) NOT NULL,
+                        hire_date DATE NOT NULL,
                         salary DECIMAL(10,2) DEFAULT 0.00,
                         status ENUM('active', 'inactive', 'terminated') DEFAULT 'active',
                         online_status ENUM('online', 'offline') DEFAULT 'offline',
                         last_activity TIMESTAMP NULL,
                         password VARCHAR(255) NULL,
+                        profile_picture VARCHAR(255) NULL,
+                        address TEXT NULL,
+                        date_of_birth DATE NULL,
+                        gender ENUM('male', 'female', 'other') NULL,
+                        emergency_contact_name VARCHAR(100) NULL,
+                        emergency_contact_phone VARCHAR(20) NULL,
+                        bank_account_number VARCHAR(50) NULL,
+                        tax_id VARCHAR(50) NULL,
+                        remember_token VARCHAR(100) NULL,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-                    )");
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                        INDEX idx_email (email),
+                        INDEX idx_status (status),
+                        INDEX idx_department (department)
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
                     
                     // Insert sample employees if table is empty
                     $stmt = $pdo->query("SELECT COUNT(*) FROM employees");
                     if ($stmt->fetchColumn() == 0) {
-                        $pdo->exec("INSERT IGNORE INTO employees (employee_id, first_name, last_name, email, phone, position, department, hire_date, salary, status) VALUES
-                            ('EMP001', 'John', 'Doe', 'john.doe@jetlouge.com', '+1234567890', 'Software Developer', 'Information Technology', '2023-01-15', 75000.00, 'active'),
-                            ('EMP002', 'Jane', 'Smith', 'jane.smith@jetlouge.com', '+1234567891', 'HR Manager', 'Human Resources', '2022-03-10', 85000.00, 'active'),
-                            ('EMP003', 'Mike', 'Johnson', 'mike.johnson@jetlouge.com', '+1234567892', 'Accountant', 'Finance', '2023-06-01', 65000.00, 'active'),
-                            ('EMP004', 'Sarah', 'Wilson', 'sarah.wilson@jetlouge.com', '+1234567893', 'Marketing Specialist', 'Marketing', '2023-08-20', 60000.00, 'active'),
-                            ('EMP005', 'Tom', 'Brown', 'tom.brown@jetlouge.com', '+1234567894', 'Operations Manager', 'Operations', '2022-11-05', 80000.00, 'active')");
+                        $pdo->exec("INSERT IGNORE INTO employees (first_name, last_name, email, phone, position, department, hire_date, salary, status) VALUES
+                            ('Alex', 'Mcqueen', 'alex.mcqueen@jetlouge.com', '+1234567890', 'Scheduler', 'Human Resources', '2023-01-15', 75000.00, 'active'),
+                            ('David', 'Brown', 'david.brown@jetlouge.com', '+1234567891', 'Sales Representative', 'Sales', '2022-03-10', 85000.00, 'active'),
+                            ('Jane', 'Smith', 'jane.smith@jetlouge.com', '+1234567892', 'HR Manager', 'Human Resources', '2023-06-01', 65000.00, 'active'),
+                            ('John', 'Doe', 'john.doe@jetlouge.com', '+1234567893', 'Software Developer', 'IT', '2023-08-20', 60000.00, 'active'),
+                            ('Mike', 'Johnson', 'mike.johnson@jetlouge.com', '+1234567894', 'Accountant', 'Human Resources', '2022-11-05', 80000.00, 'active'),
+                            ('Sarah', 'Wilson', 'sarah.wilson@jetlouge.com', '+1234567895', 'Marketing Specialist', 'Marketing', '2023-09-15', 70000.00, 'active')");
                     }
                     
                     // Build query with filters
@@ -143,7 +161,12 @@ class EmployeesController extends Controller
                 
                 // Fallback to raw queries for statistics
                 try {
-                    $pdo = new \PDO('mysql:host=localhost;dbname=hr3systemdb', 'root', '');
+                    $dbName = env('DB_DATABASE', 'hr3_hr3systemdb');
+                    $dbHost = env('DB_HOST', '127.0.0.1');
+                    $dbUser = env('DB_USERNAME', 'root');
+                    $dbPass = env('DB_PASSWORD', '');
+                    
+                    $pdo = new \PDO("mysql:host={$dbHost};dbname={$dbName}", $dbUser, $dbPass);
                     $pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
                     
                     $stmt = $pdo->query("SELECT COUNT(*) as total FROM employees");
@@ -175,12 +198,12 @@ class EmployeesController extends Controller
                 }
             }
                 
-            return view('employees', compact('employees', 'stats'));
+            return view('admin.employees.index', compact('employees', 'stats'));
             
         } catch (\Exception $e) {
             Log::error('Employees index error: ' . $e->getMessage());
             
-            return view('employees', [
+            return view('admin.employees.index', [
                 'employees' => collect([]),
                 'stats' => [
                     'total_employees' => 0,
@@ -230,13 +253,9 @@ class EmployeesController extends Controller
         }
 
         try {
-            // Generate employee ID
-            $employeeId = 'EMP' . str_pad(Employee::count() + 1, 3, '0', STR_PAD_LEFT);
-
             // Try Eloquent first
             try {
                 $employee = Employee::create([
-                    'employee_id' => $employeeId,
                     'first_name' => $request->first_name,
                     'last_name' => $request->last_name,
                     'email' => $request->email,
@@ -249,19 +268,28 @@ class EmployeesController extends Controller
                 ]);
 
                 return redirect()->route('employees.index')
-                    ->with('success', 'Employee created successfully!');
+                    ->with('success', 'Employee "' . $employee->first_name . ' ' . $employee->last_name . '" created successfully!');
                     
             } catch (\Exception $e) {
+                Log::warning('Eloquent failed, using PDO fallback: ' . $e->getMessage());
+                
                 // Fallback to raw PDO
-                $pdo = new \PDO('mysql:host=localhost;dbname=hr3systemdb', 'root', '');
+                $dbName = env('DB_DATABASE', 'hr3_hr3systemdb');
+                $dbHost = env('DB_HOST', '127.0.0.1');
+                $dbUser = env('DB_USERNAME', 'root');
+                $dbPass = env('DB_PASSWORD', '');
+                
+                $pdo = new \PDO("mysql:host={$dbHost};dbname={$dbName}", $dbUser, $dbPass);
                 $pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
                 
+                // Ensure table exists with proper structure
+                $this->ensureEmployeesTableExists($pdo);
+                
                 $stmt = $pdo->prepare("
-                    INSERT INTO employees (employee_id, first_name, last_name, email, phone, position, department, hire_date, salary, status, created_at, updated_at) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+                    INSERT INTO employees (first_name, last_name, email, phone, position, department, hire_date, salary, status, created_at, updated_at) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
                 ");
                 $stmt->execute([
-                    $employeeId,
                     $request->first_name,
                     $request->last_name,
                     $request->email,
@@ -274,7 +302,7 @@ class EmployeesController extends Controller
                 ]);
                 
                 return redirect()->route('employees.index')
-                    ->with('success', 'Employee created successfully!');
+                    ->with('success', 'Employee "' . $request->first_name . ' ' . $request->last_name . '" created successfully!');
             }
             
         } catch (\Exception $e) {
@@ -458,5 +486,41 @@ class EmployeesController extends Controller
             return redirect()->route('employees.index')
                 ->with('error', 'Error deleting employee: ' . $e->getMessage());
         }
+    }
+
+    /**
+     * Ensure employees table exists with proper structure
+     */
+    private function ensureEmployeesTableExists($pdo)
+    {
+        $pdo->exec("CREATE TABLE IF NOT EXISTS employees (
+            id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            first_name VARCHAR(100) NOT NULL,
+            last_name VARCHAR(100) NOT NULL,
+            email VARCHAR(255) NOT NULL UNIQUE,
+            phone VARCHAR(20) NULL,
+            position VARCHAR(100) NOT NULL,
+            department VARCHAR(100) NOT NULL,
+            hire_date DATE NOT NULL,
+            salary DECIMAL(10,2) DEFAULT 0.00,
+            status ENUM('active', 'inactive', 'terminated') DEFAULT 'active',
+            online_status ENUM('online', 'offline') DEFAULT 'offline',
+            last_activity TIMESTAMP NULL,
+            password VARCHAR(255) NULL,
+            profile_picture VARCHAR(255) NULL,
+            address TEXT NULL,
+            date_of_birth DATE NULL,
+            gender ENUM('male', 'female', 'other') NULL,
+            emergency_contact_name VARCHAR(100) NULL,
+            emergency_contact_phone VARCHAR(20) NULL,
+            bank_account_number VARCHAR(50) NULL,
+            tax_id VARCHAR(50) NULL,
+            remember_token VARCHAR(100) NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_email (email),
+            INDEX idx_status (status),
+            INDEX idx_department (department)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
     }
 }

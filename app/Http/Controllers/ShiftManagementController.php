@@ -53,7 +53,16 @@ class ShiftManagementController extends Controller
 
             // Get data for filters
             $employees = Employee::active()->orderBy('first_name')->get();
-            $shiftTypes = ShiftType::active()->orderBy('name')->get();
+            $shiftTypes = ShiftType::active()
+                ->orderByRaw("CASE 
+                    WHEN LOWER(name) LIKE '%morning%' THEN 1
+                    WHEN LOWER(name) LIKE '%afternoon%' THEN 2
+                    WHEN LOWER(name) LIKE '%evening%' THEN 3
+                    WHEN LOWER(name) LIKE '%night%' THEN 4
+                    ELSE 5
+                END")
+                ->orderBy('name')
+                ->get();
 
             // Redirect to shift schedule management page instead of non-existent view
             return redirect()->route('shift-schedule-management');

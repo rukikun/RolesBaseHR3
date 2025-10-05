@@ -20,13 +20,13 @@ class LandingController extends Controller
             // Get statistics for hero section
             $stats = $this->getStats();
             
-            return view('landing', compact('featured_packages', 'stats'));
+            return view('landing.index', compact('featured_packages', 'stats'));
             
         } catch (Exception $e) {
             // Log error and return view with empty data
             \Log::error('Landing page error: ' . $e->getMessage());
             
-            return view('landing', [
+            return view('landing.index', [
                 'featured_packages' => [],
                 'stats' => [
                     'total_packages' => '50+',

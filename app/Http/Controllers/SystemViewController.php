@@ -11,7 +11,7 @@ class SystemViewController extends Controller
      */
     public function portalSelection()
     {
-        return view('portal_selection');
+        return view('portal.selection');
     }
 
     /**

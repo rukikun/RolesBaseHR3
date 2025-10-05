@@ -6,6 +6,10 @@
   <title>@yield('title', 'HR System')</title>
   <meta name="csrf-token" content="{{ csrf_token() }}">
   
+  <!-- Favicon -->
+  <link rel="icon" type="image/png" href="{{ asset('assets/images/jetlouge_logo.png') }}">
+  <link rel="shortcut icon" type="image/png" href="{{ asset('assets/images/jetlouge_logo.png') }}">
+  
   <!-- Bootstrap CSS -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -26,7 +30,7 @@
       <button class="sidebar-toggle desktop-toggle me-3" id="desktop-toggle" title="Toggle Sidebar">
         <i class="bi bi-list fs-5"></i>
       </button>
-      <a class="navbar-brand fw-bold" href="/admin/dashboard">
+      <a class="navbar-brand fw-bold" href="{{ route('dashboard') }}">
         <i class="bi bi-airplane me-2"></i>Jetlouge Travels
       </a>
       <div class="d-flex align-items-center gap-3">
@@ -126,7 +130,7 @@
         </a>
       </li>
       <li class="nav-item">
-        <a href="#" class="nav-link text-dark">
+        <a href="{{ route('settings') }}" class="nav-link text-dark {{ request()->routeIs('settings*') ? 'active' : '' }}">
           <i class="bi bi-gear me-2"></i> Settings
         </a>
       </li>

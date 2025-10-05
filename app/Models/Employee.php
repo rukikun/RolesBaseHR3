@@ -30,7 +30,6 @@ class Employee extends Authenticatable implements AuthenticatableContract
     }
 
     protected $fillable = [
-        'employee_id',
         'first_name',
         'last_name',
         'email',

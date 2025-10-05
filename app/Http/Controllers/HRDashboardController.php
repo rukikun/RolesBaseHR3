@@ -34,7 +34,7 @@ class HRDashboardController extends Controller
         // Get employee statistics
         $employeeStats = $this->getEmployeeStats();
         
-        return view('dashboard', compact(
+        return view('dashboard.index', compact(
             'stats',
             'todayShifts', 
             'recentTimeEntries',

@@ -201,7 +201,7 @@ class TimesheetController extends Controller
                 'departments' => $employees->pluck('department')->unique()->count()
             ];
             
-            return view('timesheet_management', compact('employees', 'timesheets', 'shifts', 'leaveRequests', 'claims', 'attendances', 'leaveTypes', 'claimTypes', 'employeeStats', 'timesheetStats'));
+            return view('timesheets.management', compact('employees', 'timesheets', 'shifts', 'leaveRequests', 'claims', 'attendances', 'leaveTypes', 'claimTypes', 'employeeStats', 'timesheetStats'));
         } catch (\Exception $e) {
             // If there's a database error, return empty arrays
             \Log::error('TimesheetController exception: ' . $e->getMessage());
@@ -245,7 +245,7 @@ class TimesheetController extends Controller
             // Log the actual error for debugging (but don't show to user)
             \Log::info('Timesheet management initializing: ' . $e->getMessage());
             
-            return view('timesheet_management', compact('employees', 'timesheets', 'shifts', 'leaveRequests', 'claims', 'attendances', 'leaveTypes', 'claimTypes', 'employeeStats', 'timesheetStats'));
+            return view('timesheets.management', compact('employees', 'timesheets', 'shifts', 'leaveRequests', 'claims', 'attendances', 'leaveTypes', 'claimTypes', 'employeeStats', 'timesheetStats'));
         }
     }
     

@@ -25,12 +25,21 @@ class User extends Authenticatable
         'email',
         'password',
         'phone',
-        'employee_id',
         'username',
         'role',
         'last_login',
         'is_active',
-        'profile_picture'
+        'profile_picture',
+        'job_title',
+        'department',
+        'manager_id',
+        'work_location',
+        'date_of_birth',
+        'gender',
+        'address',
+        'emergency_contact_name',
+        'emergency_contact_phone',
+        'emergency_contact_relationship'
     ];
 
     /**
@@ -54,7 +63,8 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'last_login' => 'datetime',
-            'is_active' => 'boolean'
+            'is_active' => 'boolean',
+            'date_of_birth' => 'date'
         ];
     }
 
@@ -62,6 +72,36 @@ class User extends Authenticatable
     public function employee()
     {
         return $this->belongsTo(Employee::class);
+    }
+
+    public function activities()
+    {
+        return $this->hasMany(UserActivity::class)->orderBy('performed_at', 'desc');
+    }
+
+    public function recentActivities($limit = 10)
+    {
+        return $this->activities()->limit($limit);
+    }
+
+    public function preferences()
+    {
+        return $this->hasMany(UserPreference::class);
+    }
+
+    public function getPreference($key, $default = null)
+    {
+        return UserPreference::getPreference($this->id, $key, $default);
+    }
+
+    public function setPreference($key, $value, $type = 'string')
+    {
+        return UserPreference::setPreference($this->id, $key, $value, $type);
+    }
+
+    public function getAllPreferences()
+    {
+        return UserPreference::getUserPreferences($this->id);
     }
 
     // Role-based helper methods

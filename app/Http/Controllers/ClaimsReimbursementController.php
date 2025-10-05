@@ -138,7 +138,7 @@ class ClaimsReimbursementController extends Controller
             $approvedClaims = $claims->where('status', 'approved')->count();
             $totalAmount = $claims->whereIn('status', ['approved', 'paid'])->sum('amount');
                 
-            return view('claims_reimbursement', compact(
+            return view('claims.reimbursement', compact(
                 'claimTypes', 'employees', 'claims', 
                 'totalClaims', 'pendingClaims', 'approvedClaims', 'totalAmount'
             ));
@@ -147,7 +147,7 @@ class ClaimsReimbursementController extends Controller
             // Final fallback with empty collections
             Log::error('Claims index error: ' . $e->getMessage());
             
-            return view('claims_reimbursement', [
+            return view('claims.reimbursement', [
                 'claimTypes' => collect([]),
                 'employees' => collect([]),
                 'claims' => collect([]),

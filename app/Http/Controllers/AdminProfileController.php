@@ -9,6 +9,8 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use App\Models\User;
 use App\Models\Employee;
+use App\Models\UserActivity;
+use App\Models\UserPreference;
 
 class AdminProfileController extends Controller
 {
@@ -20,7 +22,35 @@ class AdminProfileController extends Controller
         $user = Auth::user();
         $roles = $this->getAvailableRoles();
         
-        return view('admin.profile.index', compact('user', 'roles'));
+        // Get recent activities for the user
+        $recentActivities = $user->recentActivities(10)->get();
+        
+        // Create some sample activities if none exist (for demo purposes)
+        if ($recentActivities->count() === 0) {
+            $this->createSampleActivities($user->id);
+            $recentActivities = $user->recentActivities(10)->get();
+        }
+        
+        // Get user statistics
+        $accountAgeDays = $user->created_at->diffInDays(now());
+        $totalLogins = UserActivity::where('user_id', $user->id)
+                                 ->where('activity_type', 'login')
+                                 ->count();
+        $profileUpdates = UserActivity::where('user_id', $user->id)
+                                    ->where('activity_type', 'profile_update')
+                                    ->count();
+        $lastActivity = UserActivity::where('user_id', $user->id)
+                                  ->latest('performed_at')
+                                  ->first();
+
+        $userStats = [
+            'total_logins' => $totalLogins > 0 ? $totalLogins : 0,
+            'profile_updates' => $profileUpdates > 0 ? $profileUpdates : 0,
+            'last_activity' => $lastActivity,
+            'account_age_days' => $accountAgeDays > 0 ? $accountAgeDays : 1
+        ];
+        
+        return view('admin.profile.index', compact('user', 'roles', 'recentActivities', 'userStats'));
     }
 
     /**
@@ -47,12 +77,24 @@ class AdminProfileController extends Controller
             'email' => ['required', 'string', 'email', 'max:255', Rule::unique('users')->ignore($user->id)],
             'username' => ['nullable', 'string', 'max:255', Rule::unique('users')->ignore($user->id)],
             'phone' => 'nullable|string|max:20',
-            'employee_id' => 'nullable|exists:employees,id',
-            'role' => 'required|in:super_admin,admin,hr_manager,hr_scheduler,attendance_admin',
-            'profile_picture' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048'
+            'profile_picture' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
+            'job_title' => 'nullable|string|max:255',
+            'department' => 'nullable|string|max:100',
+            'manager_id' => 'nullable|integer',
+            'work_location' => 'nullable|string|max:100',
+            'date_of_birth' => 'nullable|date|before:today',
+            'gender' => 'nullable|in:Male,Female,Other,Prefer not to say',
+            'address' => 'nullable|string|max:500',
+            'emergency_contact_name' => 'nullable|string|max:255',
+            'emergency_contact_phone' => 'nullable|string|max:20',
+            'emergency_contact_relationship' => 'nullable|in:Spouse,Parent,Sibling,Child,Friend,Other'
         ]);
 
         try {
+            // Track changes for activity logging
+            $originalData = $user->only(['name', 'email', 'username', 'phone', 'job_title', 'department']);
+            $changes = [];
+            
             // Handle profile picture upload
             if ($request->hasFile('profile_picture')) {
                 // Delete old profile picture if exists
@@ -62,18 +104,43 @@ class AdminProfileController extends Controller
                 
                 $profilePicturePath = $request->file('profile_picture')->store('profile_pictures', 'public');
                 $user->profile_picture = $profilePicturePath;
+                $changes['profile_picture'] = 'Updated';
             }
 
-            // Update user data
+            // Track field changes for key fields
+            $trackableFields = ['name', 'email', 'username', 'phone', 'job_title', 'department'];
+            foreach ($trackableFields as $field) {
+                if (isset($originalData[$field]) && $originalData[$field] !== $request->$field) {
+                    $changes[$field] = [
+                        'from' => $originalData[$field],
+                        'to' => $request->$field
+                    ];
+                }
+            }
+
+            // Update user data with all fields
             $user->update([
                 'name' => $request->name,
                 'email' => $request->email,
                 'username' => $request->username,
                 'phone' => $request->phone,
-                'employee_id' => $request->employee_id,
-                'role' => $request->role,
+                'job_title' => $request->job_title,
+                'department' => $request->department,
+                'manager_id' => $request->manager_id,
+                'work_location' => $request->work_location,
+                'date_of_birth' => $request->date_of_birth,
+                'gender' => $request->gender,
+                'address' => $request->address,
+                'emergency_contact_name' => $request->emergency_contact_name,
+                'emergency_contact_phone' => $request->emergency_contact_phone,
+                'emergency_contact_relationship' => $request->emergency_contact_relationship,
                 'profile_picture' => $user->profile_picture ?? null
             ]);
+
+            // Log activity if there were changes
+            if (!empty($changes)) {
+                UserActivity::logProfileUpdate($changes);
+            }
 
             return redirect()->route('admin.profile.index')
                            ->with('success', 'Profile updated successfully!');
@@ -113,6 +180,9 @@ class AdminProfileController extends Controller
         $user->update([
             'password' => Hash::make($request->password)
         ]);
+
+        // Log password change activity
+        UserActivity::logPasswordChange();
 
         return redirect()->route('admin.profile.index')
                        ->with('success', 'Password updated successfully!');
@@ -310,5 +380,122 @@ class AdminProfileController extends Controller
         ];
 
         return $permissions[$role] ?? [];
+    }
+
+    /**
+     * Update user preferences
+     */
+    public function updatePreferences(Request $request)
+    {
+        $user = Auth::user();
+        
+        $request->validate([
+            'theme' => 'nullable|in:light,dark',
+            'language' => 'nullable|in:en,es,fr',
+            'timezone' => 'nullable|string|max:50',
+            'date_format' => 'nullable|in:Y-m-d,m/d/Y,d/m/Y',
+            'time_format' => 'nullable|in:12,24',
+            'notifications_email' => 'nullable|boolean',
+            'notifications_browser' => 'nullable|boolean',
+            'records_per_page' => 'nullable|integer|min:10|max:100'
+        ]);
+
+        try {
+            // Update preferences
+            $preferences = [
+                UserPreference::THEME => $request->theme ?? 'light',
+                UserPreference::LANGUAGE => $request->language ?? 'en',
+                UserPreference::TIMEZONE => $request->timezone ?? 'Asia/Manila',
+                UserPreference::DATE_FORMAT => $request->date_format ?? 'Y-m-d',
+                UserPreference::TIME_FORMAT => $request->time_format ?? '24',
+                UserPreference::NOTIFICATIONS_EMAIL => $request->boolean('notifications_email', true),
+                UserPreference::NOTIFICATIONS_BROWSER => $request->boolean('notifications_browser', true),
+                UserPreference::RECORDS_PER_PAGE => $request->records_per_page ?? 25
+            ];
+
+            foreach ($preferences as $key => $value) {
+                $type = is_bool($value) ? 'boolean' : (is_int($value) ? 'integer' : 'string');
+                $user->setPreference($key, $value, $type);
+            }
+
+            // Log preference update activity
+            UserActivity::log('settings_update', 'User preferences updated', $preferences);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Preferences updated successfully!'
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error updating preferences: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get user preferences
+     */
+    public function getPreferences()
+    {
+        $user = Auth::user();
+        $preferences = $user->getAllPreferences();
+        $defaults = UserPreference::getDefaultPreferences();
+        
+        // Merge with defaults
+        $preferences = array_merge($defaults, $preferences);
+        
+        return response()->json([
+            'success' => true,
+            'preferences' => $preferences
+        ]);
+    }
+
+    /**
+     * Create sample activities for demo purposes
+     */
+    private function createSampleActivities($userId)
+    {
+        // Create some sample login activities
+        UserActivity::create([
+            'user_id' => $userId,
+            'activity_type' => 'login',
+            'description' => 'User logged in successfully',
+            'ip_address' => '127.0.0.1',
+            'user_agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'metadata' => ['login_method' => 'web_form'],
+            'performed_at' => now()->subHours(2)
+        ]);
+
+        UserActivity::create([
+            'user_id' => $userId,
+            'activity_type' => 'login',
+            'description' => 'User logged in successfully',
+            'ip_address' => '127.0.0.1',
+            'user_agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'metadata' => ['login_method' => 'web_form'],
+            'performed_at' => now()->subDays(1)
+        ]);
+
+        UserActivity::create([
+            'user_id' => $userId,
+            'activity_type' => 'profile_update',
+            'description' => 'Profile information updated',
+            'ip_address' => '127.0.0.1',
+            'user_agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'metadata' => ['name' => ['from' => 'Old Name', 'to' => 'New Name']],
+            'performed_at' => now()->subHours(5)
+        ]);
+
+        UserActivity::create([
+            'user_id' => $userId,
+            'activity_type' => 'settings_update',
+            'description' => 'User preferences updated',
+            'ip_address' => '127.0.0.1',
+            'user_agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            'metadata' => ['theme' => 'dark', 'language' => 'en'],
+            'performed_at' => now()->subHours(8)
+        ]);
     }
 }

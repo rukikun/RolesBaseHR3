@@ -75,7 +75,7 @@ class EmployeeController extends Controller
                             'terminated_employees' => 0,
                             'recent_hires' => 0
                         ];
-                        return view('employees', ['employees' => [], 'stats' => $stats]);
+                        return view('admin.employees.index', ['employees' => [], 'stats' => $stats]);
                     }
                     
                     // Handle filtering from timesheet management cards
@@ -231,7 +231,7 @@ class EmployeeController extends Controller
                 }
             }
             
-            return view('employees', compact('employees', 'stats'));
+            return view('admin.employees.index', compact('employees', 'stats'));
         } catch (\Exception $e) {
             $stats = [
                 'total_employees' => 0,
@@ -243,7 +243,7 @@ class EmployeeController extends Controller
                 'terminated_employees' => 0,
                 'recent_hires' => 0
             ];
-            return view('employees', ['employees' => collect([]), 'stats' => $stats]);
+            return view('admin.employees.index', ['employees' => collect([]), 'stats' => $stats]);
         }
     }
 
@@ -624,7 +624,7 @@ class EmployeeController extends Controller
                 $stats['employees_with_timesheets'] = 0;
             }
 
-            return view('employees', [
+            return view('admin.employees.index', [
                 'employees' => collect([$employee]),
                 'stats' => $stats,
                 'viewEmployee' => $employee,

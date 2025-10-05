@@ -152,7 +152,7 @@ class LeaveController extends Controller
                 ->whereBetween('start_date', [Carbon::now()->startOfWeek()->format('Y-m-d'), Carbon::now()->endOfWeek()->format('Y-m-d')])
                 ->sum('days_requested') * 8; // Assuming 8 hours per day
                 
-            return view('leave_management', compact('leaveTypes', 'employees', 'leaves', 'totalLeaveTypes', 'assignedEmployees', 'pendingRequests', 'weeklyHours'));
+            return view('leaves.management', compact('leaveTypes', 'employees', 'leaves', 'totalLeaveTypes', 'assignedEmployees', 'pendingRequests', 'weeklyHours'));
             
         } catch (\Exception $e) {
             // Final fallback with empty collections
@@ -160,7 +160,7 @@ class LeaveController extends Controller
             $employees = collect([]);
             $leaves = collect([]);
             
-            return view('leave_management', compact('leaveTypes', 'employees', 'leaves'))
+            return view('leaves.management', compact('leaveTypes', 'employees', 'leaves'))
                 ->with('error', 'Error loading leave data: ' . $e->getMessage());
         }
     }

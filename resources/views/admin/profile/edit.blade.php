@@ -116,6 +116,154 @@
                         </div>
                     </div>
 
+                    <!-- Additional Profile Information -->
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="job_title" class="form-label fw-bold">Job Title</label>
+                            <input type="text" class="form-control @error('job_title') is-invalid @enderror" 
+                                   id="job_title" name="job_title" value="{{ old('job_title', $user->job_title ?? '') }}" 
+                                   placeholder="e.g., HR Manager, Software Developer">
+                            @error('job_title')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+                        <div class="col-md-6">
+                            <label for="department" class="form-label fw-bold">Department</label>
+                            <select class="form-select @error('department') is-invalid @enderror" id="department" name="department">
+                                <option value="">Select Department</option>
+                                <option value="HR" {{ old('department', $user->department ?? '') == 'HR' ? 'selected' : '' }}>Human Resources</option>
+                                <option value="IT" {{ old('department', $user->department ?? '') == 'IT' ? 'selected' : '' }}>Information Technology</option>
+                                <option value="Finance" {{ old('department', $user->department ?? '') == 'Finance' ? 'selected' : '' }}>Finance</option>
+                                <option value="Marketing" {{ old('department', $user->department ?? '') == 'Marketing' ? 'selected' : '' }}>Marketing</option>
+                                <option value="Operations" {{ old('department', $user->department ?? '') == 'Operations' ? 'selected' : '' }}>Operations</option>
+                                <option value="Sales" {{ old('department', $user->department ?? '') == 'Sales' ? 'selected' : '' }}>Sales</option>
+                            </select>
+                            @error('department')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+                    </div>
+
+
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="manager_id" class="form-label fw-bold">Direct Manager</label>
+                            <select class="form-select @error('manager_id') is-invalid @enderror" id="manager_id" name="manager_id">
+                                <option value="">Select Manager</option>
+                                @if(isset($employees))
+                                    @foreach($employees as $employee)
+                                        <option value="{{ $employee->id }}" 
+                                            {{ old('manager_id', $user->manager_id ?? '') == $employee->id ? 'selected' : '' }}>
+                                            {{ $employee->first_name }} {{ $employee->last_name }} - {{ $employee->department }}
+                                        </option>
+                                    @endforeach
+                                @endif
+                            </select>
+                            @error('manager_id')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+                        <div class="col-md-6">
+                            <label for="work_location" class="form-label fw-bold">Work Location</label>
+                            <select class="form-select @error('work_location') is-invalid @enderror" id="work_location" name="work_location">
+                                <option value="">Select Location</option>
+                                <option value="Main Office" {{ old('work_location', $user->work_location ?? '') == 'Main Office' ? 'selected' : '' }}>Main Office</option>
+                                <option value="Branch Office" {{ old('work_location', $user->work_location ?? '') == 'Branch Office' ? 'selected' : '' }}>Branch Office</option>
+                                <option value="Remote" {{ old('work_location', $user->work_location ?? '') == 'Remote' ? 'selected' : '' }}>Remote</option>
+                                <option value="Hybrid" {{ old('work_location', $user->work_location ?? '') == 'Hybrid' ? 'selected' : '' }}>Hybrid</option>
+                            </select>
+                            @error('work_location')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+                    </div>
+
+                    <!-- Personal Information -->
+                    <hr class="my-4">
+                    <h6 class="fw-bold mb-3"><i class="fas fa-user me-2"></i>Personal Information</h6>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="date_of_birth" class="form-label fw-bold">Date of Birth</label>
+                            <input type="date" class="form-control @error('date_of_birth') is-invalid @enderror" 
+                                   id="date_of_birth" name="date_of_birth" value="{{ old('date_of_birth', $user->date_of_birth ?? '') }}">
+                            @error('date_of_birth')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+                        <div class="col-md-6">
+                            <label for="gender" class="form-label fw-bold">Gender</label>
+                            <select class="form-select @error('gender') is-invalid @enderror" id="gender" name="gender">
+                                <option value="">Select Gender</option>
+                                <option value="Male" {{ old('gender', $user->gender ?? '') == 'Male' ? 'selected' : '' }}>Male</option>
+                                <option value="Female" {{ old('gender', $user->gender ?? '') == 'Female' ? 'selected' : '' }}>Female</option>
+                                <option value="Other" {{ old('gender', $user->gender ?? '') == 'Other' ? 'selected' : '' }}>Other</option>
+                                <option value="Prefer not to say" {{ old('gender', $user->gender ?? '') == 'Prefer not to say' ? 'selected' : '' }}>Prefer not to say</option>
+                            </select>
+                            @error('gender')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-12">
+                            <label for="address" class="form-label fw-bold">Address</label>
+                            <textarea class="form-control @error('address') is-invalid @enderror" 
+                                      id="address" name="address" rows="3" 
+                                      placeholder="Enter complete address">{{ old('address', $user->address ?? '') }}</textarea>
+                            @error('address')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+                    </div>
+
+                    <!-- Emergency Contact -->
+                    <hr class="my-4">
+                    <h6 class="fw-bold mb-3"><i class="fas fa-phone-alt me-2"></i>Emergency Contact</h6>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="emergency_contact_name" class="form-label fw-bold">Emergency Contact Name</label>
+                            <input type="text" class="form-control @error('emergency_contact_name') is-invalid @enderror" 
+                                   id="emergency_contact_name" name="emergency_contact_name" 
+                                   value="{{ old('emergency_contact_name', $user->emergency_contact_name ?? '') }}" 
+                                   placeholder="Full name of emergency contact">
+                            @error('emergency_contact_name')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+                        <div class="col-md-6">
+                            <label for="emergency_contact_phone" class="form-label fw-bold">Emergency Contact Phone</label>
+                            <input type="text" class="form-control @error('emergency_contact_phone') is-invalid @enderror" 
+                                   id="emergency_contact_phone" name="emergency_contact_phone" 
+                                   value="{{ old('emergency_contact_phone', $user->emergency_contact_phone ?? '') }}" 
+                                   placeholder="Phone number">
+                            @error('emergency_contact_phone')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+                    </div>
+
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="emergency_contact_relationship" class="form-label fw-bold">Relationship</label>
+                            <select class="form-select @error('emergency_contact_relationship') is-invalid @enderror" 
+                                    id="emergency_contact_relationship" name="emergency_contact_relationship">
+                                <option value="">Select Relationship</option>
+                                <option value="Spouse" {{ old('emergency_contact_relationship', $user->emergency_contact_relationship ?? '') == 'Spouse' ? 'selected' : '' }}>Spouse</option>
+                                <option value="Parent" {{ old('emergency_contact_relationship', $user->emergency_contact_relationship ?? '') == 'Parent' ? 'selected' : '' }}>Parent</option>
+                                <option value="Sibling" {{ old('emergency_contact_relationship', $user->emergency_contact_relationship ?? '') == 'Sibling' ? 'selected' : '' }}>Sibling</option>
+                                <option value="Child" {{ old('emergency_contact_relationship', $user->emergency_contact_relationship ?? '') == 'Child' ? 'selected' : '' }}>Child</option>
+                                <option value="Friend" {{ old('emergency_contact_relationship', $user->emergency_contact_relationship ?? '') == 'Friend' ? 'selected' : '' }}>Friend</option>
+                                <option value="Other" {{ old('emergency_contact_relationship', $user->emergency_contact_relationship ?? '') == 'Other' ? 'selected' : '' }}>Other</option>
+                            </select>
+                            @error('emergency_contact_relationship')
+                                <div class="invalid-feedback">{{ $message }}</div>
+                            @enderror
+                        </div>
+                    </div>
+
 
                     <!-- Form Actions -->
                     <div class="d-flex justify-content-between">

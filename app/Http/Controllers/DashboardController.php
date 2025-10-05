@@ -114,7 +114,7 @@ class DashboardController extends Controller
         
         $isClockedIn = $todayTimeEntry && $todayTimeEntry->clock_in_time && !$todayTimeEntry->clock_out_time;
 
-        return view('admin_dashboard', compact(
+        return view('dashboard.admin', compact(
             'stats',
             'recentEntries',
             'todayTimeEntry',

@@ -160,7 +160,7 @@ class ClaimController extends Controller
                 \Log::info('First claim data: ' . json_encode($claims->first()));
             }
             
-            return view('claims_reimbursement', compact(
+            return view('claims.reimbursement', compact(
                 'claimTypes', 
                 'employees', 
                 'claims',
@@ -172,7 +172,7 @@ class ClaimController extends Controller
             ));
         } catch (\Exception $e) {
             \Log::error('Claims index error: ' . $e->getMessage());
-            return view('claims_reimbursement', [
+            return view('claims.reimbursement', [
                 'claimTypes' => collect([]),
                 'employees' => collect([]),
                 'claims' => collect([]),

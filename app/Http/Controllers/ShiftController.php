@@ -23,7 +23,17 @@ class ShiftController extends Controller
             // Get shift types with fallback
             $shiftTypes = collect();
             try {
-                $shiftTypes = ShiftType::where('is_active', true)->orderBy('name')->get();
+                // Get shift types with custom ordering (Morning first, then Afternoon)
+                $shiftTypes = ShiftType::where('is_active', true)
+                    ->orderByRaw("CASE 
+                        WHEN LOWER(name) LIKE '%morning%' THEN 1
+                        WHEN LOWER(name) LIKE '%afternoon%' THEN 2
+                        WHEN LOWER(name) LIKE '%evening%' THEN 3
+                        WHEN LOWER(name) LIKE '%night%' THEN 4
+                        ELSE 5
+                    END")
+                    ->orderBy('name')
+                    ->get();
             } catch (\Exception $e) {
                 Log::info('Using fallback query for shift types');
                 $shiftTypes = $this->getShiftTypesFallback();
@@ -226,7 +236,7 @@ class ShiftController extends Controller
                 }
             }
 
-            return view('shift_schedule_management', compact(
+            return view('shifts.schedule_management', compact(
                 'shiftTypes', 
                 'employees', 
                 'shiftsCollection', 
@@ -240,7 +250,7 @@ class ShiftController extends Controller
             Log::error('Error in ShiftController index: ' . $e->getMessage());
             
             // Return view with empty data
-            return view('shift_schedule_management', [
+            return view('shifts.schedule_management', [
                 'shiftTypes' => collect(),
                 'employees' => collect(),
                 'shiftsCollection' => collect(),
@@ -263,7 +273,17 @@ class ShiftController extends Controller
         try {
             $pdo = $this->getPDOConnection();
             
-            $stmt = $pdo->query("SELECT * FROM shift_types WHERE is_active = 1 ORDER BY name");
+            $stmt = $pdo->query("
+                SELECT * FROM shift_types 
+                WHERE is_active = 1 
+                ORDER BY CASE 
+                    WHEN LOWER(name) LIKE '%morning%' THEN 1
+                    WHEN LOWER(name) LIKE '%afternoon%' THEN 2
+                    WHEN LOWER(name) LIKE '%evening%' THEN 3
+                    WHEN LOWER(name) LIKE '%night%' THEN 4
+                    ELSE 5
+                END, name
+            ");
             $results = $stmt->fetchAll(\PDO::FETCH_ASSOC);
             
             return collect($results);

@@ -28,6 +28,7 @@ use App\Http\Controllers\DataSeederController;
 use App\Http\Controllers\SystemTestController;
 use App\Http\Controllers\SystemMaintenanceController;
 use App\Http\Controllers\SystemViewController;
+use App\Http\Controllers\SettingsController;
 
 // New MVC Management Controllers
 use App\Http\Controllers\EmployeeManagementController;
@@ -95,7 +96,7 @@ Route::post('/api/clock-in', [TimeAttendanceController::class, 'clockIn']);
 
 // Time and Attendance System Routes
 Route::get('/time-attendance', function () {
-    return view('TimeAndAttendance');
+    return view('attendance.TimeAndAttendance');
 })->name('time-attendance');
 
 // HR Module Routes with proper controllers
@@ -110,6 +111,13 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/shift-schedule-management', [ShiftController::class, 'index'])->name('shift-schedule-management');
 
     Route::get('/claims-reimbursement', [ClaimsReimbursementController::class, 'index'])->name('claims-reimbursement');
+    
+    // Settings Routes
+    Route::get('/settings', [SettingsController::class, 'index'])->name('settings');
+    Route::post('/settings', [SettingsController::class, 'store'])->name('settings.store');
+    Route::get('/settings/export', [SettingsController::class, 'export'])->name('settings.export');
+    Route::post('/settings/import', [SettingsController::class, 'import'])->name('settings.import');
+    Route::post('/settings/reset', [SettingsController::class, 'reset'])->name('settings.reset');
     
     // Claims CRUD Routes - Using Proper MVC Controller
     Route::post('/claims/store', [ClaimsReimbursementController::class, 'store'])->name('claims.store.simple');
@@ -538,6 +546,10 @@ Route::middleware(['auth'])->prefix('admin/profile')->name('admin.profile.')->gr
     Route::post('/create-admin', [AdminProfileController::class, 'createAdmin'])->name('create-admin');
     Route::put('/admins/{id}', [AdminProfileController::class, 'updateAdmin'])->name('update-admin');
     Route::delete('/admins/{id}', [AdminProfileController::class, 'deleteAdmin'])->name('delete-admin');
+    
+    // User preferences
+    Route::get('/preferences', [AdminProfileController::class, 'getPreferences'])->name('get-preferences');
+    Route::post('/preferences', [AdminProfileController::class, 'updatePreferences'])->name('update-preferences');
 });
 
 // AI Timesheet Test Route
