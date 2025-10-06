@@ -4,7 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
-use App\Models\User;
+use App\Models\Employee;
 
 class RegisterController extends Controller
 {
@@ -18,23 +18,39 @@ class RegisterController extends Controller
         $validated = $request->validate([
             'firstName' => 'required|string|max:255',
             'lastName' => 'required|string|max:255',
-            'email' => 'required|email|max:255|unique:users,email',
+            'email' => 'required|email|max:255|unique:employees,email',
             'phone' => 'required|string|max:20',
+            'role' => 'required|in:admin,hr,manager,employee',
             'password' => 'required|string|min:8',
             'confirmPassword' => 'required|same:password',
             'agreeTerms' => 'accepted',
         ]);
 
-        $user = User::create([
-            'name' => $validated['firstName'] . ' ' . $validated['lastName'],
+        $employee = Employee::create([
+            'first_name' => $validated['firstName'],
+            'last_name' => $validated['lastName'],
             'email' => $validated['email'],
-            'password' => Hash::make($validated['password']),
             'phone' => $validated['phone'],
+            'role' => $validated['role'],
+            'password' => Hash::make($validated['password']),
+            'status' => 'active',
+            'hire_date' => now(),
+            'position' => ucfirst($validated['role']),
+            'department' => $this->getDepartmentByRole($validated['role']),
         ]);
 
-        // Optionally log the user in after registration
-        // Auth::login($user);
+        return redirect()->route('admin.login')->with('success', 'Account created successfully! Please log in with your credentials.');
+    }
 
-        return redirect()->route('admin.login')->with('success', 'Account created! Please log in.');
+    private function getDepartmentByRole($role)
+    {
+        $departments = [
+            'admin' => 'Administration',
+            'hr' => 'Human Resources',
+            'manager' => 'Management',
+            'employee' => 'General',
+        ];
+
+        return $departments[$role] ?? 'General';
     }
 }

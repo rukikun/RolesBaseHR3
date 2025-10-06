@@ -4,7 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use App\Models\User;
+use App\Models\Employee;
 use App\Models\UserActivity;
 
 class AuthController extends Controller
@@ -18,7 +18,7 @@ class AuthController extends Controller
     }
 
     /**
-     * Handle admin login (uses 'users' table) - redirects to HR dashboard
+     * Handle admin login (uses 'employees' table) - redirects to HR dashboard
      */
     public function login(Request $request)
     {
@@ -27,33 +27,35 @@ class AuthController extends Controller
             'password' => ['required'],
         ]);
 
-        // Use the default 'web' guard which uses 'users' table
+        // Use the default 'web' guard which now uses 'employees' table
         if (Auth::guard('web')->attempt($credentials, $request->has('rememberMe'))) {
             $request->session()->regenerate();
-            // Get the authenticated user from users table
-            $user = Auth::guard('web')->user();
+            // Get the authenticated employee
+            $employee = Auth::guard('web')->user();
             
-            // Update last login timestamp
+            // Update last activity timestamp
             try {
-                $user->update(['last_login' => now()]);
+                $employee->update(['last_activity' => now()]);
                 
-                // Log login activity
-                UserActivity::log('login', 'User logged in successfully', [
-                    'user_agent' => $request->userAgent(),
-                    'ip_address' => $request->ip(),
-                    'login_method' => 'web_form'
-                ]);
+                // Log login activity (if UserActivity model exists)
+                if (class_exists('App\Models\UserActivity')) {
+                    UserActivity::log('login', 'Employee logged in successfully', [
+                        'user_agent' => $request->userAgent(),
+                        'ip_address' => $request->ip(),
+                        'login_method' => 'web_form'
+                    ]);
+                }
             } catch (\Exception $e) {
                 // Continue login even if activity logging fails
                 \Log::error('Login activity logging failed: ' . $e->getMessage());
             }
             
-            // Redirect based on user role - all admin users go to HR dashboard
-            if ($user->role === 'admin' || $user->role === 'hr') {
+            // Redirect based on employee role
+            if ($employee->hasAnyRole(['admin', 'hr', 'manager'])) {
                 return redirect()->intended(route('dashboard'));
             } else {
-                // Regular users from users table also go to HR dashboard
-                return redirect()->intended(route('dashboard'));
+                // Regular employees go to employee dashboard
+                return redirect()->intended(route('employee.dashboard'));
             }
         }
 
@@ -82,23 +84,25 @@ class AuthController extends Controller
     }
 
     /**
-     * Get current authenticated admin user
+     * Get current authenticated employee
      */
     public function getCurrentUser()
     {
-        $user = Auth::guard('web')->user();
+        $employee = Auth::guard('web')->user();
         
-        if (!$user) {
+        if (!$employee) {
             return response()->json(['error' => 'Not authenticated'], 401);
         }
 
         return response()->json([
-            'id' => $user->id,
-            'name' => $user->name,
-            'email' => $user->email,
-            'role' => $user->role,
-            'phone' => $user->phone,
-            'profile_picture' => $user->profile_picture,
+            'id' => $employee->id,
+            'name' => $employee->full_name,
+            'email' => $employee->email,
+            'role' => $employee->role,
+            'phone' => $employee->phone,
+            'profile_picture' => $employee->profile_picture,
+            'position' => $employee->position,
+            'department' => $employee->department,
         ]);
     }
 }

@@ -63,14 +63,15 @@
                                              class="rounded-circle" width="80" height="80" style="object-fit: cover;">
                                     @else
                                         <div class="rounded-circle d-flex align-items-center justify-content-center" 
-                                             style="width: 80px; height: 80px; background-color: var(--jetlouge-primary); color: white; font-size: 32px;">
-                                            {{ strtoupper(substr($user->name, 0, 1)) }}
+                                             style="width: 80px; height: 80px; background-color: #f8f9fa; border: 2px solid #dee2e6;">
+                                            <img src="{{ asset('assets/images/jetlouge_logo.png') }}" alt="Default Profile" 
+                                                 width="50" height="50" style="object-fit: contain;">
                                         </div>
                                     @endif
                                 </div>
                                 <div class="flex-grow-1">
                                     <input type="file" class="form-control" id="profile_picture" name="profile_picture" 
-                                           accept="image/jpeg,image/png,image/jpg,image/gif">
+                                           accept="image/jpeg,image/png,image/jpg,image/gif" onchange="previewProfilePicture(this)">
                                     <div class="form-text">Upload a new profile picture (JPEG, PNG, JPG, GIF - Max: 2MB)</div>
                                 </div>
                             </div>
@@ -80,18 +81,18 @@
                     <!-- Basic Information -->
                     <div class="row mb-3">
                         <div class="col-md-6">
-                            <label for="name" class="form-label fw-bold">Full Name <span class="text-danger">*</span></label>
-                            <input type="text" class="form-control @error('name') is-invalid @enderror" 
-                                   id="name" name="name" value="{{ old('name', $user->name) }}" required>
-                            @error('name')
+                            <label for="first_name" class="form-label fw-bold">First Name <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control @error('first_name') is-invalid @enderror" 
+                                   id="first_name" name="first_name" value="{{ old('first_name', $user->first_name) }}" required>
+                            @error('first_name')
                                 <div class="invalid-feedback">{{ $message }}</div>
                             @enderror
                         </div>
                         <div class="col-md-6">
-                            <label for="email" class="form-label fw-bold">Email Address <span class="text-danger">*</span></label>
-                            <input type="email" class="form-control @error('email') is-invalid @enderror" 
-                                   id="email" name="email" value="{{ old('email', $user->email) }}" required>
-                            @error('email')
+                            <label for="last_name" class="form-label fw-bold">Last Name <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control @error('last_name') is-invalid @enderror" 
+                                   id="last_name" name="last_name" value="{{ old('last_name', $user->last_name) }}" required>
+                            @error('last_name')
                                 <div class="invalid-feedback">{{ $message }}</div>
                             @enderror
                         </div>
@@ -99,10 +100,10 @@
 
                     <div class="row mb-3">
                         <div class="col-md-6">
-                            <label for="username" class="form-label fw-bold">Username</label>
-                            <input type="text" class="form-control @error('username') is-invalid @enderror" 
-                                   id="username" name="username" value="{{ old('username', $user->username) }}">
-                            @error('username')
+                            <label for="email" class="form-label fw-bold">Email Address <span class="text-danger">*</span></label>
+                            <input type="email" class="form-control @error('email') is-invalid @enderror" 
+                                   id="email" name="email" value="{{ old('email', $user->email) }}" required>
+                            @error('email')
                                 <div class="invalid-feedback">{{ $message }}</div>
                             @enderror
                         </div>
@@ -119,11 +120,15 @@
                     <!-- Additional Profile Information -->
                     <div class="row mb-3">
                         <div class="col-md-6">
-                            <label for="job_title" class="form-label fw-bold">Job Title</label>
-                            <input type="text" class="form-control @error('job_title') is-invalid @enderror" 
-                                   id="job_title" name="job_title" value="{{ old('job_title', $user->job_title ?? '') }}" 
-                                   placeholder="e.g., HR Manager, Software Developer">
-                            @error('job_title')
+                            <label for="role" class="form-label fw-bold">Role</label>
+                            <select class="form-select @error('role') is-invalid @enderror" id="role" name="role" required>
+                                <option value="">Select Role</option>
+                                <option value="admin" {{ old('role', $user->role ?? '') == 'admin' ? 'selected' : '' }}>Admin</option>
+                                <option value="hr" {{ old('role', $user->role ?? '') == 'hr' ? 'selected' : '' }}>HR Manager</option>
+                                <option value="manager" {{ old('role', $user->role ?? '') == 'manager' ? 'selected' : '' }}>Manager</option>
+                                <option value="employee" {{ old('role', $user->role ?? '') == 'employee' ? 'selected' : '' }}>Employee</option>
+                            </select>
+                            @error('role')
                                 <div class="invalid-feedback">{{ $message }}</div>
                             @enderror
                         </div>
@@ -131,19 +136,17 @@
                             <label for="department" class="form-label fw-bold">Department</label>
                             <select class="form-select @error('department') is-invalid @enderror" id="department" name="department">
                                 <option value="">Select Department</option>
-                                <option value="HR" {{ old('department', $user->department ?? '') == 'HR' ? 'selected' : '' }}>Human Resources</option>
-                                <option value="IT" {{ old('department', $user->department ?? '') == 'IT' ? 'selected' : '' }}>Information Technology</option>
+                                <option value="Human Resource" {{ old('department', $user->department ?? '') == 'Human Resource' ? 'selected' : '' }}>Human Resource</option>
+                                <option value="Core Human" {{ old('department', $user->department ?? '') == 'Core Human' ? 'selected' : '' }}>Core Human</option>
+                                <option value="Logistics" {{ old('department', $user->department ?? '') == 'Logistics' ? 'selected' : '' }}>Logistics</option>
+                                <option value="Administration" {{ old('department', $user->department ?? '') == 'Administration' ? 'selected' : '' }}>Administration</option>
                                 <option value="Finance" {{ old('department', $user->department ?? '') == 'Finance' ? 'selected' : '' }}>Finance</option>
-                                <option value="Marketing" {{ old('department', $user->department ?? '') == 'Marketing' ? 'selected' : '' }}>Marketing</option>
-                                <option value="Operations" {{ old('department', $user->department ?? '') == 'Operations' ? 'selected' : '' }}>Operations</option>
-                                <option value="Sales" {{ old('department', $user->department ?? '') == 'Sales' ? 'selected' : '' }}>Sales</option>
                             </select>
                             @error('department')
                                 <div class="invalid-feedback">{{ $message }}</div>
                             @enderror
                         </div>
                     </div>
-
 
                     <div class="row mb-3">
                         <div class="col-md-6">
@@ -356,4 +359,32 @@ document.addEventListener('DOMContentLoaded', function() {
     border-radius: 8px;
 }
 </style>
+
+<script>
+function previewProfilePicture(input) {
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        
+        reader.onload = function(e) {
+            // Find the profile picture container
+            const profileContainer = input.closest('.d-flex').querySelector('.me-3');
+            
+            // Create new image element
+            const newImg = document.createElement('img');
+            newImg.src = e.target.result;
+            newImg.alt = 'Profile Preview';
+            newImg.className = 'rounded-circle';
+            newImg.width = 80;
+            newImg.height = 80;
+            newImg.style.objectFit = 'cover';
+            
+            // Replace the current content with the new image
+            profileContainer.innerHTML = '';
+            profileContainer.appendChild(newImg);
+        };
+        
+        reader.readAsDataURL(input.files[0]);
+    }
+}
+</script>
 @endsection

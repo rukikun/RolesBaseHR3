@@ -24,7 +24,6 @@ yarn-error.log
 Thumbs.db
 
 # Archive and temporary files
-/archive/
 /temp/
 *.backup
 *.bak
@@ -33,6 +32,11 @@ Thumbs.db
 # Database
 *.sql.backup
 /database/backups/*.sql
+/database/archive/
+
+# Maintenance and diagnostics
+/maintenance/temp/
+/maintenance/logs/
 
 # Logs
 /storage/logs/*.log

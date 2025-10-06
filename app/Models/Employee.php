@@ -39,6 +39,7 @@ class Employee extends Authenticatable implements AuthenticatableContract
         'hire_date',
         'salary',
         'status',
+        'role',
         'online_status',
         'last_activity',
         'password',
@@ -91,6 +92,11 @@ class Employee extends Authenticatable implements AuthenticatableContract
     public function claims()
     {
         return $this->hasMany(Claim::class);
+    }
+
+    public function attendances()
+    {
+        return $this->hasMany(Attendance::class);
     }
 
     public function timesheetDetails()
@@ -211,6 +217,146 @@ class Employee extends Authenticatable implements AuthenticatableContract
     public function isOnline()
     {
         return $this->online_status === 'online';
+    }
+
+    // Role-based methods
+    public function isAdmin()
+    {
+        return $this->role === 'admin';
+    }
+
+    public function isHR()
+    {
+        return $this->role === 'hr';
+    }
+
+    public function isManager()
+    {
+        return $this->role === 'manager';
+    }
+
+    public function isEmployee()
+    {
+        return $this->role === 'employee';
+    }
+
+    public function hasRole($role)
+    {
+        return $this->role === $role;
+    }
+
+    public function hasAnyRole($roles)
+    {
+        return in_array($this->role, $roles);
+    }
+
+    public function isSuperAdmin()
+    {
+        // In our employee system, 'admin' role is equivalent to super admin
+        return $this->role === 'admin';
+    }
+
+    public function canManageAdmins()
+    {
+        // Only admin role can manage other admins
+        return $this->role === 'admin';
+    }
+
+    public function recentActivities($limit = 10)
+    {
+        // Return a query builder-like object that has a get() method
+        return new class($this, $limit) {
+            private $employee;
+            private $limit;
+
+            public function __construct($employee, $limit)
+            {
+                $this->employee = $employee;
+                $this->limit = $limit;
+            }
+
+            public function get()
+            {
+                // Return recent activities for this employee
+                $activities = collect();
+
+                try {
+                    // Add recent time entries
+                    if ($this->employee->timeEntries()->exists()) {
+                        $timeEntries = $this->employee->timeEntries()
+                            ->latest()
+                            ->limit($this->limit)
+                            ->get()
+                            ->map(function ($entry) {
+                                return [
+                                    'type' => 'timesheet',
+                                    'description' => 'Timesheet entry for ' . $entry->work_date,
+                                    'date' => $entry->created_at,
+                                    'status' => $entry->status ?? 'pending'
+                                ];
+                            });
+                        $activities = $activities->merge($timeEntries);
+                    }
+
+                    // Add recent leave requests if available
+                    if (method_exists($this->employee, 'leaveRequests') && $this->employee->leaveRequests()->exists()) {
+                        $leaveRequests = $this->employee->leaveRequests()
+                            ->latest()
+                            ->limit($this->limit)
+                            ->get()
+                            ->map(function ($request) {
+                                return [
+                                    'type' => 'leave',
+                                    'description' => 'Leave request from ' . $request->start_date . ' to ' . $request->end_date,
+                                    'date' => $request->created_at,
+                                    'status' => $request->status ?? 'pending'
+                                ];
+                            });
+                        $activities = $activities->merge($leaveRequests);
+                    }
+
+                    // Add recent claims if available
+                    if (method_exists($this->employee, 'claims') && $this->employee->claims()->exists()) {
+                        $claims = $this->employee->claims()
+                            ->latest()
+                            ->limit($this->limit)
+                            ->get()
+                            ->map(function ($claim) {
+                                return [
+                                    'type' => 'claim',
+                                    'description' => 'Expense claim: ' . ($claim->description ?? 'No description'),
+                                    'date' => $claim->created_at,
+                                    'status' => $claim->status ?? 'pending'
+                                ];
+                            });
+                        $activities = $activities->merge($claims);
+                    }
+
+                } catch (\Exception $e) {
+                    // Return empty collection if there's an error
+                    \Log::error('Error fetching recent activities: ' . $e->getMessage());
+                }
+
+                // Sort by date and limit results
+                return $activities->sortByDesc('date')->take($this->limit)->values();
+            }
+
+            public function count()
+            {
+                return $this->get()->count();
+            }
+        };
+    }
+
+    /**
+     * Get the profile picture URL or default logo
+     */
+    public function getProfilePictureUrlAttribute()
+    {
+        if ($this->profile_picture) {
+            return \Storage::url($this->profile_picture);
+        }
+        return asset('assets/images/jetlouge_logo.png');
     }
 
     /**

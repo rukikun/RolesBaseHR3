@@ -9,6 +9,7 @@ use App\Models\Employee;
 use App\Models\LeaveType;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Storage;
 use Carbon\Carbon;
 
 class LeaveRequestController extends Controller
@@ -19,7 +20,7 @@ class LeaveRequestController extends Controller
     public function index(Request $request)
     {
         try {
-            $query = LeaveRequest::with(['employee', 'leaveType', 'approver']);
+            $query = LeaveRequest::with(['employee', 'leaveType', 'approvedBy']);
 
             // Filter by employee if specified
             if ($request->has('employee_id')) {
@@ -36,19 +37,23 @@ class LeaveRequestController extends Controller
                 $query->where('leave_type_id', $request->leave_type_id);
             }
 
-            // Filter by date range if specified
-            if ($request->has('start_date') && $request->has('end_date')) {
-                $query->where(function($q) use ($request) {
-                    $q->whereBetween('start_date', [$request->start_date, $request->end_date])
-                      ->orWhereBetween('end_date', [$request->start_date, $request->end_date])
-                      ->orWhere(function($subQ) use ($request) {
-                          $subQ->where('start_date', '<=', $request->start_date)
-                               ->where('end_date', '>=', $request->end_date);
-                      });
-                });
+            // Filter by emergency status
+            if ($request->has('is_emergency')) {
+                $query->where('is_emergency', $request->boolean('is_emergency'));
             }
 
-            $leaveRequests = $query->orderBy('created_at', 'desc')->paginate(15);
+            // Filter by date range if specified
+            if ($request->has('start_date') && $request->has('end_date')) {
+                $query->inDateRange($request->start_date, $request->end_date);
+            }
+
+            // Sorting
+            $sortBy = $request->get('sort_by', 'created_at');
+            $sortOrder = $request->get('sort_order', 'desc');
+            $query->orderBy($sortBy, $sortOrder);
+
+            $perPage = $request->get('per_page', 15);
+            $leaveRequests = $query->paginate($perPage);
 
             return response()->json([
                 'status' => 'success',
@@ -60,7 +65,8 @@ class LeaveRequestController extends Controller
             Log::error('Leave Requests API index error: ' . $e->getMessage());
             return response()->json([
                 'status' => 'error',
-                'message' => 'Failed to retrieve leave requests'
+                'message' => 'Failed to retrieve leave requests',
+                'error' => config('app.debug') ? $e->getMessage() : null
             ], 500);
         }
     }
@@ -78,7 +84,10 @@ class LeaveRequestController extends Controller
                 'end_date' => 'required|date|after_or_equal:start_date',
                 'days_requested' => 'required|numeric|min:0.5|max:365',
                 'reason' => 'required|string|max:1000',
-                'admin_notes' => 'nullable|string|max:500'
+                'comments' => 'nullable|string|max:1000',
+                'medical_certificate' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048',
+                'is_emergency' => 'nullable|boolean',
+                'deducted_days' => 'nullable|numeric|min:0|max:365'
             ]);
 
             // Calculate days if not provided or validate provided days
@@ -90,7 +99,35 @@ class LeaveRequestController extends Controller
             if (abs($validated['days_requested'] - $calculatedDays) > 0.5) {
                 return response()->json([
                     'status' => 'error',
-                    'message' => 'Days requested does not match the date range provided'
+                    'message' => 'Days requested does not match the date range provided',
+                    'calculated_days' => $calculatedDays,
+                    'requested_days' => $validated['days_requested']
+                ], 422);
+            }
+
+            // Handle medical certificate upload
+            $medicalCertificatePath = null;
+            if ($request->hasFile('medical_certificate')) {
+                $medicalCertificatePath = $request->file('medical_certificate')->store('medical_certificates', 'public');
+            }
+
+            // Check for overlapping leave requests
+            $overlappingRequests = LeaveRequest::where('employee_id', $validated['employee_id'])
+                ->where('status', '!=', 'rejected')
+                ->where(function($query) use ($validated) {
+                    $query->whereBetween('start_date', [$validated['start_date'], $validated['end_date']])
+                          ->orWhereBetween('end_date', [$validated['start_date'], $validated['end_date']])
+                          ->orWhere(function($q) use ($validated) {
+                              $q->where('start_date', '<=', $validated['start_date'])
+                                ->where('end_date', '>=', $validated['end_date']);
+                          });
+                })
+                ->exists();
+
+            if ($overlappingRequests) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'You already have a leave request for overlapping dates'
                 ], 422);
             }
 
@@ -101,8 +138,11 @@ class LeaveRequestController extends Controller
                 'end_date' => $validated['end_date'],
                 'days_requested' => $validated['days_requested'],
                 'reason' => $validated['reason'],
+                'comments' => $validated['comments'] ?? null,
+                'medical_certificate_path' => $medicalCertificatePath,
                 'status' => 'pending',
-                'admin_notes' => $validated['admin_notes'] ?? null
+                'is_emergency' => $validated['is_emergency'] ?? false,
+                'deducted_days' => $validated['deducted_days'] ?? $validated['days_requested']
             ]);
 
             // Load relationships for response
@@ -124,7 +164,8 @@ class LeaveRequestController extends Controller
             Log::error('Leave Requests API store error: ' . $e->getMessage());
             return response()->json([
                 'status' => 'error',
-                'message' => 'Failed to create leave request'
+                'message' => 'Failed to create leave request',
+                'error' => config('app.debug') ? $e->getMessage() : null
             ], 500);
         }
     }
@@ -135,7 +176,7 @@ class LeaveRequestController extends Controller
     public function show($id)
     {
         try {
-            $leaveRequest = LeaveRequest::with(['employee', 'leaveType', 'approver'])->findOrFail($id);
+            $leaveRequest = LeaveRequest::with(['employee', 'leaveType', 'approvedBy'])->findOrFail($id);
 
             return response()->json([
                 'status' => 'success',
@@ -152,7 +193,8 @@ class LeaveRequestController extends Controller
             Log::error('Leave Requests API show error: ' . $e->getMessage());
             return response()->json([
                 'status' => 'error',
-                'message' => 'Failed to retrieve leave request'
+                'message' => 'Failed to retrieve leave request',
+                'error' => config('app.debug') ? $e->getMessage() : null
             ], 500);
         }
     }
@@ -179,7 +221,10 @@ class LeaveRequestController extends Controller
                 'end_date' => 'sometimes|date|after_or_equal:start_date',
                 'days_requested' => 'sometimes|numeric|min:0.5|max:365',
                 'reason' => 'sometimes|string|max:1000',
-                'admin_notes' => 'nullable|string|max:500'
+                'comments' => 'nullable|string|max:1000',
+                'medical_certificate' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:2048',
+                'is_emergency' => 'nullable|boolean',
+                'deducted_days' => 'nullable|numeric|min:0|max:365'
             ]);
 
             // Recalculate days if dates are updated
@@ -192,11 +237,22 @@ class LeaveRequestController extends Controller
                 if (abs($requestedDays - $calculatedDays) > 0.5) {
                     return response()->json([
                         'status' => 'error',
-                        'message' => 'Days requested does not match the date range provided'
+                        'message' => 'Days requested does not match the date range provided',
+                        'calculated_days' => $calculatedDays,
+                        'requested_days' => $requestedDays
                     ], 422);
                 }
                 
                 $validated['days_requested'] = $requestedDays;
+            }
+
+            // Handle medical certificate upload
+            if ($request->hasFile('medical_certificate')) {
+                // Delete old certificate if exists
+                if ($leaveRequest->medical_certificate_path) {
+                    Storage::disk('public')->delete($leaveRequest->medical_certificate_path);
+                }
+                $validated['medical_certificate_path'] = $request->file('medical_certificate')->store('medical_certificates', 'public');
             }
 
             $leaveRequest->update($validated);
@@ -223,7 +279,8 @@ class LeaveRequestController extends Controller
             Log::error('Leave Requests API update error: ' . $e->getMessage());
             return response()->json([
                 'status' => 'error',
-                'message' => 'Failed to update leave request'
+                'message' => 'Failed to update leave request',
+                'error' => config('app.debug') ? $e->getMessage() : null
             ], 500);
         }
     }
@@ -244,17 +301,19 @@ class LeaveRequestController extends Controller
             }
 
             $validated = $request->validate([
-                'admin_notes' => 'nullable|string|max:500'
+                'comments' => 'nullable|string|max:1000',
+                'deducted_days' => 'nullable|numeric|min:0|max:365'
             ]);
 
             $leaveRequest->update([
                 'status' => 'approved',
                 'approved_by' => auth()->id() ?? 1, // Default to admin if no auth
                 'approved_at' => now(),
-                'admin_notes' => $validated['admin_notes'] ?? $leaveRequest->admin_notes
+                'comments' => $validated['comments'] ?? $leaveRequest->comments,
+                'deducted_days' => $validated['deducted_days'] ?? $leaveRequest->deducted_days ?? $leaveRequest->days_requested
             ]);
 
-            $leaveRequest->load(['employee', 'leaveType', 'approver']);
+            $leaveRequest->load(['employee', 'leaveType', 'approvedBy']);
 
             return response()->json([
                 'status' => 'success',
@@ -271,7 +330,8 @@ class LeaveRequestController extends Controller
             Log::error('Leave Requests API approve error: ' . $e->getMessage());
             return response()->json([
                 'status' => 'error',
-                'message' => 'Failed to approve leave request'
+                'message' => 'Failed to approve leave request',
+                'error' => config('app.debug') ? $e->getMessage() : null
             ], 500);
         }
     }
@@ -292,17 +352,19 @@ class LeaveRequestController extends Controller
             }
 
             $validated = $request->validate([
-                'admin_notes' => 'required|string|max:500'
+                'rejection_reason' => 'required|string|max:1000',
+                'comments' => 'nullable|string|max:1000'
             ]);
 
             $leaveRequest->update([
                 'status' => 'rejected',
                 'approved_by' => auth()->id() ?? 1,
                 'approved_at' => now(),
-                'admin_notes' => $validated['admin_notes']
+                'rejection_reason' => $validated['rejection_reason'],
+                'comments' => $validated['comments'] ?? $leaveRequest->comments
             ]);
 
-            $leaveRequest->load(['employee', 'leaveType', 'approver']);
+            $leaveRequest->load(['employee', 'leaveType', 'approvedBy']);
 
             return response()->json([
                 'status' => 'success',
@@ -319,7 +381,8 @@ class LeaveRequestController extends Controller
             Log::error('Leave Requests API reject error: ' . $e->getMessage());
             return response()->json([
                 'status' => 'error',
-                'message' => 'Failed to reject leave request'
+                'message' => 'Failed to reject leave request',
+                'error' => config('app.debug') ? $e->getMessage() : null
             ], 500);
         }
     }
@@ -340,6 +403,11 @@ class LeaveRequestController extends Controller
                 ], 400);
             }
 
+            // Delete medical certificate if exists
+            if ($leaveRequest->medical_certificate_path) {
+                Storage::disk('public')->delete($leaveRequest->medical_certificate_path);
+            }
+
             $leaveRequest->delete();
 
             return response()->json([
@@ -356,7 +424,8 @@ class LeaveRequestController extends Controller
             Log::error('Leave Requests API destroy error: ' . $e->getMessage());
             return response()->json([
                 'status' => 'error',
-                'message' => 'Failed to delete leave request'
+                'message' => 'Failed to delete leave request',
+                'error' => config('app.debug') ? $e->getMessage() : null
             ], 500);
         }
     }
@@ -381,17 +450,19 @@ class LeaveRequestController extends Controller
 
             $stats = [
                 'total_requests' => $query->count(),
-                'pending_requests' => $query->where('status', 'pending')->count(),
-                'approved_requests' => $query->where('status', 'approved')->count(),
-                'rejected_requests' => $query->where('status', 'rejected')->count(),
+                'pending_requests' => (clone $query)->where('status', 'pending')->count(),
+                'approved_requests' => (clone $query)->where('status', 'approved')->count(),
+                'rejected_requests' => (clone $query)->where('status', 'rejected')->count(),
+                'emergency_requests' => (clone $query)->where('is_emergency', true)->count(),
                 'total_days_requested' => $query->sum('days_requested'),
-                'approved_days' => $query->where('status', 'approved')->sum('days_requested'),
-                'pending_days' => $query->where('status', 'pending')->sum('days_requested'),
+                'approved_days' => (clone $query)->where('status', 'approved')->sum('days_requested'),
+                'pending_days' => (clone $query)->where('status', 'pending')->sum('days_requested'),
+                'deducted_days' => (clone $query)->where('status', 'approved')->sum('deducted_days'),
                 'year' => $year
             ];
 
             // Get leave type breakdown
-            $leaveTypeStats = $query->selectRaw('leave_type_id, COUNT(*) as count, SUM(days_requested) as total_days')
+            $leaveTypeStats = (clone $query)->selectRaw('leave_type_id, COUNT(*) as count, SUM(days_requested) as total_days, SUM(CASE WHEN status = "approved" THEN deducted_days ELSE 0 END) as approved_days')
                 ->with('leaveType')
                 ->groupBy('leave_type_id')
                 ->get()
@@ -399,11 +470,27 @@ class LeaveRequestController extends Controller
                     return [
                         'leave_type' => $item->leaveType->name ?? 'Unknown',
                         'requests_count' => $item->count,
-                        'total_days' => $item->total_days
+                        'total_days' => $item->total_days,
+                        'approved_days' => $item->approved_days
                     ];
                 });
 
             $stats['leave_type_breakdown'] = $leaveTypeStats;
+
+            // Monthly breakdown
+            $monthlyStats = (clone $query)->selectRaw('MONTH(start_date) as month, COUNT(*) as count, SUM(days_requested) as total_days')
+                ->groupBy('month')
+                ->orderBy('month')
+                ->get()
+                ->map(function($item) {
+                    return [
+                        'month' => Carbon::create()->month($item->month)->format('F'),
+                        'requests_count' => $item->count,
+                        'total_days' => $item->total_days
+                    ];
+                });
+
+            $stats['monthly_breakdown'] = $monthlyStats;
 
             return response()->json([
                 'status' => 'success',
@@ -415,7 +502,8 @@ class LeaveRequestController extends Controller
             Log::error('Leave Requests API statistics error: ' . $e->getMessage());
             return response()->json([
                 'status' => 'error',
-                'message' => 'Failed to retrieve statistics'
+                'message' => 'Failed to retrieve statistics',
+                'error' => config('app.debug') ? $e->getMessage() : null
             ], 500);
         }
     }
@@ -435,9 +523,9 @@ class LeaveRequestController extends Controller
             $usedDays = LeaveRequest::where('employee_id', $employeeId)
                 ->where('status', 'approved')
                 ->whereYear('start_date', $year)
-                ->sum('days_requested');
+                ->sum('deducted_days');
 
-            // Get leave type balances (assuming there's a leave entitlement system)
+            // Get leave type balances
             $leaveTypes = LeaveType::where('is_active', true)->get();
             $balances = [];
 
@@ -446,20 +534,33 @@ class LeaveRequestController extends Controller
                     ->where('leave_type_id', $leaveType->id)
                     ->where('status', 'approved')
                     ->whereYear('start_date', $year)
+                    ->sum('deducted_days');
+
+                $pendingForType = LeaveRequest::where('employee_id', $employeeId)
+                    ->where('leave_type_id', $leaveType->id)
+                    ->where('status', 'pending')
+                    ->whereYear('start_date', $year)
                     ->sum('days_requested');
 
+                $annualEntitlement = $leaveType->annual_entitlement ?? 0;
+                $remainingDays = max(0, $annualEntitlement - $usedForType);
+
                 $balances[] = [
+                    'leave_type_id' => $leaveType->id,
                     'leave_type' => $leaveType->name,
-                    'annual_entitlement' => $leaveType->annual_entitlement ?? 0,
+                    'annual_entitlement' => $annualEntitlement,
                     'used_days' => $usedForType,
-                    'remaining_days' => max(0, ($leaveType->annual_entitlement ?? 0) - $usedForType)
+                    'pending_days' => $pendingForType,
+                    'remaining_days' => $remainingDays,
+                    'available_days' => max(0, $remainingDays - $pendingForType)
                 ];
             }
 
             return response()->json([
                 'status' => 'success',
                 'data' => [
-                    'employee' => $employee->first_name . ' ' . $employee->last_name,
+                    'employee_id' => $employee->id,
+                    'employee_name' => $employee->first_name . ' ' . $employee->last_name,
                     'year' => $year,
                     'total_used_days' => $usedDays,
                     'leave_balances' => $balances
@@ -476,7 +577,69 @@ class LeaveRequestController extends Controller
             Log::error('Leave Requests API balance error: ' . $e->getMessage());
             return response()->json([
                 'status' => 'error',
-                'message' => 'Failed to retrieve leave balance'
+                'message' => 'Failed to retrieve leave balance',
+                'error' => config('app.debug') ? $e->getMessage() : null
+            ], 500);
+        }
+    }
+
+    /**
+     * Bulk approve multiple leave requests.
+     */
+    public function bulkApprove(Request $request)
+    {
+        try {
+            $validated = $request->validate([
+                'leave_request_ids' => 'required|array',
+                'leave_request_ids.*' => 'integer|exists:leave_requests,id',
+                'comments' => 'nullable|string|max:1000'
+            ]);
+
+            $approvedCount = 0;
+            $errors = [];
+
+            foreach ($validated['leave_request_ids'] as $id) {
+                try {
+                    $leaveRequest = LeaveRequest::findOrFail($id);
+                    
+                    if ($leaveRequest->status === 'pending') {
+                        $leaveRequest->update([
+                            'status' => 'approved',
+                            'approved_by' => auth()->id() ?? 1,
+                            'approved_at' => now(),
+                            'comments' => $validated['comments'] ?? $leaveRequest->comments
+                        ]);
+                        $approvedCount++;
+                    } else {
+                        $errors[] = "Leave request ID {$id} is not pending";
+                    }
+                } catch (\Exception $e) {
+                    $errors[] = "Failed to approve leave request ID {$id}: " . $e->getMessage();
+                }
+            }
+
+            return response()->json([
+                'status' => 'success',
+                'data' => [
+                    'approved_count' => $approvedCount,
+                    'total_requested' => count($validated['leave_request_ids']),
+                    'errors' => $errors
+                ],
+                'message' => "Successfully approved {$approvedCount} leave requests"
+            ], 200);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Validation failed',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            Log::error('Leave Requests API bulk approve error: ' . $e->getMessage());
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to bulk approve leave requests',
+                'error' => config('app.debug') ? $e->getMessage() : null
             ], 500);
         }
     }

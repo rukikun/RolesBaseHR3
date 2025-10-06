@@ -12,7 +12,7 @@
       </div>
       <div>
         <h2 class="fw-bold mb-1">Admin Dashboard</h2>
-        <p class="text-muted mb-0">Welcome back, {{ Auth::check() ? Auth::user()->name : 'Admin' }}! Here's what's happening with your HR system today.</p>
+        <p class="text-muted mb-0">Welcome back, {{ Auth::check() ? (Auth::user()->full_name ?? Auth::user()->name) : 'Admin' }}! Here's what's happening with your HR system today.</p>
       </div>
     </div>
     <div class="d-flex align-items-center">
@@ -22,9 +22,9 @@
           @if(Auth::user()->profile_picture)
             <img src="{{ Storage::url(Auth::user()->profile_picture) }}" alt="Profile" class="rounded-circle me-2" width="24" height="24" style="object-fit: cover;">
           @else
-            <i class="fas fa-user-circle me-2"></i>
+            <img src="{{ asset('assets/images/jetlouge_logo.png') }}" alt="Default Profile" class="rounded-circle me-2" width="24" height="24" style="object-fit: contain; background-color: #f8f9fa; border: 1px solid #dee2e6;">
           @endif
-          {{ Auth::user()->name }}
+          {{ Auth::user()->full_name ?? Auth::user()->name }}
         </button>
         <ul class="dropdown-menu dropdown-menu-end">
           <li><a class="dropdown-item" href="{{ route('admin.profile.index') }}">

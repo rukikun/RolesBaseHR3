@@ -116,6 +116,22 @@
           </div>
 
           <div class="mb-3">
+            <label for="role" class="form-label fw-semibold">Role</label>
+            <div class="input-group">
+              <span class="input-group-text">
+                <i class="bi bi-person-badge"></i>
+              </span>
+              <select class="form-control @error('role') is-invalid @enderror" id="role" name="role" required>
+                <option value="">Select your role</option>
+                <option value="admin" {{ old('role') == 'admin' ? 'selected' : '' }}>Admin</option>
+                <option value="hr" {{ old('role') == 'hr' ? 'selected' : '' }}>HR</option>
+                <option value="manager" {{ old('role') == 'manager' ? 'selected' : '' }}>Manager</option>
+                <option value="employee" {{ old('role') == 'employee' ? 'selected' : '' }}>Employee</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="mb-3">
             <label for="password" class="form-label fw-semibold">Password</label>
             <div class="input-group">
               <span class="input-group-text">
