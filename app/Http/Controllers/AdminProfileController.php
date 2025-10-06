@@ -9,6 +9,8 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use App\Models\User;
 use App\Models\Employee;
+use App\Models\UserActivity;
+use App\Models\UserPreference;
 
 class AdminProfileController extends Controller
 {
@@ -20,25 +22,54 @@ class AdminProfileController extends Controller
         $user = Auth::user();
         $roles = $this->getAvailableRoles();
         
-        // Get recent activities for the user
-        $recentActivities = $user->recentActivities(10)->get();
+        // Get recent activities for the user (with error handling)
+        $recentActivities = collect([]);
+        try {
+            if (method_exists($user, 'recentActivities')) {
+                $recentActivities = $user->recentActivities(10)->get();
+            }
+        } catch (\Exception $e) {
+            // Handle case where UserActivity table doesn't exist
+            $recentActivities = collect([]);
+        }
         
         // Create some sample activities if none exist (for demo purposes)
         if ($recentActivities->count() === 0) {
-            $this->createSampleActivities($user->id);
-            $recentActivities = $user->recentActivities(10)->get();
+            try {
+                $this->createSampleActivities($user->id);
+                if (method_exists($user, 'recentActivities')) {
+                    $recentActivities = $user->recentActivities(10)->get();
+                }
+            } catch (\Exception $e) {
+                // Silently handle if activity creation fails
+                $recentActivities = collect([]);
+            }
         }
         
-        // Get user statistics (using employee-based data)
+        // Get user statistics (with error handling)
         $accountAgeDays = $user->created_at->diffInDays(now());
+        $totalLogins = 0;
+        $profileUpdates = 0;
+        $lastActivity = null;
         
-        // Use employee activities instead of UserActivity
-        $totalLogins = 11; // Sample data - could be tracked via login logs
-        $profileUpdates = 5; // Sample data - could be tracked via profile update timestamps
-        $lastActivity = (object)[
-            'performed_at' => now()->subHour(),
-            'description' => 'Recent profile activity'
-        ];
+        try {
+            if (class_exists('App\Models\UserActivity')) {
+                $totalLogins = UserActivity::where('user_id', $user->id)
+                                         ->where('activity_type', 'login')
+                                         ->count();
+                $profileUpdates = UserActivity::where('user_id', $user->id)
+                                            ->where('activity_type', 'profile_update')
+                                            ->count();
+                $lastActivity = UserActivity::where('user_id', $user->id)
+                                          ->latest('performed_at')
+                                          ->first();
+            }
+        } catch (\Exception $e) {
+            // Use default values if UserActivity table doesn't exist
+            $totalLogins = 0;
+            $profileUpdates = 0;
+            $lastActivity = null;
+        }
 
         $userStats = [
             'total_logins' => $totalLogins > 0 ? $totalLogins : 0,
@@ -70,23 +101,26 @@ class AdminProfileController extends Controller
         $user = Auth::user();
         
         $request->validate([
-            'first_name' => 'required|string|max:255',
-            'last_name' => 'required|string|max:255',
-            'email' => ['required', 'string', 'email', 'max:255', Rule::unique('employees')->ignore($user->id)],
+            'name' => 'required|string|max:255',
+            'email' => ['required', 'string', 'email', 'max:255', Rule::unique('users')->ignore($user->id)],
+            'username' => ['nullable', 'string', 'max:255', Rule::unique('users')->ignore($user->id)],
             'phone' => 'nullable|string|max:20',
             'profile_picture' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
-            'role' => 'required|in:admin,hr,manager,employee',
-            'department' => 'nullable|in:Human Resource,Core Human,Logistics,Administration,Finance',
+            'job_title' => 'nullable|string|max:255',
+            'department' => 'nullable|string|max:100',
+            'manager_id' => 'nullable|integer',
+            'work_location' => 'nullable|string|max:100',
             'date_of_birth' => 'nullable|date|before:today',
             'gender' => 'nullable|in:Male,Female,Other,Prefer not to say',
             'address' => 'nullable|string|max:500',
             'emergency_contact_name' => 'nullable|string|max:255',
             'emergency_contact_phone' => 'nullable|string|max:20',
+            'emergency_contact_relationship' => 'nullable|in:Spouse,Parent,Sibling,Child,Friend,Other'
         ]);
 
         try {
             // Track changes for activity logging
-            $originalData = $user->only(['first_name', 'last_name', 'email', 'phone', 'role', 'department']);
+            $originalData = $user->only(['name', 'email', 'username', 'phone', 'job_title', 'department']);
             $changes = [];
             
             // Handle profile picture upload
@@ -102,7 +136,7 @@ class AdminProfileController extends Controller
             }
 
             // Track field changes for key fields
-            $trackableFields = ['first_name', 'last_name', 'email', 'phone', 'role', 'department'];
+            $trackableFields = ['name', 'email', 'username', 'phone', 'job_title', 'department'];
             foreach ($trackableFields as $field) {
                 if (isset($originalData[$field]) && $originalData[$field] !== $request->$field) {
                     $changes[$field] = [
@@ -112,23 +146,36 @@ class AdminProfileController extends Controller
                 }
             }
 
-            // Update employee data with all fields
+            // Update user data with all fields
             $user->update([
-                'first_name' => $request->first_name,
-                'last_name' => $request->last_name,
+                'name' => $request->name,
                 'email' => $request->email,
+                'username' => $request->username,
                 'phone' => $request->phone,
-                'role' => $request->role,
+                'job_title' => $request->job_title,
                 'department' => $request->department,
+                'manager_id' => $request->manager_id,
+                'work_location' => $request->work_location,
                 'date_of_birth' => $request->date_of_birth,
                 'gender' => $request->gender,
                 'address' => $request->address,
                 'emergency_contact_name' => $request->emergency_contact_name,
                 'emergency_contact_phone' => $request->emergency_contact_phone,
+                'emergency_contact_relationship' => $request->emergency_contact_relationship,
                 'profile_picture' => $user->profile_picture ?? null
             ]);
 
-            // Activity logging removed - now using employee activities instead
+            // Log activity if there were changes
+            if (!empty($changes)) {
+                try {
+                    if (class_exists('App\Models\UserActivity') && method_exists('App\Models\UserActivity', 'log')) {
+                        UserActivity::log('profile_update', 'Profile updated', $changes);
+                    }
+                } catch (\Exception $e) {
+                    // Silently handle if activity logging fails
+                    \Log::info('Profile activity logging failed: ' . $e->getMessage());
+                }
+            }
 
             return redirect()->route('admin.profile.index')
                            ->with('success', 'Profile updated successfully!');
@@ -169,7 +216,15 @@ class AdminProfileController extends Controller
             'password' => Hash::make($request->password)
         ]);
 
-        // Activity logging removed - now using employee activities instead
+        // Log password change activity
+        try {
+            if (class_exists('App\Models\UserActivity') && method_exists('App\Models\UserActivity', 'log')) {
+                UserActivity::log('password_change', 'Password changed successfully');
+            }
+        } catch (\Exception $e) {
+            // Silently handle if activity logging fails
+            \Log::info('Password change activity logging failed: ' . $e->getMessage());
+        }
 
         return redirect()->route('admin.profile.index')
                        ->with('success', 'Password updated successfully!');
@@ -388,20 +443,32 @@ class AdminProfileController extends Controller
         ]);
 
         try {
-            // Simplified preferences update (UserPreference model removed)
+            // Update preferences
             $preferences = [
-                'theme' => $request->theme ?? 'light',
-                'language' => $request->language ?? 'en',
-                'timezone' => $request->timezone ?? 'Asia/Manila',
-                'date_format' => $request->date_format ?? 'Y-m-d',
-                'time_format' => $request->time_format ?? '24',
-                'notifications_email' => $request->boolean('notifications_email', true),
-                'notifications_browser' => $request->boolean('notifications_browser', true),
-                'records_per_page' => $request->records_per_page ?? 25
+                UserPreference::THEME => $request->theme ?? 'light',
+                UserPreference::LANGUAGE => $request->language ?? 'en',
+                UserPreference::TIMEZONE => $request->timezone ?? 'Asia/Manila',
+                UserPreference::DATE_FORMAT => $request->date_format ?? 'Y-m-d',
+                UserPreference::TIME_FORMAT => $request->time_format ?? '24',
+                UserPreference::NOTIFICATIONS_EMAIL => $request->boolean('notifications_email', true),
+                UserPreference::NOTIFICATIONS_BROWSER => $request->boolean('notifications_browser', true),
+                UserPreference::RECORDS_PER_PAGE => $request->records_per_page ?? 25
             ];
 
-            // Store preferences in session for now (could be stored in user table later)
-            session(['user_preferences' => $preferences]);
+            foreach ($preferences as $key => $value) {
+                $type = is_bool($value) ? 'boolean' : (is_int($value) ? 'integer' : 'string');
+                $user->setPreference($key, $value, $type);
+            }
+
+            // Log preference update activity
+            try {
+                if (class_exists('App\Models\UserActivity') && method_exists('App\Models\UserActivity', 'log')) {
+                    UserActivity::log('settings_update', 'User preferences updated', $preferences);
+                }
+            } catch (\Exception $e) {
+                // Silently handle if activity logging fails
+                \Log::info('Preferences activity logging failed: ' . $e->getMessage());
+            }
 
             return response()->json([
                 'success' => true,
@@ -421,19 +488,12 @@ class AdminProfileController extends Controller
      */
     public function getPreferences()
     {
-        // Get preferences from session or use defaults
-        $defaults = [
-            'theme' => 'light',
-            'language' => 'en',
-            'timezone' => 'Asia/Manila',
-            'date_format' => 'Y-m-d',
-            'time_format' => '24',
-            'notifications_email' => true,
-            'notifications_browser' => true,
-            'records_per_page' => 25
-        ];
+        $user = Auth::user();
+        $preferences = $user->getAllPreferences();
+        $defaults = UserPreference::getDefaultPreferences();
         
-        $preferences = session('user_preferences', $defaults);
+        // Merge with defaults
+        $preferences = array_merge($defaults, $preferences);
         
         return response()->json([
             'success' => true,
@@ -443,13 +503,56 @@ class AdminProfileController extends Controller
 
     /**
      * Create sample activities for demo purposes
-     * Note: Now using employee activities instead of separate UserActivity model
      */
     private function createSampleActivities($userId)
     {
-        // Sample activities are now created through actual employee actions
-        // like timesheet submissions, attendance records, etc.
-        // No need for separate UserActivity records
-        return true;
+        try {
+            if (!class_exists('App\Models\UserActivity')) {
+                return;
+            }
+
+            // Create some sample login activities
+            UserActivity::create([
+                'user_id' => $userId,
+                'activity_type' => 'login',
+                'description' => 'User logged in successfully',
+                'ip_address' => '127.0.0.1',
+                'user_agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'metadata' => ['login_method' => 'web_form'],
+                'performed_at' => now()->subHours(2)
+            ]);
+
+            UserActivity::create([
+                'user_id' => $userId,
+                'activity_type' => 'login',
+                'description' => 'User logged in successfully',
+                'ip_address' => '127.0.0.1',
+                'user_agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'metadata' => ['login_method' => 'web_form'],
+                'performed_at' => now()->subDays(1)
+            ]);
+
+            UserActivity::create([
+                'user_id' => $userId,
+                'activity_type' => 'profile_update',
+                'description' => 'Profile information updated',
+                'ip_address' => '127.0.0.1',
+                'user_agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'metadata' => ['name' => ['from' => 'Old Name', 'to' => 'New Name']],
+                'performed_at' => now()->subHours(5)
+            ]);
+            UserActivity::create([
+                'user_id' => $userId,
+                'activity_type' => 'settings_update',
+                'description' => 'User preferences updated',
+                'ip_address' => '127.0.0.1',
+                'user_agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'metadata' => ['theme' => 'dark', 'language' => 'en'],
+                'performed_at' => now()->subHours(8)
+            ]);
+        } catch (\Exception $e) {
+            // Silently handle if sample activity creation fails
+            \Log::info('Sample activity creation failed: ' . $e->getMessage());
+        }
     }
 }

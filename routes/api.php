@@ -169,13 +169,10 @@ Route::middleware('auth')->group(function () {
 
     // Leave Requests API routes
     Route::prefix('leave-requests')->group(function () {
-        Route::get('/', [App\Http\Controllers\Api\LeaveRequestController::class, 'index']);
-        Route::post('/', [App\Http\Controllers\Api\LeaveRequestController::class, 'store']);
-        Route::get('/statistics', [App\Http\Controllers\Api\LeaveRequestController::class, 'statistics']);
-        Route::get('/balance/{employeeId}', [App\Http\Controllers\Api\LeaveRequestController::class, 'balance']);
-        Route::get('/{id}', [App\Http\Controllers\Api\LeaveRequestController::class, 'show']);
-        Route::put('/{id}', [App\Http\Controllers\Api\LeaveRequestController::class, 'update']);
-        Route::delete('/{id}', [App\Http\Controllers\Api\LeaveRequestController::class, 'destroy']);
+        // Single endpoint for external systems to send data and create leave requests
+        Route::post('/receive', [App\Http\Controllers\Api\LeaveRequestController::class, 'receiveData']);
+        
+        // Approval endpoints
         Route::post('/{id}/approve', [App\Http\Controllers\Api\LeaveRequestController::class, 'approve']);
         Route::post('/{id}/reject', [App\Http\Controllers\Api\LeaveRequestController::class, 'reject']);
     });

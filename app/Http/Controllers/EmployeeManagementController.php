@@ -3,11 +3,13 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use App\Models\Employee;
 use App\Traits\DatabaseConnectionTrait;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Http;
+
 
 class EmployeeManagementController extends Controller
 {
@@ -16,59 +18,95 @@ class EmployeeManagementController extends Controller
     /**
      * Display a listing of employees
      */
-    public function index(Request $request)
+    public function index()
     {
+        \Log::info('EmployeeManagementController@index called at ' . now());
+        
+        // Initialize empty employees collection
+        $employees = collect();
+        
         try {
-            // Build API URL with query parameters
-            $apiUrl = 'http://hr4.jetlougetravels-ph.com/api/employees';
-            $queryParams = [];
-            
-            // Add filters if present
-            if ($request->has('status') && $request->status != '') {
-                $queryParams['status'] = $request->status;
-            }
-            
-            if ($request->has('department') && $request->department != '') {
-                $queryParams['department'] = $request->department;
-            }
-            
-            if ($request->has('search') && $request->search != '') {
-                $queryParams['search'] = $request->search;
-            }
-            
-            // Add query parameters to URL if any
-            if (!empty($queryParams)) {
-                $apiUrl .= '?' . http_build_query($queryParams);
-            }
-            
-            $response = Http::get($apiUrl);
-            
+            // Fetch data from API
+            $response = Http::timeout(10)->get('http://hr4.jetlougetravels-ph.com/api/employees');
+
             if ($response->successful()) {
                 $apiData = $response->json();
-                // Extract employees from the 'data' field of API response
-                $employees = collect($apiData['data'] ?? []);
+                \Log::info('API Response received - Count: ' . count($apiData));
                 
-                // Convert to objects for blade compatibility
-                $employees = $employees->map(function($employee) {
-                    return (object) $employee;
-                });
+                if (is_array($apiData) && !empty($apiData)) {
+                    // Transform API data to objects that match the view expectations
+                    $employees = collect($apiData)->map(function ($employee) {
+                        return (object) [
+                            'id' => $employee['id'],
+                            'first_name' => $employee['first_name'] ?? '',
+                            'last_name' => $employee['last_name'] ?? '',
+                            'name' => $employee['name'],
+                            'email' => $employee['email'],
+                            'position' => $employee['role'] ?? $employee['job_title'] ?? 'N/A',
+                            'department' => $this->mapDepartment($employee['role'] ?? ''),
+                            'status' => $this->mapStatus($employee['status'] ?? 'Active'),
+                            'phone' => $employee['phone'] ?? null,
+                            'hire_date' => $employee['date_hired'] ?? $employee['start_date'] ?? null,
+                            'external_id' => $employee['external_employee_id'] ?? null,
+                            'salary' => null, // Not provided by API
+                            'age' => $employee['age'] ?? null,
+                            'gender' => $employee['gender'] ?? null,
+                            'address' => $employee['address'] ?? null
+                        ];
+                    });
+                    
+                    \Log::info('Successfully transformed ' . $employees->count() . ' employees from API');
+                }
             } else {
-                $employees = collect([]);
-                Log::error('API request failed: ' . $response->body());
+                \Log::warning('API request failed with status: ' . $response->status());
             }
             
-            // Get departments for filter dropdown
-            $departments = $employees->pluck('department')->filter()->unique()->values();
-            
-            return view('admin.employees.index', compact('employees', 'departments'));
-            
         } catch (\Exception $e) {
-            Log::error('Error fetching employees from API: ' . $e->getMessage());
-            $employees = collect([]);
-            $departments = collect([]);
-            return view('admin.employees.index', compact('employees', 'departments'))
-                ->with('error', 'Error loading employees: ' . $e->getMessage());
+            \Log::error('Employee Management API Error: ' . $e->getMessage());
         }
+
+        // Calculate statistics
+        $stats = [
+            'total_employees' => $employees->count(),
+            'active_employees' => $employees->where('status', 'active')->count(),
+            'employees_with_timesheets' => 0, // Not available from API
+        ];
+
+        \Log::info('Returning view with ' . $employees->count() . ' employees');
+        
+        return view('admin.employees.index', compact('employees', 'stats'));
+    }
+    
+    /**
+     * Map API role to department
+     */
+    private function mapDepartment($role)
+    {
+        $departmentMap = [
+            'Accountant' => 'Finance',
+            'Logistics Coordinator' => 'Operations',
+            'HR Manager' => 'Human Resources',
+            'Software Developer' => 'Information Technology',
+            'Sales Representative' => 'Sales',
+            'Marketing Specialist' => 'Marketing'
+        ];
+        
+        return $departmentMap[$role] ?? 'General';
+    }
+    
+    /**
+     * Map API status to view status
+     */
+    private function mapStatus($apiStatus)
+    {
+        $statusMap = [
+            'Passed' => 'active',
+            'Active' => 'active',
+            'Inactive' => 'inactive',
+            'Terminated' => 'terminated'
+        ];
+        
+        return $statusMap[$apiStatus] ?? 'active';
     }
 
     /**
@@ -76,24 +114,8 @@ class EmployeeManagementController extends Controller
      */
     public function create()
     {
-        try {
-            // Get departments from API
-            $response = Http::get('http://127.0.0.1:8000/api/employees/departments/list');
-            
-            if ($response->successful()) {
-                $apiData = $response->json();
-                $departments = collect($apiData['data'] ?? []);
-            } else {
-                $departments = collect(['IT', 'HR', 'Finance', 'Marketing', 'Operations']); // Fallback
-            }
-            
-            return view('admin.employees.create', compact('departments'));
-            
-        } catch (\Exception $e) {
-            Log::error('Error fetching departments: ' . $e->getMessage());
-            $departments = collect(['IT', 'HR', 'Finance', 'Marketing', 'Operations']); // Fallback
-            return view('admin.employees.create', compact('departments'));
-        }
+        $departments = Employee::distinct()->pluck('department')->filter();
+        return view('admin.employees.create', compact('departments'));
     }
 
     /**
@@ -104,7 +126,7 @@ class EmployeeManagementController extends Controller
         $validator = Validator::make($request->all(), [
             'first_name' => 'required|string|max:255',
             'last_name' => 'required|string|max:255',
-            'email' => 'required|email',
+            'email' => 'required|email|unique:employees,email',
             'phone' => 'nullable|string|max:20',
             'position' => 'nullable|string|max:255',
             'department' => 'nullable|string|max:255',
@@ -128,8 +150,11 @@ class EmployeeManagementController extends Controller
         }
 
         try {
-            // Prepare data for API
-            $employeeData = [
+            // Generate employee ID if not provided
+            $employeeId = $this->generateEmployeeId();
+
+            $employee = Employee::create([
+                'employee_id' => $employeeId,
                 'first_name' => $request->first_name,
                 'last_name' => $request->last_name,
                 'email' => $request->email,
@@ -138,7 +163,7 @@ class EmployeeManagementController extends Controller
                 'department' => $request->department,
                 'hire_date' => $request->hire_date,
                 'salary' => $request->salary,
-                'password' => $request->password, // API will handle hashing
+                'password' => Hash::make($request->password),
                 'date_of_birth' => $request->date_of_birth,
                 'gender' => $request->gender,
                 'address' => $request->address,
@@ -147,23 +172,11 @@ class EmployeeManagementController extends Controller
                 'bank_account_number' => $request->bank_account_number,
                 'tax_id' => $request->tax_id,
                 'status' => 'active'
-            ];
+            ]);
 
-            // Send to API
-            $response = Http::post('http://127.0.0.1:8000/api/employees', $employeeData);
-
-            if ($response->successful()) {
-                $apiData = $response->json();
-                Log::info('Employee created successfully via API');
-                return redirect()->route('employees.index')
-                    ->with('success', 'Employee created successfully!');
-            } else {
-                $errorMessage = 'API Error: ' . $response->body();
-                Log::error('API error creating employee: ' . $errorMessage);
-                return redirect()->back()
-                    ->withInput()
-                    ->with('error', 'Error creating employee: ' . $errorMessage);
-            }
+            Log::info('Employee created successfully: ' . $employee->full_name);
+            return redirect()->route('employees.index')
+                ->with('success', 'Employee created successfully!');
 
         } catch (\Exception $e) {
             Log::error('Error creating employee: ' . $e->getMessage());
@@ -176,21 +189,11 @@ class EmployeeManagementController extends Controller
     /**
      * Display the specified employee
      */
-    public function show($id)
+    public function show(Employee $employee)
     {
         try {
-            // Get employee from API
-            $response = Http::get("http://127.0.0.1:8000/api/employees/{$id}");
-            
-            if ($response->successful()) {
-                $apiData = $response->json();
-                $employee = (object) ($apiData['data'] ?? []);
-                return view('admin.employees.show', compact('employee'));
-            } else {
-                Log::error('API error fetching employee: ' . $response->body());
-                return redirect()->back()->with('error', 'Employee not found.');
-            }
-            
+            $employee->load(['timeEntries', 'shifts', 'leaveRequests', 'claims']);
+            return view('admin.employees.show', compact('employee'));
         } catch (\Exception $e) {
             Log::error('Error showing employee: ' . $e->getMessage());
             return redirect()->back()->with('error', 'Error loading employee details.');
@@ -200,46 +203,21 @@ class EmployeeManagementController extends Controller
     /**
      * Show the form for editing the specified employee
      */
-    public function edit($id)
+    public function edit(Employee $employee)
     {
-        try {
-            // Get employee from API
-            $response = Http::get("http://127.0.0.1:8000/api/employees/{$id}");
-            
-            if ($response->successful()) {
-                $apiData = $response->json();
-                $employee = (object) ($apiData['data'] ?? []);
-                
-                // Get departments from API
-                $deptResponse = Http::get('http://127.0.0.1:8000/api/employees/departments/list');
-                if ($deptResponse->successful()) {
-                    $deptData = $deptResponse->json();
-                    $departments = collect($deptData['data'] ?? []);
-                } else {
-                    $departments = collect(['IT', 'HR', 'Finance', 'Marketing', 'Operations']);
-                }
-                
-                return view('admin.employees.edit', compact('employee', 'departments'));
-            } else {
-                Log::error('API error fetching employee: ' . $response->body());
-                return redirect()->back()->with('error', 'Employee not found.');
-            }
-            
-        } catch (\Exception $e) {
-            Log::error('Error loading employee for edit: ' . $e->getMessage());
-            return redirect()->back()->with('error', 'Error loading employee details.');
-        }
+        $departments = Employee::distinct()->pluck('department')->filter();
+        return view('admin.employees.edit', compact('employee', 'departments'));
     }
 
     /**
      * Update the specified employee
      */
-    public function update(Request $request, $id)
+    public function update(Request $request, Employee $employee)
     {
         $validator = Validator::make($request->all(), [
             'first_name' => 'required|string|max:255',
             'last_name' => 'required|string|max:255',
-            'email' => 'required|email',
+            'email' => 'required|email|unique:employees,email,' . $employee->id,
             'phone' => 'nullable|string|max:20',
             'position' => 'nullable|string|max:255',
             'department' => 'nullable|string|max:255',
@@ -264,28 +242,18 @@ class EmployeeManagementController extends Controller
         }
 
         try {
-            // Prepare data for API
-            $updateData = $request->except(['password', '_token', '_method']);
+            $updateData = $request->except(['password']);
             
-            // Only include password if provided
+            // Only update password if provided
             if ($request->filled('password')) {
-                $updateData['password'] = $request->password; // API will handle hashing
+                $updateData['password'] = Hash::make($request->password);
             }
 
-            // Send to API
-            $response = Http::put("http://127.0.0.1:8000/api/employees/{$id}", $updateData);
+            $employee->update($updateData);
 
-            if ($response->successful()) {
-                Log::info('Employee updated successfully via API');
-                return redirect()->route('employees.index')
-                    ->with('success', 'Employee updated successfully!');
-            } else {
-                $errorMessage = 'API Error: ' . $response->body();
-                Log::error('API error updating employee: ' . $errorMessage);
-                return redirect()->back()
-                    ->withInput()
-                    ->with('error', 'Error updating employee: ' . $errorMessage);
-            }
+            Log::info('Employee updated successfully: ' . $employee->full_name);
+            return redirect()->route('employees.index')
+                ->with('success', 'Employee updated successfully!');
 
         } catch (\Exception $e) {
             Log::error('Error updating employee: ' . $e->getMessage());
@@ -298,22 +266,15 @@ class EmployeeManagementController extends Controller
     /**
      * Remove the specified employee
      */
-    public function destroy($id)
+    public function destroy(Employee $employee)
     {
         try {
-            // Delete via API
-            $response = Http::delete("http://127.0.0.1:8000/api/employees/{$id}");
+            $employeeName = $employee->full_name;
+            $employee->delete();
 
-            if ($response->successful()) {
-                Log::info('Employee deleted successfully via API');
-                return redirect()->route('employees.index')
-                    ->with('success', 'Employee deleted successfully!');
-            } else {
-                $errorMessage = 'API Error: ' . $response->body();
-                Log::error('API error deleting employee: ' . $errorMessage);
-                return redirect()->back()
-                    ->with('error', 'Error deleting employee: ' . $errorMessage);
-            }
+            Log::info('Employee deleted successfully: ' . $employeeName);
+            return redirect()->route('employees.index')
+                ->with('success', 'Employee deleted successfully!');
 
         } catch (\Exception $e) {
             Log::error('Error deleting employee: ' . $e->getMessage());
@@ -323,32 +284,28 @@ class EmployeeManagementController extends Controller
     }
 
     /**
-     * Get employee statistics via API
+     * Generate unique employee ID
+     */
+    private function generateEmployeeId()
+    {
+        $lastEmployee = Employee::orderBy('id', 'desc')->first();
+        $nextId = $lastEmployee ? $lastEmployee->id + 1 : 1;
+        return 'EMP' . str_pad($nextId, 4, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * Get employee statistics
      */
     public function getStats()
     {
         try {
-            $response = Http::get('http://127.0.0.1:8000/api/employees/stats/summary');
-            
-            if ($response->successful()) {
-                $apiData = $response->json();
-                return $apiData['data'] ?? [
-                    'total' => 0,
-                    'active' => 0,
-                    'inactive' => 0,
-                    'online' => 0,
-                    'departments' => 0
-                ];
-            } else {
-                Log::error('API error getting employee stats: ' . $response->body());
-                return [
-                    'total' => 0,
-                    'active' => 0,
-                    'inactive' => 0,
-                    'online' => 0,
-                    'departments' => 0
-                ];
-            }
+            return [
+                'total' => Employee::count(),
+                'active' => Employee::where('status', 'active')->count(),
+                'inactive' => Employee::where('status', 'inactive')->count(),
+                'online' => Employee::where('online_status', 'online')->count(),
+                'departments' => Employee::distinct()->count('department')
+            ];
         } catch (\Exception $e) {
             Log::error('Error getting employee stats: ' . $e->getMessage());
             return [

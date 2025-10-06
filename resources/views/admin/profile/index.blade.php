@@ -48,12 +48,11 @@
                 <div class="profile-picture-container mb-2">
                     @if($user->profile_picture)
                         <img src="{{ Storage::url($user->profile_picture) }}" alt="Profile Picture" 
-                             class="rounded-circle profile-picture" width="80" height="80" style="object-fit: cover;">
+                             class="rounded-circle profile-picture" width="80" height="80">
                     @else
                         <div class="profile-picture-placeholder rounded-circle d-flex align-items-center justify-content-center" 
-                             style="width: 80px; height: 80px; background-color: #f8f9fa; border: 2px solid #dee2e6; margin: 0 auto;">
-                            <img src="{{ asset('assets/images/jetlouge_logo.png') }}" alt="Default Profile" 
-                                 width="50" height="50" style="object-fit: contain;">
+                             style="width: 80px; height: 80px; background-color: var(--jetlouge-primary); color: white; font-size: 32px; margin: 0 auto;">
+                            {{ strtoupper(substr($user->name, 0, 1)) }}
                         </div>
                     @endif
                 </div>
@@ -88,14 +87,15 @@
             <div class="card-body py-3">
                 @php
                     $profileFields = [
-                        ['label' => 'Full Name', 'value' => $user->full_name ?? ($user->first_name . ' ' . $user->last_name), 'icon' => 'fas fa-user'],
+                        ['label' => 'Full Name', 'value' => $user->name, 'icon' => 'fas fa-user'],
                         ['label' => 'Email Address', 'value' => $user->email, 'icon' => 'fas fa-envelope'],
+                        ['label' => 'Username', 'value' => $user->username ?? 'Not set', 'icon' => 'fas fa-at'],
                         ['label' => 'Phone Number', 'value' => $user->phone ?? 'Not set', 'icon' => 'fas fa-phone'],
-                        ['label' => 'Role', 'value' => $user->role == 'hr' ? 'HR Manager' : ucfirst($user->role ?? 'Not set'), 'icon' => 'fas fa-user-tag'],
+                        ['label' => 'Job Title', 'value' => $user->job_title ?? 'Not set', 'icon' => 'fas fa-briefcase'],
                         ['label' => 'Department', 'value' => $user->department ?? 'Not set', 'icon' => 'fas fa-building'],
-                        ['label' => 'Hire Date', 'value' => $user->hire_date ? \Carbon\Carbon::parse($user->hire_date)->format('M d, Y') : 'Not set', 'icon' => 'fas fa-calendar-plus'],
-                        ['label' => 'Status', 'value' => ucfirst($user->status ?? 'active'), 'icon' => 'fas fa-circle'],
-                        ['label' => 'Last Activity', 'value' => $user->last_activity ? \Carbon\Carbon::parse($user->last_activity)->format('M d, Y h:i A') : 'Never', 'icon' => 'fas fa-clock']
+                        ['label' => 'Work Location', 'value' => $user->work_location ?? 'Not set', 'icon' => 'fas fa-map-marker-alt'],
+                        ['label' => 'Last Login', 'value' => $user->last_login ? $user->last_login->format('M d, Y h:i A') : 'Never', 'icon' => 'fas fa-clock'],
+                        ['label' => 'Account Created', 'value' => $user->created_at->format('M d, Y h:i A'), 'icon' => 'fas fa-calendar-plus']
                     ];
                 @endphp
 

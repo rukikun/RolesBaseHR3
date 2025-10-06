@@ -1,3 +1,4 @@
+
 @extends('layouts.hr')
 
 @section('title', 'Employees - HR System')
@@ -126,75 +127,54 @@
   </div>
   <div class="card-body">
     <!-- Employee Search and Filters -->
-    <form method="GET" action="{{ route('employees.index') }}" id="employee-filter-form">
-      <div class="row mb-3">
-        <div class="col-md-4">
-          <input type="text" class="form-control" name="search" id="employee-search" 
-                 placeholder="Search employees..." value="{{ request('search') }}">
-        </div>
-        <div class="col-md-3">
-          <select class="form-select" name="department" id="department-filter">
-            <option value="">All Departments</option>
-            @foreach($departments as $department)
-              <option value="{{ $department }}" {{ request('department') == $department ? 'selected' : '' }}>
-                {{ $department }}
-              </option>
-            @endforeach
-          </select>
-        </div>
-        <div class="col-md-3">
-          <select class="form-select" name="status" id="status-filter">
-            <option value="">All Status</option>
-            <option value="active" {{ request('status') == 'active' ? 'selected' : '' }}>Active</option>
-            <option value="inactive" {{ request('status') == 'inactive' ? 'selected' : '' }}>Inactive</option>
-            <option value="terminated" {{ request('status') == 'terminated' ? 'selected' : '' }}>Terminated</option>
-          </select>
-        </div>
-        <div class="col-md-2">
-          <button type="submit" class="btn btn-primary me-2">
-            <i class="fas fa-search me-1"></i>Search
-          </button>
-          <a href="{{ route('employees.index') }}" class="btn btn-outline-secondary">
-            <i class="fas fa-times me-1"></i>Clear
-          </a>
-        </div>
+    <!-- Employee Search and Filters -->
+    <div class="row mb-3">
+      <div class="col-md-4">
+        <input type="text" class="form-control" id="employee-search" placeholder="Search employees...">
       </div>
-    </form>
+      <div class="col-md-3">
+        <select class="form-select" id="department-filter">
+          <option value="">All Departments</option>
+          <option value="Human Resources">Human Resources</option>
+          <option value="Information Technology">Information Technology</option>
+          <option value="Finance">Finance</option>
+          <option value="Marketing">Marketing</option>
+          <option value="Sales">Sales</option>
+          <option value="Operations">Operations</option>
+        </select>
+      </div>
+      <div class="col-md-3">
+        <select class="form-select" id="status-filter">
+          <option value="">All Status</option>
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+          <option value="terminated">Terminated</option>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <button class="btn btn-outline-secondary" onclick="clearFilters()">
+          <i class="fas fa-times me-1"></i>Clear
+        </button>
+      </div>
+    </div>
 
     <!-- Filter Information Display -->
-    @if(request()->has('status') || request()->has('department') || request()->has('search'))
+    @if(request()->has('status') || request()->has('filter') || request()->has('view'))
     <div class="alert alert-info mb-3">
       <i class="fas fa-filter me-2"></i>
       <strong>Filtered View:</strong>
-      @if(request()->get('status'))
-        Status: {{ ucfirst(request()->get('status')) }}
+      @if(request()->get('status') === 'active')
+        Showing only active employees
+      @elseif(request()->get('filter') === 'with_timesheets')
+        Showing employees with timesheets today
+      @elseif(request()->get('view') === 'departments')
+        Showing employees with assigned departments
       @endif
-      @if(request()->get('department'))
-        @if(request()->get('status')) | @endif
-        Department: {{ request()->get('department') }}
-      @endif
-      @if(request()->get('search'))
-        @if(request()->get('status') || request()->get('department')) | @endif
-        Search: "{{ request()->get('search') }}"
-      @endif
-      <a href="{{ route('employees.index') }}" class="btn btn-sm btn-outline-secondary ms-2">
-        <i class="fas fa-times me-1"></i>Clear Filters
+      <a href="/employees" class="btn btn-sm btn-outline-secondary ms-2">
+        <i class="fas fa-times me-1"></i>Clear Filter
       </a>
     </div>
     @endif
-
-    <!-- Employee Count Display -->
-    <div class="d-flex justify-content-between align-items-center mb-3">
-      <div class="employee-count text-muted">
-        {{ $employees->count() }} employee{{ $employees->count() !== 1 ? 's' : '' }} found
-      </div>
-      @if($employees->count() > 0)
-        <small class="text-muted">
-          <i class="fas fa-info-circle me-1"></i>
-          Data loaded from API
-        </small>
-      @endif
-    </div>
 
     <div class="table-responsive">
       <table class="table table-hover" id="employees-table">
@@ -1527,71 +1507,13 @@ function viewEmployeeDetails(employeeId) {
             </div>
         </div>
     </div>
-</style>
-
-<script>
-// Enhanced search functionality
-document.addEventListener('DOMContentLoaded', function() {
-    const searchInput = document.getElementById('employee-search');
-    const departmentFilter = document.getElementById('department-filter');
-    const statusFilter = document.getElementById('status-filter');
-    const form = document.getElementById('employee-filter-form');
-    
-    // Submit form on Enter key in search input
-    if (searchInput) {
-        searchInput.addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                form.submit();
-            }
-        });
-    }
-    
-    // Auto-submit on filter changes
-    if (departmentFilter) {
-        departmentFilter.addEventListener('change', function() {
-            form.submit();
-        });
-    }
-    
-    if (statusFilter) {
-        statusFilter.addEventListener('change', function() {
-            form.submit();
-        });
-    }
-    
-    // Show loading state during form submission
-    form.addEventListener('submit', function() {
-        const submitBtn = form.querySelector('button[type="submit"]');
-        if (submitBtn) {
-            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Searching...';
-            submitBtn.disabled = true;
-        }
-    });
-});
-
-// Employee count display
-function updateEmployeeCount() {
-    const tableBody = document.getElementById('employees-table-body');
-    const rows = tableBody.querySelectorAll('tr');
-    const count = rows.length;
-    
-    // Update count display if exists
-    const countDisplay = document.querySelector('.employee-count');
-    if (countDisplay) {
-        countDisplay.textContent = `${count} employee${count !== 1 ? 's' : ''} found`;
-    }
-}
-
-// Call on page load
-document.addEventListener('DOMContentLoaded', updateEmployeeCount);
-</script>
+</div>
 
 @endsection
 
 <style>
 /* Working Modal Centering */
-{{ ... }}
+.working-modal {
   display: none !important;
   position: fixed !important;
   top: 0 !important;
