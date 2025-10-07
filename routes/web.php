@@ -587,11 +587,77 @@ Route::post('/test-save', [SystemTestController::class, 'testSave'])->middleware
 Route::middleware(['auth:web'])->group(function () {
     
     // Employee Management Routes - Using Proper MVC Controller
-    Route::get('/employees', [EmployeesController::class, 'index'])->name('employees.index');
+    Route::get('/employees', [EmployeeManagementController::class, 'index'])->name('employees.index');
+    Route::post('/employees/export-data', [EmployeeManagementController::class, 'exportData'])->name('employees.export-data');
+    Route::post('/employees/{id}/export', [EmployeeManagementController::class, 'exportSingleEmployee'])->name('employees.export-single');
+    
+    // Test route for export functionality
+    Route::get('/test-export', function() {
+        try {
+            $response = \Illuminate\Support\Facades\Http::timeout(10)->get('http://hr4.jetlougetravels-ph.com/api/employees');
+            if ($response->successful()) {
+                $data = $response->json();
+                return response()->json([
+                    'success' => true,
+                    'message' => 'API connection successful',
+                    'count' => count($data),
+                    'sample' => array_slice($data, 0, 2)
+                ]);
+            } else {
+                return response()->json(['error' => 'API request failed', 'status' => $response->status()]);
+            }
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Exception: ' . $e->getMessage()]);
+        }
+    })->name('test.export');
+    
+    // Debug route for shifts
+    Route::get('/debug-shifts', function() {
+        try {
+            $today = today()->toDateString();
+            
+            // Get all shift types
+            $shiftTypes = \DB::table('shift_types')->get();
+            
+            // Get all shifts
+            $allShifts = \DB::table('shifts')
+                ->select('*')
+                ->get();
+                
+            // Get shifts for today
+            $todayShifts = \DB::table('shifts')
+                ->whereDate('shift_date', today())
+                ->get();
+                
+            // Get employees
+            $employees = \DB::table('employees')->where('status', 'active')->get();
+            
+            return response()->json([
+                'today_date' => $today,
+                'shift_types_count' => $shiftTypes->count(),
+                'shift_types' => $shiftTypes,
+                'all_shifts_count' => $allShifts->count(),
+                'all_shifts' => $allShifts,
+                'today_shifts_count' => $todayShifts->count(),
+                'today_shifts' => $todayShifts,
+                'active_employees_count' => $employees->count(),
+                'active_employees' => $employees->take(3)
+            ]);
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()]);
+        }
+    })->name('debug.shifts');
     Route::post('/employees', [EmployeesController::class, 'store'])->name('employees.store');
     Route::get('/employees/{id}/view', [EmployeesController::class, 'view'])->name('employees.view');
     Route::put('/employees/{id}', [EmployeesController::class, 'update'])->name('employees.update');
     Route::delete('/employees/{id}', [EmployeesController::class, 'destroy'])->name('employees.destroy');
+    
+    // Employee List Routes - Using Employee List Controller
+    Route::get('/employees/list', [App\Http\Controllers\EmployeeListController::class, 'index'])->name('employees.list');
+    Route::post('/employees/list', [App\Http\Controllers\EmployeeListController::class, 'store'])->name('employees.list.store');
+    Route::get('/employees/list/{id}/view', [App\Http\Controllers\EmployeeListController::class, 'show'])->name('employees.list.view');
+    Route::put('/employees/list/{id}', [App\Http\Controllers\EmployeeListController::class, 'update'])->name('employees.list.update');
+    Route::delete('/employees/list/{id}', [App\Http\Controllers\EmployeeListController::class, 'destroy'])->name('employees.list.destroy');
     
     // Shift Management Routes (specific routes BEFORE resource routes)
     Route::get('admin/shifts/calendar/data', [ShiftManagementController::class, 'getCalendarShifts'])->name('admin.shifts.calendar.data');

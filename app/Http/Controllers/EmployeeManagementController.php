@@ -76,6 +76,160 @@ class EmployeeManagementController extends Controller
         
         return view('admin.employees.index', compact('employees', 'stats'));
     }
+
+    /**
+     * Export API data to local database
+     */
+    public function exportData(Request $request)
+    {
+        try {
+            Log::info('Starting export data process...');
+            
+            // Fetch data from API
+            $response = Http::timeout(10)->get('http://hr4.jetlougetravels-ph.com/api/employees');
+
+            if (!$response->successful()) {
+                Log::error('API request failed with status: ' . $response->status());
+                return response()->json(['error' => 'Failed to fetch data from API. Status: ' . $response->status()], 500);
+            }
+
+            $apiData = $response->json();
+            Log::info('API data received. Count: ' . count($apiData));
+            
+            if (empty($apiData)) {
+                return response()->json(['error' => 'No data received from API'], 400);
+            }
+
+            $imported = 0;
+            $skipped = 0;
+            $errors = [];
+
+            foreach ($apiData as $index => $employeeData) {
+                try {
+                    // Validate required fields
+                    if (empty($employeeData['email'])) {
+                        $errors[] = "Employee at index {$index}: Missing email";
+                        continue;
+                    }
+
+                    // Check if employee already exists by email
+                    $existingEmployee = Employee::where('email', $employeeData['email'])->first();
+                    
+                    if ($existingEmployee) {
+                        $skipped++;
+                        continue;
+                    }
+
+                    // Create new employee record
+                    $newEmployee = Employee::create([
+                        'first_name' => $employeeData['first_name'] ?? '',
+                        'last_name' => $employeeData['last_name'] ?? '',
+                        'email' => $employeeData['email'],
+                        'phone' => $employeeData['phone'] ?? null,
+                        'position' => $employeeData['role'] ?? $employeeData['job_title'] ?? 'N/A',
+                        'department' => $this->mapDepartment($employeeData['role'] ?? ''),
+                        'status' => $this->mapStatus($employeeData['status'] ?? 'Active'),
+                        'hire_date' => $employeeData['date_hired'] ?? $employeeData['start_date'] ?? null,
+                        'address' => $employeeData['address'] ?? null,
+                        'gender' => $employeeData['gender'] ?? null,
+                    ]);
+
+                    $imported++;
+                    Log::info("Imported employee: {$newEmployee->email}");
+
+                } catch (\Exception $e) {
+                    $errors[] = "Employee at index {$index}: " . $e->getMessage();
+                    Log::error("Error importing employee at index {$index}: " . $e->getMessage());
+                }
+            }
+
+            Log::info("Data export completed: {$imported} imported, {$skipped} skipped, " . count($errors) . " errors");
+            
+            $message = "Successfully imported {$imported} employees. {$skipped} employees were skipped (already exist).";
+            if (!empty($errors)) {
+                $message .= " " . count($errors) . " errors occurred.";
+            }
+            
+            return response()->json([
+                'success' => true,
+                'message' => $message,
+                'imported' => $imported,
+                'skipped' => $skipped,
+                'errors' => $errors
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Export Data Error: ' . $e->getMessage());
+            Log::error('Stack trace: ' . $e->getTraceAsString());
+            return response()->json(['error' => 'Export failed: ' . $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Export individual employee data to local database
+     */
+    public function exportSingleEmployee(Request $request, $id)
+    {
+        try {
+            // Fetch data from API
+            $response = Http::timeout(10)->get('http://hr4.jetlougetravels-ph.com/api/employees');
+
+            if (!$response->successful()) {
+                return response()->json(['error' => 'Failed to fetch data from API'], 500);
+            }
+
+            $apiData = $response->json();
+            $employeeData = null;
+
+            // Find the specific employee by ID
+            foreach ($apiData as $employee) {
+                if ($employee['id'] == $id) {
+                    $employeeData = $employee;
+                    break;
+                }
+            }
+
+            if (!$employeeData) {
+                return response()->json(['error' => 'Employee not found in API data'], 404);
+            }
+
+            // Check if employee already exists by email
+            $existingEmployee = Employee::where('email', $employeeData['email'])->first();
+            
+            if ($existingEmployee) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Employee already exists in local database'
+                ]);
+            }
+
+            // Create new employee record
+            $newEmployee = Employee::create([
+                'first_name' => $employeeData['first_name'] ?? '',
+                'last_name' => $employeeData['last_name'] ?? '',
+                'email' => $employeeData['email'],
+                'phone' => $employeeData['phone'] ?? null,
+                'position' => $employeeData['role'] ?? $employeeData['job_title'] ?? 'N/A',
+                'department' => $this->mapDepartment($employeeData['role'] ?? ''),
+                'status' => $this->mapStatus($employeeData['status'] ?? 'Active'),
+                'hire_date' => $employeeData['date_hired'] ?? $employeeData['start_date'] ?? null,
+                'address' => $employeeData['address'] ?? null,
+                'gender' => $employeeData['gender'] ?? null,
+            ]);
+
+            Log::info("Individual employee exported: {$newEmployee->first_name} {$newEmployee->last_name}");
+            
+            return response()->json([
+                'success' => true,
+                'message' => "Successfully imported employee: {$newEmployee->first_name} {$newEmployee->last_name}",
+                'employee' => $newEmployee
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('Export Single Employee Error: ' . $e->getMessage());
+            return response()->json(['error' => 'Export failed: ' . $e->getMessage()], 500);
+        }
+    }
     
     /**
      * Map API role to department

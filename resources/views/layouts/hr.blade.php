@@ -79,6 +79,58 @@
           .list-group-item { background: #fff; font-size: 1rem; transition: background .12s; }
           .list-group-item:active, .list-group-item:hover { background: #f5f7fa !important; }
           .fw-medium { font-weight: 500; }
+          
+          /* Employee dropdown slide-down animation */
+          .employee-dropdown {
+            position: relative;
+          }
+          
+          .employee-submenu {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-in-out, padding 0.3s ease-in-out;
+            background-color: #f8f9fa;
+            border-left: 3px solid #007bff;
+            margin-left: 1rem;
+            border-radius: 0 8px 8px 0;
+          }
+          
+          .employee-submenu.show {
+            max-height: 200px;
+            padding: 0.5rem 0;
+          }
+          
+          .submenu-item {
+            display: block;
+            padding: 0.5rem 1rem;
+            color: #495057;
+            text-decoration: none;
+            font-size: 0.9rem;
+            transition: all 0.2s ease;
+            border-left: 3px solid transparent;
+          }
+          
+          .submenu-item:hover {
+            background-color: #e9ecef;
+            color: #007bff;
+            border-left-color: #007bff;
+            text-decoration: none;
+          }
+          
+          .submenu-item i {
+            width: 16px;
+            text-align: center;
+            margin-right: 0.5rem;
+          }
+          
+          /* Dropdown toggle arrow animation */
+          .employee-dropdown .dropdown-toggle::after {
+            transition: transform 0.3s ease;
+          }
+          
+          .employee-dropdown.open .dropdown-toggle::after {
+            transform: rotate(180deg);
+          }
         </style>
         <button class="sidebar-toggle mobile-toggle" id="menu-btn" title="Open Menu">
           <i class="bi bi-list fs-5"></i>
@@ -124,10 +176,18 @@
           <i class="fas fa-file-invoice-dollar me-2"></i> Claims & Reimbursement
         </a>
       </li>
-      <li class="nav-item">
-        <a href="{{ route('employees.index') }}" class="nav-link text-dark {{ request()->routeIs('employees.*') ? 'active' : '' }}">
+      <li class="nav-item employee-dropdown">
+        <a href="#" class="nav-link text-dark dropdown-toggle {{ request()->routeIs('employees.*') ? 'active' : '' }}" onclick="toggleEmployeeDropdown(event)" aria-expanded="false">
           <i class="bi bi-people me-2"></i> Employees
         </a>
+        <div class="employee-submenu" id="employee-submenu">
+          <a class="submenu-item" href="{{ route('employees.index') }}">
+            <i class="fas fa-globe me-2"></i>Employee Directory
+          </a>
+          <a class="submenu-item" href="{{ route('employees.list') }}">
+            <i class="fas fa-database me-2"></i>Employee List
+          </a>
+        </div>
       </li>
       <li class="nav-item">
         <a href="{{ route('settings') }}" class="nav-link text-dark {{ request()->routeIs('settings*') ? 'active' : '' }}">
@@ -206,6 +266,34 @@
           }
         }
       });
+    });
+    
+    // Employee dropdown toggle function
+    function toggleEmployeeDropdown(event) {
+      event.preventDefault();
+      event.stopPropagation();
+      
+      const dropdown = document.querySelector('.employee-dropdown');
+      const submenu = document.getElementById('employee-submenu');
+      
+      if (submenu.classList.contains('show')) {
+        submenu.classList.remove('show');
+        dropdown.classList.remove('open');
+      } else {
+        submenu.classList.add('show');
+        dropdown.classList.add('open');
+      }
+    }
+    
+    // Close dropdown when clicking outside
+    document.addEventListener('click', function(event) {
+      const dropdown = document.querySelector('.employee-dropdown');
+      const submenu = document.getElementById('employee-submenu');
+      
+      if (!dropdown.contains(event.target)) {
+        submenu.classList.remove('show');
+        dropdown.classList.remove('open');
+      }
     });
   </script>
   

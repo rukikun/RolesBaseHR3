@@ -171,4 +171,30 @@ class User extends Authenticatable
 
         return $roles[$this->role] ?? ucfirst(str_replace('_', ' ', $this->role));
     }
+
+    // Get activity icon based on activity type
+    public function getActivityIcon($activityType = null)
+    {
+        $icons = [
+            'login' => 'fas fa-sign-in-alt text-success',
+            'logout' => 'fas fa-sign-out-alt text-info',
+            'profile_update' => 'fas fa-user-edit text-primary',
+            'password_change' => 'fas fa-key text-warning',
+            'role_change' => 'fas fa-user-shield text-danger',
+            'admin_created' => 'fas fa-user-plus text-success',
+            'admin_deleted' => 'fas fa-user-minus text-danger',
+            'settings_update' => 'fas fa-cogs text-info',
+            'data_export' => 'fas fa-download text-secondary',
+            'data_import' => 'fas fa-upload text-secondary',
+            'profile_view' => 'fas fa-user text-primary',
+            'dashboard_view' => 'fas fa-tachometer-alt text-info'
+        ];
+
+        // If no activity type provided, return default user icon
+        if (!$activityType) {
+            return 'fas fa-user text-primary';
+        }
+
+        return $icons[$activityType] ?? 'fas fa-info-circle text-muted';
+    }
 }

@@ -120,8 +120,8 @@
       <i class="fas fa-users me-2"></i>Employee Directory
     </h5>
     <div>
-      <button class="btn btn-primary" onclick="openAddEmployeeModal()">
-        <i class="fas fa-plus me-2"></i>Add Employee
+      <button class="btn btn-success me-2" onclick="exportAllData()">
+        <i class="fas fa-download me-2"></i>Export All Data
       </button>
     </div>
   </div>
@@ -205,31 +205,9 @@
               @endif
             </td>
             <td>
-              <div class="btn-group" role="group">
-                <!-- View Action -->
-                <button class="btn btn-sm btn-outline-primary" onclick="viewEmployeeDetails({{ $employee->id }})" title="View Details">
-                  <i class="fas fa-eye"></i>
-                </button>
-                
-                <!-- Edit Action -->
-                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="openEditEmployeeModal({{ $employee->id }})" title="Edit">
-                  <i class="fas fa-edit"></i>
-                </button>
-                
-                <!-- View Timesheets Action -->
-                <a href="/timesheet-management?employee={{ $employee->id }}" class="btn btn-sm btn-outline-info" title="View Timesheets">
-                  <i class="fas fa-clock"></i>
-                </a>
-                
-                <!-- Delete Action -->
-                <form method="POST" action="{{ route('employees.destroy', $employee->id) }}" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this employee?')">
-                  @csrf
-                  @method('DELETE')
-                  <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete">
-                    <i class="fas fa-trash"></i>
-                  </button>
-                </form>
-              </div>
+              <button class="btn btn-sm btn-success" onclick="exportEmployeeData({{ $employee->id }})" title="Export Data">
+                <i class="fas fa-download me-1"></i>Export Data
+              </button>
             </td>
           </tr>
           @empty
@@ -1580,3 +1558,79 @@ td .btn-group .btn-sm i {
   font-size: 0.875rem !important;
 }
 </style>
+
+<script>
+// Export all data functionality
+function exportAllData() {
+    if (!confirm('This will export all API employee data to your local database. Continue?')) {
+        return;
+    }
+    
+    const button = event.target;
+    const originalText = button.innerHTML;
+    button.disabled = true;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Exporting...';
+    
+    fetch('{{ route("employees.export-data") }}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message);
+            // Optionally refresh the page or update the UI
+            window.location.reload();
+        } else {
+            alert('Export failed: ' + (data.error || 'Unknown error'));
+        }
+    })
+    .catch(error => {
+        console.error('Export error:', error);
+        alert('Export failed: ' + error.message);
+    })
+    .finally(() => {
+        button.disabled = false;
+        button.innerHTML = originalText;
+    });
+}
+
+// Export individual employee data
+function exportEmployeeData(employeeId) {
+    if (!confirm('Export this employee to your local database?')) {
+        return;
+    }
+    
+    const button = event.target;
+    const originalText = button.innerHTML;
+    button.disabled = true;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Exporting...';
+    
+    fetch(`/employees/${employeeId}/export`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            alert(data.message);
+        } else {
+            alert('Export failed: ' + (data.message || data.error || 'Unknown error'));
+        }
+    })
+    .catch(error => {
+        console.error('Export error:', error);
+        alert('Export failed: ' + error.message);
+    })
+    .finally(() => {
+        button.disabled = false;
+        button.innerHTML = originalText;
+    });
+}
+</script>

@@ -90,7 +90,18 @@
 
 <div class="dashboard-section mb-4">
   <div class="section-header d-flex justify-content-between align-items-center mb-3">
-    <h3 style="color: var(--jetlouge-primary);">Today's Schedule</h3>
+    <div>
+      <h3 style="color: var(--jetlouge-primary);">
+        @if(isset($isToday) && $isToday)
+          Today's Schedule
+        @else
+          Schedule for {{ \Carbon\Carbon::parse($shiftDate ?? today())->format('M d, Y') }}
+        @endif
+      </h3>
+      @if(isset($isToday) && !$isToday)
+        <small class="text-muted">Showing most recent shift data</small>
+      @endif
+    </div>
     <a href="{{ route('shift-schedule-management') }}#calendar-section" class="btn btn-primary" onclick="scrollToCalendar()">View Full Schedule</a>
   </div>
   <div class="card">
@@ -165,10 +176,10 @@
                 @endif
               </h6>
               <div class="employee-list-container" data-employee-count="{{ count($shift['employees']) }}">
-                @foreach($shift['employees'] as $employee)
+                @forelse($shift['employees'] as $employee)
                   <div class="employee-item-hr d-flex align-items-center mb-2 p-2 bg-light rounded">
                     <div class="employee-avatar-hr me-2">
-                      @if($employee['avatar'])
+                      @if($employee['avatar'] ?? false)
                         <img src="{{ asset('storage/' . $employee['avatar']) }}" alt="{{ $employee['name'] }}" class="rounded-circle" style="width: 28px; height: 28px; object-fit: cover;">
                       @else
                         <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center" style="width: 28px; height: 28px; font-size: 11px; font-weight: 600;">
@@ -186,7 +197,12 @@
                       @endif
                     </div>
                   </div>
-                @endforeach
+                @empty
+                  <div class="text-center text-muted py-3">
+                    <i class="fas fa-user-slash mb-2"></i>
+                    <div class="small">No employees assigned for today</div>
+                  </div>
+                @endforelse
                 @if(count($shift['employees']) > 2)
                   <div class="scroll-indicator text-center text-muted small py-1">
                     <i class="fas fa-chevron-down"></i> Scroll for more

@@ -76,7 +76,10 @@ class DashboardController extends Controller
             });
 
         // Get today's shift schedule
-        $todayShifts = $this->getTodayShifts();
+        $shiftData = $this->getTodayShifts();
+        $todayShifts = $shiftData['shifts'] ?? collect();
+        $shiftDate = $shiftData['date'] ?? today()->toDateString();
+        $isToday = $shiftData['is_today'] ?? true;
         
         // Get leave requests for stats
         $leaveRequests = DB::table('leave_requests')
@@ -110,25 +113,25 @@ class DashboardController extends Controller
                 ->where('employee_id', $employee->id)
                 ->whereDate('work_date', today())
                 ->first();
-        }
         
         $isClockedIn = $todayTimeEntry && $todayTimeEntry->clock_in_time && !$todayTimeEntry->clock_out_time;
 
-        return view('dashboard.admin', compact(
+        return view('dashboard.index', compact(
             'stats',
+            'employeeStats',
             'recentEntries',
-            'todayTimeEntry',
-            'isClockedIn',
-            'employee',
             'employees',
             'leaveTypes',
             'claimTypes',
             'todayShifts',
+            'shiftDate',
+            'isToday',
             'leaveRequests'
         ));
     }
 
     public function clockIn(Request $request)
+{{ ... }}
     {
         $user = Auth::user();
         $employee = $user->employee ?? Employee::find(1);
@@ -420,27 +423,56 @@ class DashboardController extends Controller
     private function getTodayShifts()
     {
         try {
+            \Log::info('Getting today shifts for date: ' . today()->toDateString());
+            
             // Get shift types with employee assignments for today
             $shiftTypes = DB::table('shift_types')
                 ->where('is_active', 1)
                 ->get();
 
+            \Log::info('Found shift types: ' . $shiftTypes->count());
+
             $shifts = collect();
             
+            // First, check if there are any shifts for today
+            $todayShiftsCount = DB::table('shifts')
+                ->whereDate('shift_date', today())
+                ->count();
+                
+            \Log::info('Shifts for today (' . today()->toDateString() . '): ' . $todayShiftsCount);
+            
+            // If no shifts for today, get the most recent shift date
+            $targetDate = today();
+            if ($todayShiftsCount == 0) {
+                $mostRecentDate = DB::table('shifts')
+                    ->orderBy('shift_date', 'desc')
+                    ->value('shift_date');
+                    
+                if ($mostRecentDate) {
+                    $targetDate = \Carbon\Carbon::parse($mostRecentDate);
+                    \Log::info('No shifts for today, using most recent date: ' . $targetDate->toDateString());
+                }
+            }
+
             foreach ($shiftTypes as $shiftType) {
-                // Get employees assigned to this shift type for today
+                \Log::info('Processing shift type: ' . $shiftType->name . ' (ID: ' . $shiftType->id . ')');
+                
+                // Get employees assigned to this shift type for the target date
                 $employees = DB::table('shifts')
                     ->join('employees', 'shifts.employee_id', '=', 'employees.id')
                     ->where('shifts.shift_type_id', $shiftType->id)
-                    ->whereDate('shifts.shift_date', today())
+                    ->whereDate('shifts.shift_date', $targetDate)
                     ->where('employees.status', 'active')
                     ->select(
                         'employees.id',
                         'employees.first_name',
                         'employees.last_name',
-                        'employees.position'
+                        'employees.position',
+                        'shifts.shift_date'
                     )
                     ->get();
+
+                \Log::info('Found employees for shift type ' . $shiftType->id . ': ' . $employees->count());
 
                 try {
                     $startTime = Carbon::createFromFormat('H:i:s', $shiftType->start_time)->format('g:i A');
@@ -518,39 +550,21 @@ class DashboardController extends Controller
                 ]);
             }
 
-            return $shifts;
-        } catch (\Exception $e) {
-            // Fallback to default shifts with basic employee distribution
-            $employeeCount = 0;
-            try {
-                $employeeCount = DB::table('employees')->where('status', 'active')->count();
-            } catch (\Exception $e2) {
-                // If even employee count fails, use 0
-            }
+            \Log::info('Returning ' . $shifts->count() . ' shifts for date: ' . $targetDate->toDateString());
             
-            return collect([
-                [
-                    'id' => 1,
-                    'name' => 'Morning Shift',
-                    'time_range' => '8:00 AM - 4:00 PM',
-                    'employee_count' => ceil($employeeCount / 3),
-                    'employees' => []
-                ],
-                [
-                    'id' => 2,
-                    'name' => 'Afternoon Shift',
-                    'time_range' => '2:00 PM - 10:00 PM',
-                    'employee_count' => floor($employeeCount / 3),
-                    'employees' => []
-                ],
-                [
-                    'id' => 3,
-                    'name' => 'Night Shift',
-                    'time_range' => '10:00 PM - 6:00 AM',
-                    'employee_count' => floor($employeeCount / 3),
-                    'employees' => []
-                ]
-            ]);
+            return [
+                'shifts' => $shifts,
+                'date' => $targetDate->toDateString(),
+                'is_today' => $targetDate->isToday()
+            ];
+
+        } catch (\Exception $e) {
+            \Log::error('Error getting today shifts: ' . $e->getMessage());
+            return [
+                'shifts' => collect(),
+                'date' => today()->toDateString(),
+                'is_today' => true
+            ];
         }
     }
 
