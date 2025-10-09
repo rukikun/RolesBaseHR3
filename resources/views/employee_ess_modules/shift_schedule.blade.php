@@ -85,7 +85,7 @@
       <div class="stats-icon info">
         <i class="bi bi-currency-dollar"></i>
       </div>
-      <div class="stats-value">$2,340</div>
+      <div class="stats-value">₱32,800</div>
       <p class="stats-label">Total Amount</p>
       <p class="stats-sublabel">Expected Earnings</p>
     </div>

@@ -119,13 +119,14 @@
                     <!-- Additional Profile Information -->
                     <div class="row mb-3">
                         <div class="col-md-6">
-                            <label for="job_title" class="form-label fw-bold">Job Title</label>
-                            <input type="text" class="form-control @error('job_title') is-invalid @enderror" 
-                                   id="job_title" name="job_title" value="{{ old('job_title', $user->job_title ?? '') }}" 
-                                   placeholder="e.g., HR Manager, Software Developer">
-                            @error('job_title')
-                                <div class="invalid-feedback">{{ $message }}</div>
-                            @enderror
+                            <label for="role" class="form-label fw-bold">Role</label>
+                            <input type="text" class="form-control" 
+                                   id="role" name="role" 
+                                   value="{{ ucwords(str_replace('_', ' ', $user->role ?? 'employee')) }}" 
+                                   readonly 
+                                   style="background-color: #f8f9fa; cursor: not-allowed;"
+                                   title="Role cannot be changed. Contact administrator to modify your role.">
+                            <small class="text-muted">Role is assigned by administrator and cannot be changed.</small>
                         </div>
                         <div class="col-md-6">
                             <label for="department" class="form-label fw-bold">Department</label>

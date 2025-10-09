@@ -123,9 +123,9 @@
               </span>
               <select class="form-control @error('role') is-invalid @enderror" id="role" name="role" required>
                 <option value="">Select your role</option>
+                <option value="superadmin" {{ old('role') == 'superadmin' ? 'selected' : '' }}>SuperAdmin</option>
                 <option value="admin" {{ old('role') == 'admin' ? 'selected' : '' }}>Admin</option>
-                <option value="hr" {{ old('role') == 'hr' ? 'selected' : '' }}>HR</option>
-                <option value="manager" {{ old('role') == 'manager' ? 'selected' : '' }}>Manager</option>
+                <option value="hr_manager" {{ old('role') == 'hr_manager' ? 'selected' : '' }}>Hr Manager</option>
                 <option value="employee" {{ old('role') == 'employee' ? 'selected' : '' }}>Employee</option>
               </select>
             </div>

@@ -91,7 +91,7 @@
                         ['label' => 'Email Address', 'value' => $user->email, 'icon' => 'fas fa-envelope'],
                         ['label' => 'Username', 'value' => $user->username ?? 'Not set', 'icon' => 'fas fa-at'],
                         ['label' => 'Phone Number', 'value' => $user->phone ?? 'Not set', 'icon' => 'fas fa-phone'],
-                        ['label' => 'Job Title', 'value' => $user->job_title ?? 'Not set', 'icon' => 'fas fa-briefcase'],
+                        ['label' => 'Role', 'value' => ucwords(str_replace('_', ' ', $user->role ?? 'employee')), 'icon' => 'fas fa-user-tag'],
                         ['label' => 'Department', 'value' => $user->department ?? 'Not set', 'icon' => 'fas fa-building'],
                         ['label' => 'Work Location', 'value' => $user->work_location ?? 'Not set', 'icon' => 'fas fa-map-marker-alt'],
                         ['label' => 'Last Login', 'value' => $user->last_login ? $user->last_login->format('M d, Y h:i A') : 'Never', 'icon' => 'fas fa-clock'],
@@ -145,7 +145,7 @@
                             ['label' => 'Total Logins', 'value' => $userStats['total_logins'], 'icon' => 'fas fa-sign-in-alt', 'color' => 'success'],
                             ['label' => 'Profile Updates', 'value' => $userStats['profile_updates'], 'icon' => 'fas fa-edit', 'color' => 'info'],
                             ['label' => 'Account Age', 'value' => $accountAgeText, 'icon' => 'fas fa-birthday-cake', 'color' => 'warning'],
-                            ['label' => 'Last Activity', 'value' => $userStats['last_activity'] ? $userStats['last_activity']->performed_at->diffForHumans() : 'No activity', 'icon' => 'fas fa-clock', 'color' => 'primary']
+                            ['label' => 'Last Activity', 'value' => $userStats['last_activity'] ? $userStats['last_activity']->diffForHumans() : 'No activity', 'icon' => 'fas fa-clock', 'color' => 'primary']
                         ];
                     @endphp
 
@@ -185,7 +185,7 @@
                                     <div class="activity-content flex-grow-1">
                                         <p class="mb-1 small">{{ $activity->description }}</p>
                                         <small class="text-muted">
-                                            <i class="fas fa-clock me-1"></i>{{ $activity->performed_at->diffForHumans() }}
+                                            <i class="fas fa-clock me-1"></i>{{ $activity->performed_at ? $activity->performed_at->diffForHumans() : $activity->created_at->diffForHumans() }}
                                             @if($activity->ip_address)
                                                 <span class="ms-2">
                                                     <i class="fas fa-map-marker-alt me-1"></i>{{ $activity->ip_address }}

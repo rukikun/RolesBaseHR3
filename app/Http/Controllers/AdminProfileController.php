@@ -46,26 +46,36 @@ class AdminProfileController extends Controller
             }
         }
         
-        // Get user statistics (with error handling)
+        // Get employee statistics (with error handling)
         $accountAgeDays = $user->created_at->diffInDays(now());
-        $totalLogins = 0;
-        $profileUpdates = 0;
-        $lastActivity = null;
         
         try {
-            if (class_exists('App\Models\UserActivity')) {
-                $totalLogins = UserActivity::where('user_id', $user->id)
-                                         ->where('activity_type', 'login')
-                                         ->count();
-                $profileUpdates = UserActivity::where('user_id', $user->id)
-                                            ->where('activity_type', 'profile_update')
-                                            ->count();
-                $lastActivity = UserActivity::where('user_id', $user->id)
-                                          ->latest('performed_at')
-                                          ->first();
+            // Get login count
+            $totalLogins = \App\Models\EmployeeActivity::where('employee_id', $user->id)
+                ->where('activity_type', 'login')
+                ->count();
+            
+            // Get profile update count
+            $profileUpdates = \App\Models\EmployeeActivity::where('employee_id', $user->id)
+                ->where('activity_type', 'profile_update')
+                ->count();
+            
+            // Get last activity
+            $lastActivityRecord = \App\Models\EmployeeActivity::where('employee_id', $user->id)
+                ->orderBy('performed_at', 'desc')
+                ->first();
+            $lastActivity = null;
+            if ($lastActivityRecord) {
+                try {
+                    $lastActivity = $lastActivityRecord->performed_at;
+                } catch (\Exception $e) {
+                    // Fallback to created_at if performed_at is not accessible
+                    $lastActivity = $lastActivityRecord->created_at ?? null;
+                }
             }
+            
         } catch (\Exception $e) {
-            // Use default values if UserActivity table doesn't exist
+            // Fallback values if EmployeeActivity table doesn't exist
             $totalLogins = 0;
             $profileUpdates = 0;
             $lastActivity = null;
@@ -102,14 +112,13 @@ class AdminProfileController extends Controller
         
         $request->validate([
             'name' => 'required|string|max:255',
-            'email' => ['required', 'string', 'email', 'max:255', Rule::unique('users')->ignore($user->id)],
-            'username' => ['nullable', 'string', 'max:255', Rule::unique('users')->ignore($user->id)],
+            'email' => ['required', 'string', 'email', 'max:255', Rule::unique('employees')->ignore($user->id)],
+            'username' => ['nullable', 'string', 'max:255', Rule::unique('employees')->ignore($user->id)],
             'phone' => 'nullable|string|max:20',
             'profile_picture' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
-            'job_title' => 'nullable|string|max:255',
             'department' => 'nullable|string|max:100',
-            'manager_id' => 'nullable|integer',
             'work_location' => 'nullable|string|max:100',
+            'manager_id' => 'nullable|integer|exists:employees,id',
             'date_of_birth' => 'nullable|date|before:today',
             'gender' => 'nullable|in:Male,Female,Other,Prefer not to say',
             'address' => 'nullable|string|max:500',
@@ -119,9 +128,20 @@ class AdminProfileController extends Controller
         ]);
 
         try {
-            // Track changes for activity logging
-            $originalData = $user->only(['name', 'email', 'username', 'phone', 'job_title', 'department']);
+            // Track changes for activity logging - use actual Employee model fields
+            $originalData = [
+                'name' => $user->name, // This uses the accessor we created
+                'email' => $user->email,
+                'phone' => $user->phone,
+                'department' => $user->department
+            ];
             $changes = [];
+            
+            \Log::info('Profile update attempt', [
+                'employee_id' => $user->id,
+                'original_data' => $originalData,
+                'request_data' => $request->only(['name', 'email', 'phone', 'department'])
+            ]);
             
             // Handle profile picture upload
             if ($request->hasFile('profile_picture')) {
@@ -136,26 +156,27 @@ class AdminProfileController extends Controller
             }
 
             // Track field changes for key fields
-            $trackableFields = ['name', 'email', 'username', 'phone', 'job_title', 'department'];
+            $trackableFields = ['name', 'email', 'phone', 'department'];
             foreach ($trackableFields as $field) {
-                if (isset($originalData[$field]) && $originalData[$field] !== $request->$field) {
+                $oldValue = $originalData[$field] ?? null;
+                $newValue = $request->$field ?? null;
+                
+                if ($oldValue !== $newValue) {
                     $changes[$field] = [
-                        'from' => $originalData[$field],
-                        'to' => $request->$field
+                        'from' => $oldValue,
+                        'to' => $newValue
                     ];
                 }
             }
 
-            // Update user data with all fields
-            $user->update([
-                'name' => $request->name,
+            // Update employee data with all available fields
+            $updateData = [
                 'email' => $request->email,
                 'username' => $request->username,
                 'phone' => $request->phone,
-                'job_title' => $request->job_title,
                 'department' => $request->department,
-                'manager_id' => $request->manager_id,
                 'work_location' => $request->work_location,
+                'manager_id' => $request->manager_id,
                 'date_of_birth' => $request->date_of_birth,
                 'gender' => $request->gender,
                 'address' => $request->address,
@@ -163,22 +184,39 @@ class AdminProfileController extends Controller
                 'emergency_contact_phone' => $request->emergency_contact_phone,
                 'emergency_contact_relationship' => $request->emergency_contact_relationship,
                 'profile_picture' => $user->profile_picture ?? null
+            ];
+
+            // Parse name into first_name and last_name for Employee model
+            if ($request->name) {
+                $nameParts = explode(' ', $request->name, 2);
+                $updateData['first_name'] = $nameParts[0];
+                $updateData['last_name'] = $nameParts[1] ?? '';
+            }
+
+            \Log::info('Attempting to update employee with data:', $updateData);
+            
+            $updateResult = $user->update($updateData);
+            
+            \Log::info('Update result:', [
+                'success' => $updateResult,
+                'changes_detected' => !empty($changes),
+                'changes' => $changes
             ]);
 
             // Log activity if there were changes
             if (!empty($changes)) {
                 try {
-                    if (class_exists('App\Models\UserActivity') && method_exists('App\Models\UserActivity', 'log')) {
-                        UserActivity::log('profile_update', 'Profile updated', $changes);
-                    }
+                    \App\Models\EmployeeActivity::logProfileUpdate($changes);
+                    \Log::info('Profile activity logged successfully');
                 } catch (\Exception $e) {
-                    // Silently handle if activity logging fails
-                    \Log::info('Profile activity logging failed: ' . $e->getMessage());
+                    \Log::error('Profile activity logging failed: ' . $e->getMessage());
                 }
             }
 
+            \Log::info('Redirecting to profile with success message');
+            
             return redirect()->route('admin.profile.index')
-                           ->with('success', 'Profile updated successfully!');
+                           ->with('success', 'Profile updated successfully! Changes: ' . json_encode($changes));
                            
         } catch (\Exception $e) {
             return back()->withErrors(['error' => 'Error updating profile: ' . $e->getMessage()])
@@ -504,36 +542,36 @@ class AdminProfileController extends Controller
     /**
      * Create sample activities for demo purposes
      */
-    private function createSampleActivities($userId)
+    private function createSampleActivities($employeeId)
     {
         try {
-            if (!class_exists('App\Models\UserActivity')) {
+            if (!class_exists('App\Models\EmployeeActivity')) {
                 return;
             }
 
             // Create some sample login activities
-            UserActivity::create([
-                'user_id' => $userId,
+            \App\Models\EmployeeActivity::create([
+                'employee_id' => $employeeId,
                 'activity_type' => 'login',
-                'description' => 'User logged in successfully',
+                'description' => 'Employee logged in successfully',
                 'ip_address' => '127.0.0.1',
                 'user_agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
                 'metadata' => ['login_method' => 'web_form'],
                 'performed_at' => now()->subHours(2)
             ]);
 
-            UserActivity::create([
-                'user_id' => $userId,
+            \App\Models\EmployeeActivity::create([
+                'employee_id' => $employeeId,
                 'activity_type' => 'login',
-                'description' => 'User logged in successfully',
+                'description' => 'Employee logged in successfully',
                 'ip_address' => '127.0.0.1',
                 'user_agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
                 'metadata' => ['login_method' => 'web_form'],
                 'performed_at' => now()->subDays(1)
             ]);
 
-            UserActivity::create([
-                'user_id' => $userId,
+            \App\Models\EmployeeActivity::create([
+                'employee_id' => $employeeId,
                 'activity_type' => 'profile_update',
                 'description' => 'Profile information updated',
                 'ip_address' => '127.0.0.1',
@@ -541,10 +579,11 @@ class AdminProfileController extends Controller
                 'metadata' => ['name' => ['from' => 'Old Name', 'to' => 'New Name']],
                 'performed_at' => now()->subHours(5)
             ]);
-            UserActivity::create([
-                'user_id' => $userId,
+            
+            \App\Models\EmployeeActivity::create([
+                'employee_id' => $employeeId,
                 'activity_type' => 'settings_update',
-                'description' => 'User preferences updated',
+                'description' => 'Employee preferences updated',
                 'ip_address' => '127.0.0.1',
                 'user_agent' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
                 'metadata' => ['theme' => 'dark', 'language' => 'en'],

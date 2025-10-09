@@ -553,33 +553,38 @@ class EmployeeController extends Controller
         }
     }
 
-    // Get users for employee dropdown
+    // Get employees for dropdown (replaces users)
     public function getUsers()
     {
         try {
-            // Check if users table exists
-            $tablesExist = DB::select("SHOW TABLES LIKE 'users'");
-            if (empty($tablesExist)) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Users table does not exist.',
-                    'data' => []
-                ]);
-            }
-
-            $users = DB::select("SELECT id, name, email FROM users ORDER BY name");
+            // Use employees instead of users
+            $employees = Employee::select('id', DB::raw("CONCAT(first_name, ' ', last_name) as name"), 'email')
+                ->orderBy('first_name')
+                ->orderBy('last_name')
+                ->get();
 
             return response()->json([
                 'success' => true,
-                'data' => $users,
-                'count' => count($users)
+                'data' => $employees,
+                'count' => $employees->count()
             ]);
         } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Database error: ' . $e->getMessage(),
-                'data' => []
-            ]);
+            // Fallback to raw query if Eloquent fails
+            try {
+                $employees = DB::select("SELECT id, CONCAT(first_name, ' ', last_name) as name, email FROM employees ORDER BY first_name, last_name");
+                
+                return response()->json([
+                    'success' => true,
+                    'data' => $employees,
+                    'count' => count($employees)
+                ]);
+            } catch (\Exception $e2) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Database error: ' . $e2->getMessage(),
+                    'data' => []
+                ]);
+            }
         }
     }
 

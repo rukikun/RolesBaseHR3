@@ -96,7 +96,7 @@
         </div>
         <div class="ms-3">
           <h3 class="fw-bold mb-0 stat-number">{{ number_format($timesheetStats['total_hours'] ?? 0, 1) }}</h3>
-          <p class="text-muted mb-0 small stat-label">Total Hours</p>
+          <p class="text-muted mb-0 small stat-label">Total Time</p>
         </div>
       </div>
     </div>
@@ -230,7 +230,7 @@
                   <th>Employee</th>
                   <th>Department</th>
                   <th>Week Period</th>
-                  <th>Total Hours</th>
+                  <th>Total Time</th>
                   <th>Overtime</th>
                   <th>Generated Date</th>
                   <th>Status</th>
@@ -476,7 +476,7 @@
                 <th>Date</th>
                 <th>Clock In</th>
                 <th>Clock Out</th>
-                <th>Total Hours</th>
+                <th>Total Time</th>
                 <th>Overtime</th>
                 <th>Status</th>
                 <th>Location</th>
@@ -525,20 +525,50 @@
                   <td>
                     @php
                       $totalHours = $attendance->total_hours ?? 0;
-                      $isNegative = $totalHours < 0;
+                      $displayHours = abs($totalHours); // Always show positive hours
+                      
+                      // Format as "Xh Ym" instead of "X.XXh"
+                      $wholeHours = floor($displayHours);
+                      $minutes = round(($displayHours - $wholeHours) * 60);
+                      
+                      if ($wholeHours > 0 && $minutes > 0) {
+                          $formattedTime = $wholeHours . 'h ' . $minutes . 'm';
+                      } elseif ($wholeHours > 0) {
+                          $formattedTime = $wholeHours . 'h';
+                      } elseif ($minutes > 0) {
+                          $formattedTime = $minutes . 'm';
+                      } else {
+                          $formattedTime = '0m';
+                      }
                     @endphp
-                    @if($isNegative)
-                      <strong class="text-danger">{{ number_format($totalHours, 2) }}h</strong>
-                      <i class="fas fa-exclamation-triangle text-warning ms-1" title="Negative hours detected"></i>
-                    @else
-                      <strong>{{ number_format($totalHours, 2) }}h</strong>
-                    @endif
+                    <strong>{{ $formattedTime }}</strong>
                   </td>
                   <td>
-                    @if($attendance->overtime_hours > 0)
-                      <span class="badge bg-warning">{{ number_format($attendance->overtime_hours, 2) }}h</span>
+                    @php
+                      $overtimeHours = abs($attendance->overtime_hours ?? 0); // Always show positive overtime
+                      
+                      if ($overtimeHours > 0) {
+                          // Format overtime as "Xh Ym"
+                          $wholeHours = floor($overtimeHours);
+                          $minutes = round(($overtimeHours - $wholeHours) * 60);
+                          
+                          if ($wholeHours > 0 && $minutes > 0) {
+                              $formattedOvertime = $wholeHours . 'h ' . $minutes . 'm';
+                          } elseif ($wholeHours > 0) {
+                              $formattedOvertime = $wholeHours . 'h';
+                          } elseif ($minutes > 0) {
+                              $formattedOvertime = $minutes . 'm';
+                          } else {
+                              $formattedOvertime = '0m';
+                          }
+                      } else {
+                          $formattedOvertime = '0m';
+                      }
+                    @endphp
+                    @if($overtimeHours > 0)
+                      <span class="badge bg-warning">{{ $formattedOvertime }}</span>
                     @else
-                      <span class="text-muted">0h</span>
+                      <span class="text-muted">{{ $formattedOvertime }}</span>
                     @endif
                   </td>
                   <td>
@@ -1018,7 +1048,7 @@
                 <div class="row mb-3">
                     <div class="col-md-6">
                         <div class="detail-item">
-                            <label class="detail-label">Total Hours:</label>
+                            <label class="detail-label">Total Time:</label>
                             <div id="view-timesheet-hours" class="detail-value">-</div>
                         </div>
                     </div>
@@ -1297,7 +1327,7 @@
                                 <th style="background-color: #20B2AA; color: white;">Clock In</th>
                                 <th style="background-color: #20B2AA; color: white;">Break</th>
                                 <th style="background-color: #20B2AA; color: white;">Clock Out</th>
-                                <th style="background-color: #20B2AA; color: white;">Total Hours</th>
+                                <th style="background-color: #20B2AA; color: white;">Total Time</th>
                                 <th style="background-color: #20B2AA; color: white;">Overtime</th>
                             </tr>
                         </thead>
@@ -1426,7 +1456,7 @@
                                 <th style="background-color: #20B2AA; color: white;">Time In</th>
                                 <th style="background-color: #20B2AA; color: white;">Break</th>
                                 <th style="background-color: #20B2AA; color: white;">Time Out</th>
-                                <th style="background-color: #20B2AA; color: white;">Total Hours</th>
+                                <th style="background-color: #20B2AA; color: white;">Total Time</th>
                                 <th style="background-color: #20B2AA; color: white;">Actual Time</th>
                             </tr>
                         </thead>
@@ -2074,6 +2104,50 @@
 </style>
 
 <script>
+// Time formatting function - converts decimal hours to readable format
+function formatHoursToTime(hours) {
+    if (hours === null || hours === undefined || hours === 0) {
+        return '0m';
+    }
+    
+    const wholeHours = Math.floor(hours);
+    const minutes = Math.round((hours - wholeHours) * 60);
+    
+    if (wholeHours > 0 && minutes > 0) {
+        return wholeHours + 'h ' + minutes + 'm';
+    } else if (wholeHours > 0) {
+        return wholeHours + 'h';
+    } else if (minutes > 0) {
+        return minutes + 'm';
+    } else {
+        return '0m';
+    }
+}
+
+// Helper function to convert time format back to decimal hours
+function parseTimeToHours(timeStr) {
+    if (!timeStr || timeStr === '--' || timeStr === '0m') {
+        return 0;
+    }
+    
+    let hours = 0;
+    let minutes = 0;
+    
+    // Extract hours (e.g., "8h" or "8h 30m")
+    const hoursMatch = timeStr.match(/(\d+)h/);
+    if (hoursMatch) {
+        hours = parseInt(hoursMatch[1]);
+    }
+    
+    // Extract minutes (e.g., "30m" or "8h 30m")
+    const minutesMatch = timeStr.match(/(\d+)m/);
+    if (minutesMatch) {
+        minutes = parseInt(minutesMatch[1]);
+    }
+    
+    return hours + (minutes / 60);
+}
+
 // Working Modal Functions - Enhanced with Better Error Handling
 function openWorkingModal(modalId) {
     console.log('Attempting to open modal:', modalId);
@@ -2251,7 +2325,7 @@ document.addEventListener('DOMContentLoaded', function() {
                                 <strong>Hours Worked:</strong> ${viewData.hours_worked}
                             </div>
                             <div class="col-md-6">
-                                <strong>Overtime Hours:</strong> ${viewData.overtime_hours || 0}
+                                <strong>Overtime:</strong> ${formatHoursToTime(viewData.overtime_hours || 0)}
                             </div>
                         </div>
                         <div class="row mt-3">
@@ -2840,7 +2914,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 </div>
                 <div class="col-md-6">
                     <strong>Hours Worked:</strong> ${viewData.hours_worked || 0}h<br>
-                    <strong>Overtime:</strong> ${viewData.overtime_hours || 0}h<br>
+                    <strong>Overtime:</strong> ${formatHoursToTime(viewData.overtime_hours || 0)}<br>
                     <strong>Status:</strong> <span class="badge bg-${viewData.status === 'approved' ? 'success' : (viewData.status === 'pending' ? 'warning' : 'danger')}">${viewData.status}</span><br>
                     <strong>Break Duration:</strong> ${viewData.break_duration || 1}h
                 </div>
@@ -2952,10 +3026,10 @@ function viewAttendance(attendanceId) {
                                     <div class="col-md-6">
                                         <strong>Clock In:</strong> ${attendance.clock_in_time ? new Date(attendance.clock_in_time).toLocaleTimeString() : 'Not clocked in'}<br>
                                         <strong>Clock Out:</strong> ${attendance.clock_out_time ? new Date(attendance.clock_out_time).toLocaleTimeString() : 'Not clocked out'}<br>
-                                        <strong>Total Hours:</strong> ${attendance.total_hours || 0}h
+                                        <strong>Total Time:</strong> ${formatHoursToTime(attendance.total_hours || 0)}
                                     </div>
                                 </div>
-                                ${attendance.overtime_hours > 0 ? `<div class="mt-3"><strong>Overtime Hours:</strong> ${attendance.overtime_hours}h</div>` : ''}
+                                ${attendance.overtime_hours > 0 ? `<div class="mt-3"><strong>Overtime:</strong> ${formatHoursToTime(attendance.overtime_hours)}</div>` : ''}
                                 ${attendance.location ? `<div class="mt-2"><strong>Location:</strong> ${attendance.location}</div>` : ''}
                                 ${attendance.ip_address ? `<div class="mt-2"><strong>IP Address:</strong> ${attendance.ip_address}</div>` : ''}
                                 ${attendance.notes ? `<div class="mt-2"><strong>Notes:</strong><br>${attendance.notes}</div>` : ''}
@@ -4834,8 +4908,8 @@ function generateRealisticTimesheetData(employeeId) {
             time_in: formattedTimeIn,
             break: '12:00 PM - 1:00 PM',
             time_out: formattedTimeOut,
-            total_hours: totalHours + ' hrs.',
-            overtime: dayOvertime > 0 ? dayOvertime.toFixed(1) + ' hrs.' : '0 hrs.'
+            total_hours: formatHoursToTime(totalHours),
+            overtime: dayOvertime > 0 ? formatHoursToTime(dayOvertime) : '0m'
         };
     });
     
@@ -4897,7 +4971,7 @@ function calculateMinutesBetween(startTime, endTime) {
 function generateAIInsights(weeklyData) {
     const insights = [];
     const totalHours = Object.values(weeklyData).reduce((sum, day) => {
-        return sum + parseFloat(day.total_hours.replace(' hrs.', ''));
+        return sum + parseTimeToHours(day.total_hours);
     }, 0);
     
     insights.push(`Total weekly hours: ${totalHours.toFixed(1)} hours`);
@@ -5275,15 +5349,15 @@ function extractTimesheetDataFromModal() {
             const break_time = cells[3].textContent.trim();
             const clockOut = cells[4].textContent.trim();
             const totalHours = cells[5].textContent.trim();
-            const overtime = cells[6] ? cells[6].textContent.trim() : '0 hrs.';
+            const overtime = cells[6] ? cells[6].textContent.trim() : '0m';
             
             weeklyData[day] = {
                 date: date,
                 clock_in: clockIn,
                 break: break_time,
                 clock_out: clockOut,
-                total_hours: parseFloat(totalHours.replace(' hrs.', '')) || 0,
-                overtime: parseFloat(overtime.replace(' hrs.', '')) || 0
+                total_hours: parseTimeToHours(totalHours) || 0,
+                overtime: parseTimeToHours(overtime) || 0
             };
         }
     });
@@ -5362,7 +5436,7 @@ function saveAITimesheet() {
         saveButton.disabled = false;
         
         if (data.success) {
-            showAlert('success', `AI timesheet saved successfully for ${data.employee_name || employeeName}! Total: ${data.total_hours || 0} hrs, Overtime: ${data.overtime_hours || 0} hrs. It now appears in the pending approval table below.`);
+            showAlert('success', `AI timesheet saved successfully for ${data.employee_name || employeeName}! Total: ${formatHoursToTime(data.total_hours || 0)}, Overtime: ${formatHoursToTime(data.overtime_hours || 0)}. It now appears in the pending approval table below.`);
             closeWorkingModal('ai-timesheet-modal');
             refreshSavedTimesheets();
             refreshStatisticsAfterAction(); // Update statistics after saving
@@ -5462,46 +5536,52 @@ function getStatusBadge(status) {
 
 // Get action buttons HTML based on status
 function getActionButtons(timesheetId, status) {
-    const viewButton = `<button class="btn btn-sm btn-outline-info" onclick="viewSavedTimesheet('${timesheetId}')" title="View"><i class="fas fa-eye"></i></button>`;
-    
     if (status === 'pending') {
-        // Show view, approve, and reject buttons for pending items
+        // Show approve, reject, and delete buttons for pending items
         return `
             <div class="btn-group" role="group">
-                ${viewButton}
                 <button class="btn btn-sm btn-outline-success" onclick="approveTimesheet('${timesheetId}')" title="Approve">
                     <i class="fas fa-check"></i>
                 </button>
                 <button class="btn btn-sm btn-outline-danger" onclick="rejectTimesheet('${timesheetId}')" title="Reject">
                     <i class="fas fa-times"></i>
                 </button>
+                <button class="btn btn-sm btn-outline-danger" onclick="deleteTimesheet('${timesheetId}')" title="Delete">
+                    <i class="fas fa-trash"></i>
+                </button>
             </div>
         `;
     } else if (status === 'approved') {
-        // Show view and send to payroll buttons for approved items
+        // Show send to payroll and delete buttons for approved items
         return `
             <div class="btn-group" role="group">
-                ${viewButton}
                 <button class="btn btn-sm btn-outline-primary" onclick="sendToPayroll('${timesheetId}')" title="Send to Payroll">
                     <i class="fas fa-money-bill-wave"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-danger" onclick="deleteTimesheet('${timesheetId}')" title="Delete">
+                    <i class="fas fa-trash"></i>
                 </button>
             </div>
         `;
     } else if (status === 'sent_to_payroll') {
-        // Show only view button for items sent to payroll
+        // Show status indicator and delete button for items sent to payroll
         return `
             <div class="btn-group" role="group">
-                ${viewButton}
                 <span class="btn btn-sm btn-outline-secondary disabled" title="Already sent to payroll">
                     <i class="fas fa-check-circle"></i>
                 </span>
+                <button class="btn btn-sm btn-outline-danger" onclick="deleteTimesheet('${timesheetId}')" title="Delete">
+                    <i class="fas fa-trash"></i>
+                </button>
             </div>
         `;
     } else {
-        // Show only view button for rejected items
+        // Show delete button for rejected items
         return `
             <div class="btn-group" role="group">
-                ${viewButton}
+                <button class="btn btn-sm btn-outline-danger" onclick="deleteTimesheet('${timesheetId}')" title="Delete">
+                    <i class="fas fa-trash"></i>
+                </button>
             </div>
         `;
     }
@@ -5540,8 +5620,8 @@ function populateSavedTimesheetsTable(timesheets) {
             </td>
             <td>${timesheet.department || 'General'}</td>
             <td>${timesheet.week_period || 'Current Week'}</td>
-            <td><span class="badge bg-info">${timesheet.total_hours || '0'} hrs</span></td>
-            <td><span class="badge bg-warning">${timesheet.overtime_hours || '0'} hrs</span></td>
+            <td><span class="badge bg-info">${formatHoursToTime(timesheet.total_hours || 0)}</span></td>
+            <td><span class="badge bg-warning">${formatHoursToTime(timesheet.overtime_hours || 0)}</span></td>
             <td>
                 <small>${timesheet.generated_at}</small>
             </td>
@@ -5620,8 +5700,8 @@ function populateSavedTimesheetModal(timesheet) {
                     <td>${dayData.clock_in || '--'}</td>
                     <td>${dayData.break || '--'}</td>
                     <td>${dayData.clock_out || '--'}</td>
-                    <td>${dayData.total_hours ? dayData.total_hours + ' hrs.' : '--'}</td>
-                    <td>${dayData.overtime ? dayData.overtime + ' hrs.' : '0 hrs.'}</td>
+                    <td>${dayData.total_hours || '--'}</td>
+                    <td>${dayData.overtime || '0m'}</td>
                 </tr>
             `;
         }).join('');
@@ -5651,7 +5731,7 @@ function populateSavedTimesheetModal(timesheet) {
 
 // Send timesheet to payroll
 function sendToPayroll(timesheetId) {
-    if (!confirm('Are you sure you want to send this timesheet to payroll? This will create actual time entries for payroll processing.')) {
+    if (!confirm('Are you sure you want to send this timesheet to payroll? This will create a payroll entry for processing.')) {
         return;
     }
     
@@ -5660,13 +5740,31 @@ function sendToPayroll(timesheetId) {
     button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
     button.disabled = true;
     
-    fetch(`/api/ai-timesheets/send-to-payroll/${timesheetId}`, {
+    // Get timesheet data from the saved timesheets
+    const timesheetData = getSavedTimesheetData(timesheetId);
+    
+    if (!timesheetData) {
+        button.innerHTML = originalText;
+        button.disabled = false;
+        showAlert('error', 'Unable to find timesheet data. Please try again.');
+        return;
+    }
+    
+    fetch('/payroll/send-to-payroll', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
             'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
             'Accept': 'application/json'
-        }
+        },
+        body: JSON.stringify({
+            timesheet_id: timesheetId,
+            employee_id: timesheetData.employee_id,
+            department: timesheetData.department || 'Unknown',
+            week_period: timesheetData.week_period,
+            total_hours: timesheetData.total_hours || 0,
+            overtime_hours: timesheetData.overtime_hours || 0
+        })
     })
     .then(response => {
         if (!response.ok) {
@@ -5679,9 +5777,9 @@ function sendToPayroll(timesheetId) {
         button.disabled = false;
         
         if (data.success) {
-            showAlert('success', `Timesheet sent to payroll successfully! ${data.entries_created || 0} time entries created.`);
+            showAlert('success', `Timesheet sent to payroll successfully! Payroll ID: ${data.payroll_id}`);
             refreshSavedTimesheets();
-            refreshStatisticsAfterAction(); // Update statistics after sending to payroll
+            refreshStatisticsAfterAction();
         } else {
             showAlert('error', 'Failed to send to payroll: ' + data.message);
         }
@@ -5692,6 +5790,57 @@ function sendToPayroll(timesheetId) {
         button.disabled = false;
         showAlert('error', 'Failed to send to payroll: ' + error.message);
     });
+}
+
+// Helper function to get saved timesheet data
+function getSavedTimesheetData(timesheetId) {
+    // Try to find the timesheet data from the saved timesheets table
+    const timesheetRow = document.querySelector(`button[onclick="sendToPayroll('${timesheetId}')"]`)?.closest('tr');
+    
+    if (!timesheetRow) {
+        return null;
+    }
+    
+    const cells = timesheetRow.cells;
+    if (cells.length < 6) {
+        return null;
+    }
+    
+    // Extract data from table cells (adjust indices based on your table structure)
+    const employeeName = cells[0]?.textContent?.trim() || '';
+    const department = cells[1]?.textContent?.trim() || 'Unknown';
+    const weekPeriod = cells[2]?.textContent?.trim() || '';
+    const totalHours = parseFloat(cells[3]?.textContent?.replace(/[^\d.]/g, '') || '0');
+    const overtimeHours = parseFloat(cells[4]?.textContent?.replace(/[^\d.]/g, '') || '0');
+    
+    // Extract employee ID from the employee name or use a default
+    const employeeId = extractEmployeeId(employeeName) || 1;
+    
+    return {
+        employee_id: employeeId,
+        department: department,
+        week_period: weekPeriod,
+        total_hours: totalHours,
+        overtime_hours: overtimeHours
+    };
+}
+
+// Helper function to extract employee ID (you may need to adjust this based on your data structure)
+function extractEmployeeId(employeeName) {
+    // Try to extract ID from employee name if it contains "ID:" pattern
+    const idMatch = employeeName.match(/ID:\s*(\d+)/);
+    if (idMatch) {
+        return parseInt(idMatch[1]);
+    }
+    
+    // Fallback: map employee names to IDs (you can expand this)
+    const employeeMap = {
+        'Super Admin': 1,
+        'Jane Smith': 2,
+        'John Doe': 3
+    };
+    
+    return employeeMap[employeeName] || 1; // Default to employee ID 1
 }
 
 // Refresh statistics dynamically
@@ -5787,6 +5936,36 @@ function rejectTimesheet(timesheetId) {
     .catch(error => {
         console.error('Error rejecting timesheet:', error);
         showAlert('error', 'Failed to reject timesheet');
+    });
+}
+
+// Delete timesheet
+function deleteTimesheet(timesheetId) {
+    if (!confirm('Are you sure you want to delete this timesheet? This action cannot be undone.')) {
+        return;
+    }
+    
+    fetch(`/api/ai-timesheets/delete/${timesheetId}`, {
+        method: 'DELETE',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+            'Accept': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showAlert('success', 'Timesheet deleted successfully!');
+            refreshSavedTimesheets();
+            refreshStatisticsAfterAction(); // Update statistics after deletion
+        } else {
+            showAlert('error', data.message || 'Failed to delete timesheet');
+        }
+    })
+    .catch(error => {
+        console.error('Error deleting timesheet:', error);
+        showAlert('error', 'Failed to delete timesheet');
     });
 }
 

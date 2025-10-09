@@ -17,8 +17,8 @@
     </div>
     <nav aria-label="breadcrumb">
       <ol class="breadcrumb mb-0">
-        <li class="breadcrumb-item"><a href="{{ route('dashboard') }}" class="text-decoration-none">Home</a></li>
-        <li class="breadcrumb-item active" aria-current="page">Claims Management</li>
+        <li class="breadcrumb-item"><a href="{{ route('dashboard') }}" class="text-decoration-none text-primary">Home</a></li>
+        <li class="breadcrumb-item active text-muted" aria-current="page">Claims Management</li>
       </ol>
     </nav>
   </div>
@@ -129,14 +129,11 @@ $totalAmount = $totalAmount ?? 0;
         </h5>
       </div>
       <div class="card-body">
-        <button class="btn btn-info mb-2 me-2" id="validate-attachments-btn">
+        <a href="{{ route('validate-attachment') }}" class="btn btn-info mb-2 me-2" id="validate-attachments-btn">
           <i class="fas fa-check me-2"></i>Validate Attachments
-        </button>
+        </a>
         <button class="btn btn-warning mb-2 me-2" id="approve-reject-btn" onclick="scrollToClaims()">
           <i class="fas fa-gavel me-2"></i>Approve/Reject
-        </button>
-        <button class="btn btn-success mb-2" id="forward-finance-btn">
-          <i class="fas fa-share me-2"></i>Forward to Payroll
         </button>
       </div>
     </div>
@@ -307,15 +304,6 @@ $totalAmount = $totalAmount ?? 0;
                           @method('PATCH')
                           <button type="submit" class="btn btn-sm btn-outline-warning" title="Reject">
                             <i class="fas fa-times"></i>
-                          </button>
-                        </form>
-                        @endif
-                        @if($status === 'approved' && isset($claim->id))
-                        <form method="POST" action="{{ route('claims.pay', $claim->id) }}" style="display: inline;" onsubmit="return confirm('Are you sure you want to mark this claim as paid?')">
-                          @csrf
-                          @method('PATCH')
-                          <button type="submit" class="btn btn-sm btn-outline-info" title="Mark as Paid">
-                            <i class="fas fa-dollar-sign"></i>
                           </button>
                         </form>
                         @endif

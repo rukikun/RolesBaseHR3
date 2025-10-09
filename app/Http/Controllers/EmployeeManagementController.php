@@ -26,8 +26,8 @@ class EmployeeManagementController extends Controller
         $employees = collect();
         
         try {
-            // Fetch data from API
-            $response = Http::timeout(10)->get('http://hr4.jetlougetravels-ph.com/api/employees');
+            // Fetch data from HR4 API
+            $response = Http::timeout(10)->get('https://hr4.jetlougetravels-ph.com/api/employees');
 
             if ($response->successful()) {
                 $apiData = $response->json();
@@ -55,21 +55,47 @@ class EmployeeManagementController extends Controller
                         ];
                     });
                     
-                    \Log::info('Successfully transformed ' . $employees->count() . ' employees from API');
+                    \Log::info('Successfully transformed ' . $employees->count() . ' employees from HR4 API');
                 }
             } else {
-                \Log::warning('API request failed with status: ' . $response->status());
+                \Log::warning('HR4 API request failed with status: ' . $response->status());
+                // Fallback to local database if API fails
+                $employees = Employee::orderBy('first_name')->orderBy('last_name')->get();
+                $employees = $employees->map(function($employee) {
+                    $employee->name = $employee->first_name . ' ' . $employee->last_name;
+                    return $employee;
+                });
+                \Log::info('Fallback: Retrieved ' . $employees->count() . ' employees from local database');
             }
             
         } catch (\Exception $e) {
             \Log::error('Employee Management API Error: ' . $e->getMessage());
+            // Fallback to local database
+            try {
+                $employees = Employee::orderBy('first_name')->orderBy('last_name')->get();
+                $employees = $employees->map(function($employee) {
+                    $employee->name = $employee->first_name . ' ' . $employee->last_name;
+                    return $employee;
+                });
+                \Log::info('Fallback: Retrieved ' . $employees->count() . ' employees from local database');
+            } catch (\Exception $e2) {
+                \Log::error('Both API and local database failed: ' . $e2->getMessage());
+                $employees = collect();
+            }
         }
 
-        // Calculate statistics
+        // Calculate statistics from the fetched employees
         $stats = [
             'total_employees' => $employees->count(),
             'active_employees' => $employees->where('status', 'active')->count(),
+            'departments' => $employees->pluck('department')->filter()->unique()->count(),
             'employees_with_timesheets' => 0, // Not available from API
+            'online_employees' => 0, // Not available from API
+            'inactive_employees' => $employees->where('status', 'inactive')->count(),
+            'terminated_employees' => $employees->where('status', 'terminated')->count(),
+            'recent_hires' => $employees->filter(function($employee) {
+                return $employee->hire_date && \Carbon\Carbon::parse($employee->hire_date)->gte(now()->subDays(30));
+            })->count()
         ];
 
         \Log::info('Returning view with ' . $employees->count() . ' employees');
@@ -86,7 +112,7 @@ class EmployeeManagementController extends Controller
             Log::info('Starting export data process...');
             
             // Fetch data from API
-            $response = Http::timeout(10)->get('http://hr4.jetlougetravels-ph.com/api/employees');
+            $response = Http::timeout(10)->get('https://hr4.jetlougetravels-ph.com/api/employees');
 
             if (!$response->successful()) {
                 Log::error('API request failed with status: ' . $response->status());
@@ -120,7 +146,7 @@ class EmployeeManagementController extends Controller
                         continue;
                     }
 
-                    // Create new employee record
+                    // Create new employee record (only using columns that exist in the table)
                     $newEmployee = Employee::create([
                         'first_name' => $employeeData['first_name'] ?? '',
                         'last_name' => $employeeData['last_name'] ?? '',
@@ -130,8 +156,10 @@ class EmployeeManagementController extends Controller
                         'department' => $this->mapDepartment($employeeData['role'] ?? ''),
                         'status' => $this->mapStatus($employeeData['status'] ?? 'Active'),
                         'hire_date' => $employeeData['date_hired'] ?? $employeeData['start_date'] ?? null,
-                        'address' => $employeeData['address'] ?? null,
-                        'gender' => $employeeData['gender'] ?? null,
+                        'salary' => 0.00, // Default salary
+                        'role' => 'employee', // Default role for imported employees
+                        'online_status' => 'offline',
+                        'password' => \Hash::make('password123'), // Default password
                     ]);
 
                     $imported++;
@@ -172,7 +200,7 @@ class EmployeeManagementController extends Controller
     {
         try {
             // Fetch data from API
-            $response = Http::timeout(10)->get('http://hr4.jetlougetravels-ph.com/api/employees');
+            $response = Http::timeout(10)->get('https://hr4.jetlougetravels-ph.com/api/employees');
 
             if (!$response->successful()) {
                 return response()->json(['error' => 'Failed to fetch data from API'], 500);
@@ -203,7 +231,7 @@ class EmployeeManagementController extends Controller
                 ]);
             }
 
-            // Create new employee record
+            // Create new employee record (only using columns that exist in the table)
             $newEmployee = Employee::create([
                 'first_name' => $employeeData['first_name'] ?? '',
                 'last_name' => $employeeData['last_name'] ?? '',
@@ -213,8 +241,10 @@ class EmployeeManagementController extends Controller
                 'department' => $this->mapDepartment($employeeData['role'] ?? ''),
                 'status' => $this->mapStatus($employeeData['status'] ?? 'Active'),
                 'hire_date' => $employeeData['date_hired'] ?? $employeeData['start_date'] ?? null,
-                'address' => $employeeData['address'] ?? null,
-                'gender' => $employeeData['gender'] ?? null,
+                'salary' => 0.00, // Default salary
+                'role' => 'employee', // Default role for imported employees
+                'online_status' => 'offline',
+                'password' => \Hash::make('password123'), // Default password
             ]);
 
             Log::info("Individual employee exported: {$newEmployee->first_name} {$newEmployee->last_name}");

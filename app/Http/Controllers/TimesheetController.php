@@ -1472,20 +1472,21 @@ class TimesheetController extends Controller
                             $hours = round($totalMinutes / 60, 1);
                         }
                         
-                        $regularHours = min($hours, 8);
-                        $overtimeHours = max(0, $hours - 8);
+                        // Use existing total_hours and overtime_hours from database if available
+                        $totalHours = isset($att->total_hours) ? abs($att->total_hours) : abs($hours);
+                        $overtimeHours = isset($att->overtime_hours) ? abs($att->overtime_hours) : max(0, $totalHours - 8);
                         
-                        // Ensure no negative hours are displayed
-                        $displayHours = max(0, $regularHours);
-                        $displayOvertime = max(0, $overtimeHours);
+                        // Format hours as "Xh Ym" instead of "X.X hrs."
+                        $totalHoursFormatted = $this->formatHoursToTime($totalHours);
+                        $overtimeFormatted = $overtimeHours > 0 ? $this->formatHoursToTime($overtimeHours) : '0m';
                         
                         $weeklyData[$dayOfWeek] = [
                             'date' => $clockIn->format('m/d/y'),
                             'time_in' => $clockIn->format('g:i A'),
                             'break' => '12:00 PM - 1:00 PM',
                             'time_out' => $clockOut->format('g:i A'),
-                            'total_hours' => $displayHours . ' hrs.',
-                            'overtime' => $displayOvertime > 0 ? $displayOvertime . ' hrs.' : '0 hrs.'
+                            'total_hours' => $totalHoursFormatted,
+                            'overtime' => $overtimeFormatted
                         ];
                     }
                 }
@@ -2427,6 +2428,29 @@ class TimesheetController extends Controller
                     'total_hours' => 0
                 ]
             ], 500);
+        }
+    }
+    
+    /**
+     * Helper method to format decimal hours to readable time format
+     */
+    private function formatHoursToTime($hours)
+    {
+        if ($hours === null || $hours === 0) {
+            return '0m';
+        }
+        
+        $wholeHours = floor($hours);
+        $minutes = round(($hours - $wholeHours) * 60);
+        
+        if ($wholeHours > 0 && $minutes > 0) {
+            return $wholeHours . 'h ' . $minutes . 'm';
+        } elseif ($wholeHours > 0) {
+            return $wholeHours . 'h';
+        } elseif ($minutes > 0) {
+            return $minutes . 'm';
+        } else {
+            return '0m';
         }
     }
 }

@@ -4,8 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use App\Models\User;
-use App\Models\UserActivity;
+use App\Models\Employee;
 
 class AuthController extends Controller
 {
@@ -18,7 +17,7 @@ class AuthController extends Controller
     }
 
     /**
-     * Handle admin login (uses 'users' table) - redirects to HR dashboard
+     * Handle employee login (uses 'employees' table) - redirects to HR dashboard
      */
     public function login(Request $request)
     {
@@ -27,33 +26,35 @@ class AuthController extends Controller
             'password' => ['required'],
         ]);
 
-        // Use the default 'web' guard which uses 'users' table
-        if (Auth::guard('web')->attempt($credentials, $request->has('rememberMe'))) {
+        // Use the 'employee' guard which uses 'employees' table
+        if (Auth::guard('employee')->attempt($credentials, $request->has('rememberMe'))) {
             $request->session()->regenerate();
-            // Get the authenticated user from users table
-            $user = Auth::guard('web')->user();
+            // Get the authenticated employee from employees table
+            $employee = Auth::guard('employee')->user();
             
-            // Update last login timestamp
+            // Update last activity and set online status
             try {
-                $user->update(['last_login' => now()]);
+                $employee->update([
+                    'last_activity' => now(),
+                    'online_status' => 'online'
+                ]);
                 
                 // Log login activity
-                UserActivity::log('login', 'User logged in successfully', [
-                    'user_agent' => $request->userAgent(),
-                    'ip_address' => $request->ip(),
-                    'login_method' => 'web_form'
-                ]);
+                \App\Models\EmployeeActivity::logLogin();
             } catch (\Exception $e) {
                 // Continue login even if activity logging fails
-                \Log::error('Login activity logging failed: ' . $e->getMessage());
+                \Log::error('Employee activity update failed: ' . $e->getMessage());
             }
             
-            // Redirect based on user role - all admin users go to HR dashboard
-            if ($user->isAdmin() || $user->hasRole(['admin', 'hr', 'manager'])) {
+            // Redirect based on employee role - all roles go to dashboard
+            if ($employee->canAccessDashboard()) {
                 return redirect()->intended(route('dashboard'));
             } else {
-                // Regular users from users table also go to HR dashboard
-                return redirect()->intended(route('dashboard'));
+                // If role doesn't have dashboard access, logout and show error
+                Auth::guard('employee')->logout();
+                return back()->withErrors([
+                    'email' => 'Your account does not have permission to access this system.',
+                ]);
             }
         }
 
@@ -63,44 +64,54 @@ class AuthController extends Controller
     }
 
     /**
-     * Handle admin logout
+     * Handle employee logout
      */
     public function logout(Request $request)
     {
-        // Log logout activity before logging out
-        if (Auth::check()) {
-            UserActivity::log('logout', 'User logged out', [
-                'user_agent' => $request->userAgent(),
-                'ip_address' => $request->ip()
-            ]);
+        // Update employee status before logging out
+        if (Auth::guard('employee')->check()) {
+            $employee = Auth::guard('employee')->user();
+            try {
+                $employee->update([
+                    'online_status' => 'offline',
+                    'last_activity' => now()
+                ]);
+                
+                // Log logout activity
+                \App\Models\EmployeeActivity::logLogout();
+            } catch (\Exception $e) {
+                \Log::error('Employee logout status update failed: ' . $e->getMessage());
+            }
         }
         
-        Auth::guard('web')->logout();
+        Auth::guard('employee')->logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();
         return redirect('/admin/login');
     }
 
     /**
-     * Get current authenticated admin user
+     * Get current authenticated employee
      */
     public function getCurrentUser()
     {
-        $user = Auth::guard('web')->user();
+        $employee = Auth::guard('employee')->user();
         
-        if (!$user) {
+        if (!$employee) {
             return response()->json(['error' => 'Not authenticated'], 401);
         }
 
         return response()->json([
-            'id' => $user->id,
-            'name' => $user->name,
-            'email' => $user->email,
-            'role' => $user->role,
-            'phone' => $user->phone,
-            'profile_picture' => $user->profile_picture,
-            'job_title' => $user->job_title,
-            'department' => $user->department,
+            'id' => $employee->id,
+            'name' => $employee->full_name,
+            'first_name' => $employee->first_name,
+            'last_name' => $employee->last_name,
+            'email' => $employee->email,
+            'role' => $employee->role,
+            'phone' => $employee->phone,
+            'profile_picture' => $employee->profile_picture,
+            'position' => $employee->position,
+            'department' => $employee->department,
         ]);
     }
 }

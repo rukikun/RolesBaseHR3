@@ -96,7 +96,7 @@
       <div class="stats-icon info">
         <i class="bi bi-currency-dollar"></i>
       </div>
-      <div class="stats-value">$2,340</div>
+      <div class="stats-value">₱32,800</div>
       <p class="stats-label">Total Amount</p>
       <p class="stats-sublabel">Expected Earnings</p>
     </div>
@@ -312,7 +312,7 @@
                   ({{ date('g:i A', strtotime($shiftType['default_start_time'] ?? $shiftType->default_start_time)) }} - 
                    {{ date('g:i A', strtotime($shiftType['default_end_time'] ?? $shiftType->default_end_time)) }})
                   @if(isset($shiftType['hourly_rate']) || isset($shiftType->hourly_rate))
-                    - ${{ number_format($shiftType['hourly_rate'] ?? $shiftType->hourly_rate, 2) }}/hr
+                    - ₱{{ number_format($shiftType['hourly_rate'] ?? $shiftType->hourly_rate, 2) }}/hr
                   @endif
                 </option>
               @empty
@@ -431,7 +431,7 @@
           <div class="alert alert-info" id="hoursEstimate" style="display: none;">
             <i class="bi bi-info-circle me-2"></i>
             <strong>Estimated Hours:</strong> <span id="estimatedHours">0</span> hours
-            <br><strong>Estimated Pay:</strong> $<span id="estimatedPay">0.00</span>
+            <br><strong>Estimated Pay:</strong> ₱<span id="estimatedPay">0.00</span>
           </div>
         </div>
         

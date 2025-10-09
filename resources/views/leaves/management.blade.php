@@ -188,7 +188,7 @@
                       <button class="btn btn-sm btn-outline-info" onclick="viewLeaveTypeDetails('{{ addslashes($leaveType->name ?? '') }}', '{{ addslashes($leaveType->code ?? '') }}', {{ $leaveType->max_days_per_year ?? 0 }}, '{{ ($leaveType->carry_forward ?? 0) ? 'Yes' : 'No' }}', '{{ ($leaveType->requires_approval ?? 1) ? 'Yes' : 'No' }}')">
                         <i class="fas fa-eye"></i>
                       </button>
-                      <button class="btn btn-sm btn-outline-primary" onclick="editLeaveType({{ $leaveType->id }})">
+                      <button class="btn btn-sm btn-outline-primary" onclick="editLeaveTypeForm({{ $leaveType->id }}, '{{ addslashes($leaveType->name ?? '') }}', '{{ addslashes($leaveType->code ?? '') }}', '{{ addslashes($leaveType->description ?? '') }}', {{ $leaveType->max_days_per_year ?? 0 }}, {{ ($leaveType->carry_forward ?? 0) ? 'true' : 'false' }}, {{ ($leaveType->requires_approval ?? 1) ? 'true' : 'false' }})">
                         <i class="fas fa-edit"></i>
                       </button>
                       <form method="POST" action="{{ route('leave-types.destroy', $leaveType->id) }}" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this leave type?')">

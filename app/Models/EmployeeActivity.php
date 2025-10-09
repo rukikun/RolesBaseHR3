@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 
 class EmployeeActivity extends Model
 {
@@ -36,15 +37,27 @@ class EmployeeActivity extends Model
     // Activity logging helper methods
     public static function log($activityType, $description, $metadata = [])
     {
-        return self::create([
-            'employee_id' => Auth::id(),
-            'activity_type' => $activityType,
-            'description' => $description,
-            'ip_address' => request()->ip(),
-            'user_agent' => request()->userAgent(),
-            'metadata' => $metadata,
-            'performed_at' => now()
-        ]);
+        try {
+            $employeeId = Auth::guard('employee')->id() ?? Auth::id();
+            
+            if (!$employeeId) {
+                Log::warning('No authenticated employee found for activity logging');
+                return null;
+            }
+            
+            return self::create([
+                'employee_id' => $employeeId,
+                'activity_type' => $activityType,
+                'description' => $description,
+                'ip_address' => request()->ip(),
+                'user_agent' => request()->userAgent(),
+                'metadata' => $metadata,
+                'performed_at' => now()
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Failed to log employee activity: ' . $e->getMessage());
+            return null;
+        }
     }
 
     public static function logLogin()
@@ -123,6 +136,14 @@ class EmployeeActivity extends Model
     // Get formatted activity description
     public function getFormattedDescription()
     {
-        return $this->description . ' at ' . $this->performed_at->format('M d, Y h:i A');
+        try {
+            $timestamp = $this->performed_at ?? $this->created_at;
+            if ($timestamp) {
+                return $this->description . ' at ' . $timestamp->format('M d, Y h:i A');
+            }
+            return $this->description;
+        } catch (\Exception $e) {
+            return $this->description;
+        }
     }
 }

@@ -196,8 +196,8 @@ class AttendanceController extends Controller
                 'status' => 'clocked_out',
                 'notes' => $request->notes ? $attendance->notes . ' | ' . $request->notes : $attendance->notes,
             ]);
-
-            // Calculate total hours and overtime
+            
+            // Calculate and save total hours and overtime
             $attendance->total_hours = $attendance->calculateTotalHours();
             $attendance->overtime_hours = $attendance->calculateOvertimeHours();
             $attendance->save();
@@ -209,8 +209,8 @@ class AttendanceController extends Controller
                     'id' => $attendance->id,
                     'employee_id' => $attendance->employee_id,
                     'clock_out_time' => $attendance->formatted_clock_out,
-                    'total_hours' => $attendance->total_hours,
-                    'overtime_hours' => $attendance->overtime_hours,
+                    'total_hours' => abs($attendance->total_hours), // Remove negative sign
+                    'overtime_hours' => abs($attendance->overtime_hours), // Remove negative sign
                     'status' => $attendance->status,
                 ]
             ]);
@@ -382,6 +382,64 @@ class AttendanceController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to get attendance status: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get employee's attendance logs for dashboard
+     */
+    public function getLogs(Request $request, $employeeId)
+    {
+        try {
+            $logs = Attendance::where('employee_id', $employeeId)
+                ->orderBy('date', 'desc')
+                ->limit(10) // Get last 10 records
+                ->get()
+                ->map(function ($attendance) {
+                    // Calculate hours dynamically to ensure accuracy
+                    $totalHours = $attendance->total_hours;
+                    $overtimeHours = $attendance->overtime_hours;
+                    
+                    // If hours are not calculated or negative, recalculate
+                    if ($totalHours === null || $totalHours < 0) {
+                        $totalHours = $attendance->calculateTotalHours();
+                        $overtimeHours = $attendance->calculateOvertimeHours();
+                        
+                        // Update the record if it was incorrect
+                        if ($attendance->total_hours !== $totalHours) {
+                            $attendance->update([
+                                'total_hours' => $totalHours,
+                                'overtime_hours' => $overtimeHours
+                            ]);
+                        }
+                    }
+                    
+                    return [
+                        'id' => $attendance->id,
+                        'date' => $attendance->date->format('Y-m-d'),
+                        'clock_in_time' => $attendance->formatted_clock_in,
+                        'clock_out_time' => $attendance->formatted_clock_out,
+                        'total_hours' => $totalHours ? number_format(abs($totalHours), 2) : null, // Remove negative sign
+                        'overtime_hours' => $overtimeHours ? number_format(abs($overtimeHours), 2) : 0, // Remove negative sign
+                        'status' => $attendance->status,
+                        'status_text' => ucfirst(str_replace('_', ' ', $attendance->status)),
+                        'location' => $attendance->location,
+                        'is_today' => $attendance->date->isToday(),
+                    ];
+                });
+
+            return response()->json([
+                'success' => true,
+                'logs' => $logs
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('Error in AttendanceController@getLogs: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to get attendance logs: ' . $e->getMessage()
             ], 500);
         }
     }

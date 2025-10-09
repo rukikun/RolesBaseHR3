@@ -42,6 +42,143 @@ class HRDashboardController extends Controller
         ));
     }
     
+    /**
+     * Get recent time entries as JSON for AJAX refresh
+     */
+    public function getRecentTimeEntriesJson()
+    {
+        try {
+            \Log::info('=== Starting getRecentTimeEntriesJson (Simple Version) ===');
+            
+            // Simple direct query to avoid complex relationship issues
+            $attendances = DB::table('attendances')
+                ->join('employees', 'attendances.employee_id', '=', 'employees.id')
+                ->select(
+                    'attendances.id',
+                    'attendances.date',
+                    'attendances.clock_in_time',
+                    'attendances.clock_out_time',
+                    'attendances.total_hours',
+                    'employees.first_name',
+                    'employees.last_name',
+                    'employees.profile_picture'
+                )
+                ->orderBy('attendances.date', 'desc')
+                ->orderBy('attendances.id', 'desc')
+                ->limit(10)
+                ->get();
+            
+            \Log::info('Retrieved ' . $attendances->count() . ' attendance records');
+            
+            $processedEntries = $attendances->map(function($attendance) {
+                try {
+                    // Handle total_hours safely and format as time
+                    $totalHours = null;
+                    $formattedTotalTime = '--';
+                    if ($attendance->total_hours !== null) {
+                        $hours = abs(floatval($attendance->total_hours)); // Ensure positive number
+                        $totalHours = $hours;
+                        
+                        // Format as "Xh Ym" instead of "X.XX hrs"
+                        $wholeHours = floor($hours);
+                        $minutes = round(($hours - $wholeHours) * 60);
+                        
+                        if ($wholeHours > 0 && $minutes > 0) {
+                            $formattedTotalTime = $wholeHours . 'h ' . $minutes . 'm';
+                        } elseif ($wholeHours > 0) {
+                            $formattedTotalTime = $wholeHours . 'h';
+                        } elseif ($minutes > 0) {
+                            $formattedTotalTime = $minutes . 'm';
+                        } else {
+                            $formattedTotalTime = '0m';
+                        }
+                    }
+                    
+                    // Format date
+                    $workDate = '--';
+                    if ($attendance->date) {
+                        try {
+                            $workDate = \Carbon\Carbon::parse($attendance->date)->format('M d, Y');
+                        } catch (\Exception $e) {
+                            \Log::warning('Error formatting date: ' . $e->getMessage());
+                            $workDate = '--';
+                        }
+                    }
+                    
+                    // Format times
+                    $clockIn = '--';
+                    $clockOut = '--';
+                    
+                    if ($attendance->clock_in_time) {
+                        try {
+                            $clockIn = \Carbon\Carbon::parse($attendance->clock_in_time)->format('g:i A');
+                        } catch (\Exception $e) {
+                            $clockIn = '--';
+                        }
+                    }
+                    
+                    if ($attendance->clock_out_time) {
+                        try {
+                            $clockOut = \Carbon\Carbon::parse($attendance->clock_out_time)->format('g:i A');
+                        } catch (\Exception $e) {
+                            $clockOut = '--';
+                        }
+                    }
+                    
+                    // Employee name
+                    $employeeName = trim(($attendance->first_name ?? '') . ' ' . ($attendance->last_name ?? ''));
+                    if (empty($employeeName)) {
+                        $employeeName = 'Unknown Employee';
+                    }
+                    
+                    return [
+                        'id' => $attendance->id,
+                        'employee_name' => $employeeName,
+                        'profile_picture' => $attendance->profile_picture,
+                        'work_date' => $workDate,
+                        'formatted_clock_in' => $clockIn,
+                        'formatted_clock_out' => $clockOut,
+                        'total_hours' => $totalHours,
+                        'formatted_total_time' => $formattedTotalTime,
+                        'status' => ($totalHours !== null && $totalHours >= 8) ? 'success' : 'secondary'
+                    ];
+                } catch (\Exception $e) {
+                    \Log::error('Error processing individual attendance record: ' . $e->getMessage());
+                    return [
+                        'id' => $attendance->id ?? null,
+                        'employee_name' => 'Error Loading',
+                        'profile_picture' => null,
+                        'work_date' => '--',
+                        'formatted_clock_in' => '--',
+                        'formatted_clock_out' => '--',
+                        'total_hours' => null,
+                        'formatted_total_time' => '--',
+                        'status' => 'secondary'
+                    ];
+                }
+            });
+            
+            \Log::info('Successfully processed ' . $processedEntries->count() . ' entries');
+            
+            return response()->json([
+                'success' => true,
+                'entries' => $processedEntries,
+                'count' => $processedEntries->count()
+            ]);
+            
+        } catch (\Exception $e) {
+            \Log::error('Error in getRecentTimeEntriesJson: ' . $e->getMessage());
+            \Log::error('Stack trace: ' . $e->getTraceAsString());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Database error occurred while fetching time entries',
+                'debug_message' => $e->getMessage(),
+                'entries' => []
+            ], 500);
+        }
+    }
+    
     private function getDashboardStats()
     {
         try {
@@ -116,17 +253,18 @@ class HRDashboardController extends Controller
             $shifts = collect();
             
             foreach ($shiftTypes as $shiftType) {
-                // First try today's assignments using Eloquent relationships
-                $todayShifts = Shift::with('employee')
+                // Get all scheduled shifts (not just today's) using Eloquent relationships
+                $allShifts = Shift::with('employee')
                     ->where('shift_type_id', $shiftType->id)
-                    ->whereDate('shift_date', today())
                     ->whereHas('employee', function($query) {
                         $query->where('status', 'active');
                     })
+                    ->orderBy('shift_date', 'desc')
                     ->orderBy('start_time')
+                    ->limit(50) // Increased limit to show more shifts
                     ->get();
 
-                $employees = $todayShifts->map(function($shift) {
+                $employees = $allShifts->map(function($shift) {
                     return (object) [
                         'id' => $shift->employee->id,
                         'first_name' => $shift->employee->first_name,
@@ -139,33 +277,6 @@ class HRDashboardController extends Controller
                         'end_time' => $shift->end_time
                     ];
                 });
-                
-                // If no employees found for today, get the most recent assignments using Eloquent
-                if ($employees->isEmpty()) {
-                    $recentShifts = Shift::with('employee')
-                        ->where('shift_type_id', $shiftType->id)
-                        ->whereHas('employee', function($query) {
-                            $query->where('status', 'active');
-                        })
-                        ->orderBy('shift_date', 'desc')
-                        ->orderBy('start_time')
-                        ->limit(20)
-                        ->get();
-
-                    $employees = $recentShifts->map(function($shift) {
-                        return (object) [
-                            'id' => $shift->employee->id,
-                            'first_name' => $shift->employee->first_name,
-                            'last_name' => $shift->employee->last_name,
-                            'position' => $shift->employee->position,
-                            'profile_picture' => $shift->employee->profile_picture,
-                            'shift_id' => $shift->id,
-                            'shift_date' => $shift->shift_date,
-                            'start_time' => $shift->start_time,
-                            'end_time' => $shift->end_time
-                        ];
-                    });
-                }
 
                 try {
                     $startTime = Carbon::createFromFormat('H:i:s', $shiftType->start_time)->format('g:i A');
@@ -417,191 +528,103 @@ class HRDashboardController extends Controller
     
     private function getRecentTimeEntries()
     {
-        \Log::info('=== Starting getRecentTimeEntries ===');
-        
-        // First, let's check if tables exist
         try {
-            $attendanceTableExists = \Schema::hasTable('attendances');
-            $timeEntriesTableExists = \Schema::hasTable('time_entries');
-            $employeesTableExists = \Schema::hasTable('employees');
+            \Log::info('=== Starting getRecentTimeEntries (Fixed Version) ===');
             
-            \Log::info('Table existence check:', [
-                'attendances' => $attendanceTableExists,
-                'time_entries' => $timeEntriesTableExists,
-                'employees' => $employeesTableExists
-            ]);
+            // Simple direct query to avoid relationship issues
+            $attendances = DB::table('attendances')
+                ->join('employees', 'attendances.employee_id', '=', 'employees.id')
+                ->select(
+                    'attendances.id',
+                    'attendances.date',
+                    'attendances.clock_in_time',
+                    'attendances.clock_out_time',
+                    'attendances.total_hours',
+                    'employees.first_name',
+                    'employees.last_name',
+                    'employees.profile_picture'
+                )
+                ->orderBy('attendances.date', 'desc')
+                ->orderBy('attendances.id', 'desc')
+                ->limit(10)
+                ->get();
             
-            if (!$employeesTableExists) {
-                \Log::error('Employees table does not exist!');
-                return collect([]);
-            }
+            \Log::info('Retrieved ' . $attendances->count() . ' attendance records for original method');
+            
+            return $attendances->map(function($attendance) {
+                // Format times
+                $clockIn = '--';
+                $clockOut = '--';
+                
+                if ($attendance->clock_in_time) {
+                    try {
+                        $clockIn = \Carbon\Carbon::parse($attendance->clock_in_time)->format('g:i A');
+                    } catch (\Exception $e) {
+                        $clockIn = '--';
+                    }
+                }
+                
+                if ($attendance->clock_out_time) {
+                    try {
+                        $clockOut = \Carbon\Carbon::parse($attendance->clock_out_time)->format('g:i A');
+                    } catch (\Exception $e) {
+                        $clockOut = '--';
+                    }
+                }
+                
+                // Employee name
+                $employeeName = trim(($attendance->first_name ?? '') . ' ' . ($attendance->last_name ?? ''));
+                if (empty($employeeName)) {
+                    $employeeName = 'Unknown Employee';
+                }
+                
+                // Format date
+                $workDate = null;
+                if ($attendance->date) {
+                    try {
+                        $workDate = \Carbon\Carbon::parse($attendance->date);
+                    } catch (\Exception $e) {
+                        $workDate = null;
+                    }
+                }
+                
+                // Fix negative hours and format as time
+                $totalHours = null;
+                $formattedTotalTime = '--';
+                if ($attendance->total_hours !== null) {
+                    $hours = abs(floatval($attendance->total_hours)); // Remove negative sign
+                    $totalHours = $hours;
+                    
+                    // Format as "Xh Ym" instead of "X.XX hrs"
+                    $wholeHours = floor($hours);
+                    $minutes = round(($hours - $wholeHours) * 60);
+                    
+                    if ($wholeHours > 0 && $minutes > 0) {
+                        $formattedTotalTime = $wholeHours . 'h ' . $minutes . 'm';
+                    } elseif ($wholeHours > 0) {
+                        $formattedTotalTime = $wholeHours . 'h';
+                    } elseif ($minutes > 0) {
+                        $formattedTotalTime = $minutes . 'm';
+                    } else {
+                        $formattedTotalTime = '0m';
+                    }
+                }
+                
+                return (object) [
+                    'id' => $attendance->id,
+                    'employee_name' => $employeeName,
+                    'profile_picture' => $attendance->profile_picture,
+                    'work_date' => $workDate,
+                    'formatted_clock_in' => $clockIn,
+                    'formatted_clock_out' => $clockOut,
+                    'total_hours' => $totalHours, // Now positive
+                    'formatted_total_time' => $formattedTotalTime,
+                ];
+            });
             
         } catch (\Exception $e) {
-            \Log::error('Error checking table existence: ' . $e->getMessage());
+            \Log::error('Error in getRecentTimeEntries: ' . $e->getMessage());
             return collect([]);
-        }
-        
-        // Try attendances table first
-        if ($attendanceTableExists) {
-            try {
-                \Log::info('Querying attendances table...');
-                
-                // First check total count
-                $totalAttendances = DB::table('attendances')->count();
-                \Log::info('Total attendances in table: ' . $totalAttendances);
-                
-                if ($totalAttendances > 0) {
-                    // Get recent attendances with employee info using Eloquent
-                    $attendances = Attendance::with('employee')
-                        ->orderBy('date', 'desc')
-                        ->orderBy('id', 'desc')
-                        ->limit(3)
-                        ->get()
-                        ->map(function($attendance) {
-                            return (object) [
-                                'id' => $attendance->id,
-                                'employee_id' => $attendance->employee_id,
-                                'attendance_date' => $attendance->date,
-                                'clock_in_time' => $attendance->clock_in_time,
-                                'clock_out_time' => $attendance->clock_out_time,
-                                'stored_total_hours' => $attendance->total_hours,
-                                'status' => $attendance->status,
-                                'first_name' => $attendance->employee->first_name ?? 'Unknown',
-                                'last_name' => $attendance->employee->last_name ?? 'Employee',
-                                'profile_picture' => $attendance->employee->profile_picture ?? null
-                            ];
-                        });
-                    
-                    \Log::info('Found ' . $attendances->count() . ' attendance records with employee data');
-                    
-                    if ($attendances->isNotEmpty()) {
-                        $result = $attendances->map(function ($entry) {
-                            \Log::info('Processing attendance entry:', [
-                                'id' => $entry->id,
-                                'employee' => $entry->first_name . ' ' . $entry->last_name,
-                                'date' => $entry->attendance_date,
-                                'clock_in' => $entry->clock_in_time,
-                                'clock_out' => $entry->clock_out_time,
-                                'stored_total_hours' => $entry->stored_total_hours
-                            ]);
-                            
-                            $calculatedHours = $entry->stored_total_hours ?? $this->calculateTotalHours($entry->clock_in_time, $entry->clock_out_time, $entry->attendance_date);
-                            
-                            \Log::info('Final total_hours for entry ' . $entry->id . ': ' . ($calculatedHours ?? 'NULL'));
-                            
-                            return (object) [
-                                'id' => $entry->id,
-                                'employee_name' => $entry->first_name . ' ' . $entry->last_name,
-                                'profile_picture' => $entry->profile_picture,
-                                'work_date' => $entry->attendance_date ? Carbon::parse($entry->attendance_date) : null,
-                                'formatted_clock_in' => $entry->clock_in_time ? date('g:i A', strtotime($entry->clock_in_time)) : '--',
-                                'formatted_clock_out' => $entry->clock_out_time ? date('g:i A', strtotime($entry->clock_out_time)) : '--',
-                                'total_hours' => $calculatedHours,
-                                'status' => $entry->status ?? 'present'
-                            ];
-                        });
-                        
-                        \Log::info('Returning ' . $result->count() . ' processed attendance records');
-                        return $result;
-                    }
-                }
-            } catch (\Exception $e) {
-                \Log::error('Attendances query failed: ' . $e->getMessage());
-                \Log::error('Stack trace: ' . $e->getTraceAsString());
-            }
-        }
-        
-        // Try time_entries table as fallback
-        if ($timeEntriesTableExists) {
-            try {
-                \Log::info('Trying time_entries table as fallback...');
-                
-                $totalTimeEntries = DB::table('time_entries')->count();
-                \Log::info('Total time entries in table: ' . $totalTimeEntries);
-                
-                if ($totalTimeEntries > 0) {
-                    $timeEntries = DB::table('time_entries')
-                        ->join('employees', 'time_entries.employee_id', '=', 'employees.id')
-                        ->select(
-                            'time_entries.*',
-                            'employees.first_name',
-                            'employees.last_name',
-                            'employees.profile_picture'
-                        )
-                        ->orderBy('time_entries.created_at', 'desc')
-                        ->limit(3)
-                        ->get();
-                    
-                    \Log::info('Found ' . $timeEntries->count() . ' time entry records');
-                    
-                    if ($timeEntries->isNotEmpty()) {
-                        $result = $timeEntries->map(function ($entry) {
-                            return (object) [
-                                'id' => $entry->id,
-                                'employee_name' => $entry->first_name . ' ' . $entry->last_name,
-                                'profile_picture' => $entry->profile_picture,
-                                'work_date' => $entry->work_date ? Carbon::parse($entry->work_date) : null,
-                                'formatted_clock_in' => $entry->clock_in_time ? date('g:i A', strtotime($entry->clock_in_time)) : '--',
-                                'formatted_clock_out' => $entry->clock_out_time ? date('g:i A', strtotime($entry->clock_out_time)) : '--',
-                                'total_hours' => $entry->hours_worked ?? $this->calculateTotalHours($entry->clock_in_time, $entry->clock_out_time, $entry->work_date),
-                                'status' => $entry->status ?? 'pending'
-                            ];
-                        });
-                        
-                        \Log::info('Returning ' . $result->count() . ' processed time entry records');
-                        return $result;
-                    }
-                }
-            } catch (\Exception $e) {
-                \Log::error('Time entries query failed: ' . $e->getMessage());
-            }
-        }
-        
-        \Log::warning('No data found in any table, returning empty collection');
-        return collect([]);
-    }
-    
-    /**
-     * Calculate total hours between clock-in and clock-out times
-     */
-    private function calculateTotalHours($clockInTime, $clockOutTime, $date = null)
-    {
-        // Return null if either time is missing
-        if (!$clockInTime || !$clockOutTime) {
-            return null;
-        }
-        
-        try {
-            // Parse datetime strings directly (since they're stored as DATETIME in DB)
-            $clockIn = Carbon::parse($clockInTime);
-            $clockOut = Carbon::parse($clockOutTime);
-            
-            // Handle overnight shifts (clock-out is next day)
-            if ($clockOut->lt($clockIn)) {
-                $clockOut->addDay();
-            }
-            
-            // Calculate difference in hours
-            $totalHours = $clockOut->diffInMinutes($clockIn) / 60;
-            
-            // Round to 2 decimal places and ensure it's not negative
-            $totalHours = max(0, round($totalHours, 2));
-            
-            \Log::info('Calculated hours:', [
-                'clock_in' => $clockInTime,
-                'clock_out' => $clockOutTime,
-                'total_hours' => $totalHours
-            ]);
-            
-            return $totalHours;
-            
-        } catch (\Exception $e) {
-            \Log::error('Error calculating total hours: ' . $e->getMessage(), [
-                'clock_in' => $clockInTime,
-                'clock_out' => $clockOutTime,
-                'date' => $date
-            ]);
-            return null;
         }
     }
 }

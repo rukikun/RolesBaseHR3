@@ -15,7 +15,7 @@ class HR3SystemSeeder extends Seeder
             [
                 'first_name' => 'John', 'last_name' => 'Doe', 'email' => 'john.doe@jetlouge.com',
                 'phone' => '+63 912 345 6789', 'position' => 'Customer Service Representative',
-                'department' => 'Operations', 'hire_date' => '2024-01-15', 'salary' => 35000.00,
+                'department' => 'Operations', 'hire_date' => '2024-01-15', 'salary' => 45000.00,
                 'status' => 'active', 'online_status' => 'online',
                 'password' => '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
                 'created_at' => now(), 'updated_at' => now()
@@ -23,7 +23,7 @@ class HR3SystemSeeder extends Seeder
             [
                 'first_name' => 'Jane', 'last_name' => 'Smith', 'email' => 'jane.smith@jetlouge.com',
                 'phone' => '+63 917 234 5678', 'position' => 'Travel Consultant',
-                'department' => 'Sales', 'hire_date' => '2024-02-01', 'salary' => 40000.00,
+                'department' => 'Sales', 'hire_date' => '2024-02-01', 'salary' => 55000.00,
                 'status' => 'active', 'online_status' => 'online',
                 'password' => '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
                 'created_at' => now(), 'updated_at' => now()
@@ -31,7 +31,7 @@ class HR3SystemSeeder extends Seeder
             [
                 'first_name' => 'Mike', 'last_name' => 'Johnson', 'email' => 'mike.johnson@jetlouge.com',
                 'phone' => '+63 918 345 6789', 'position' => 'Operations Manager',
-                'department' => 'Operations', 'hire_date' => '2023-11-10', 'salary' => 55000.00,
+                'department' => 'Operations', 'hire_date' => '2023-11-10', 'salary' => 75000.00,
                 'status' => 'active', 'online_status' => 'offline',
                 'password' => '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
                 'created_at' => now(), 'updated_at' => now()
@@ -39,7 +39,7 @@ class HR3SystemSeeder extends Seeder
             [
                 'first_name' => 'Sarah', 'last_name' => 'Wilson', 'email' => 'sarah.wilson@jetlouge.com',
                 'phone' => '+63 919 456 7890', 'position' => 'Marketing Specialist',
-                'department' => 'Marketing', 'hire_date' => '2024-03-05', 'salary' => 42000.00,
+                'department' => 'Marketing', 'hire_date' => '2024-03-05', 'salary' => 58000.00,
                 'status' => 'active', 'online_status' => 'online',
                 'password' => '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
                 'created_at' => now(), 'updated_at' => now()
@@ -47,7 +47,7 @@ class HR3SystemSeeder extends Seeder
             [
                 'first_name' => 'David', 'last_name' => 'Brown', 'email' => 'david.brown@jetlouge.com',
                 'phone' => '+63 920 567 8901', 'position' => 'IT Support',
-                'department' => 'IT', 'hire_date' => '2024-01-20', 'salary' => 45000.00,
+                'department' => 'IT', 'hire_date' => '2024-01-20', 'salary' => 62000.00,
                 'status' => 'active', 'online_status' => 'offline',
                 'password' => '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
                 'created_at' => now(), 'updated_at' => now()
@@ -74,10 +74,10 @@ class HR3SystemSeeder extends Seeder
 
         // Insert claim types
         DB::table('claim_types')->insert([
-            ['name' => 'Travel Expenses', 'description' => 'Business travel related expenses', 'max_amount' => 5000.00, 'requires_receipt' => true, 'approval_required' => true, 'created_at' => now(), 'updated_at' => now()],
-            ['name' => 'Meal Allowance', 'description' => 'Meal expenses during business hours', 'max_amount' => 500.00, 'requires_receipt' => true, 'approval_required' => false, 'created_at' => now(), 'updated_at' => now()],
-            ['name' => 'Office Supplies', 'description' => 'Office equipment and supplies', 'max_amount' => 1000.00, 'requires_receipt' => true, 'approval_required' => true, 'created_at' => now(), 'updated_at' => now()],
-            ['name' => 'Training Fees', 'description' => 'Professional development and training', 'max_amount' => 10000.00, 'requires_receipt' => true, 'approval_required' => true, 'created_at' => now(), 'updated_at' => now()],
+            ['name' => 'Travel Expenses', 'description' => 'Business travel related expenses', 'max_amount' => 15000.00, 'requires_receipt' => true, 'approval_required' => true, 'created_at' => now(), 'updated_at' => now()],
+            ['name' => 'Meal Allowance', 'description' => 'Meal expenses during business hours', 'max_amount' => 2000.00, 'requires_receipt' => true, 'approval_required' => false, 'created_at' => now(), 'updated_at' => now()],
+            ['name' => 'Office Supplies', 'description' => 'Office equipment and supplies', 'max_amount' => 5000.00, 'requires_receipt' => true, 'approval_required' => true, 'created_at' => now(), 'updated_at' => now()],
+            ['name' => 'Training Fees', 'description' => 'Professional development and training', 'max_amount' => 25000.00, 'requires_receipt' => true, 'approval_required' => true, 'created_at' => now(), 'updated_at' => now()],
             ['name' => 'Communication', 'description' => 'Phone and internet expenses', 'max_amount' => 2000.00, 'requires_receipt' => true, 'approval_required' => false, 'created_at' => now(), 'updated_at' => now()]
         ]);
 

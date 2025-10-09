@@ -1402,7 +1402,7 @@ setTimeout(function() {
 <div class="card mb-4" id="shift-requests-section">
   <div class="card-header d-flex justify-content-between align-items-center">
     <h5 class="card-title mb-0">
-      <i class="fas fa-exchange-alt me-2"></i>Shift Swap Requests 
+      <i class="fas fa-exchange-alt me-2"></i>Shift Requests 
     </h5>
     <button class="btn btn-primary" onclick="openWorkingModal('new-shift-request-modal')">
       <i class="fas fa-plus me-2"></i>New Request

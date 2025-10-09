@@ -30,13 +30,23 @@ class Employee extends Authenticatable implements AuthenticatableContract
     }
 
     protected $fillable = [
+        'employee_number',
         'first_name',
         'last_name',
         'email',
+        'username',
         'phone',
         'position',
         'department',
+        'work_location',
+        'manager_id',
         'hire_date',
+        'date_of_birth',
+        'gender',
+        'address',
+        'emergency_contact_name',
+        'emergency_contact_phone',
+        'emergency_contact_relationship',
         'salary',
         'status',
         'role',
@@ -44,13 +54,7 @@ class Employee extends Authenticatable implements AuthenticatableContract
         'last_activity',
         'password',
         'profile_picture',
-        'address',
-        'date_of_birth',
-        'gender',
-        'emergency_contact_name',
-        'emergency_contact_phone',
-        'bank_account_number',
-        'tax_id'
+        'remember_token'
     ];
 
     protected $hidden = [
@@ -99,10 +103,6 @@ class Employee extends Authenticatable implements AuthenticatableContract
         return $this->hasMany(EmployeeTimesheetDetail::class);
     }
 
-    public function user()
-    {
-        return $this->hasOne(User::class);
-    }
 
     // ESS-related relationships
     public function trainings()
@@ -220,14 +220,19 @@ class Employee extends Authenticatable implements AuthenticatableContract
         return $this->role === 'admin';
     }
 
-    public function isHR()
+    public function isSuperAdmin()
     {
-        return $this->role === 'hr';
+        return $this->role === 'super_admin';
     }
 
-    public function isManager()
+    public function isHRManager()
     {
-        return $this->role === 'manager';
+        return $this->role === 'hr_manager';
+    }
+
+    public function isHRScheduler()
+    {
+        return $this->role === 'hr_scheduler';
     }
 
     public function isEmployee()
@@ -243,6 +248,39 @@ class Employee extends Authenticatable implements AuthenticatableContract
     public function hasAnyRole($roles)
     {
         return in_array($this->role, $roles);
+    }
+
+    public function canAccessDashboard()
+    {
+        return in_array($this->role, ['employee', 'admin', 'super_admin', 'hr_manager', 'hr_scheduler']);
+    }
+
+    // Accessor for full name
+    public function getNameAttribute()
+    {
+        return $this->first_name . ' ' . $this->last_name;
+    }
+
+    // Activity relationship
+    public function activities()
+    {
+        return $this->hasMany(EmployeeActivity::class);
+    }
+
+    public function recentActivities($limit = 10)
+    {
+        return $this->activities()->orderBy('performed_at', 'desc')->limit($limit);
+    }
+
+    // Manager relationship
+    public function manager()
+    {
+        return $this->belongsTo(Employee::class, 'manager_id');
+    }
+
+    public function subordinates()
+    {
+        return $this->hasMany(Employee::class, 'manager_id');
     }
 
     /**

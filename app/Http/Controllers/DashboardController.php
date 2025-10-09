@@ -18,8 +18,8 @@ class DashboardController extends Controller
 {
     public function index()
     {
-        $user = Auth::user();
-        $employee = $user->employee ?? Employee::find(1); // Fallback for testing
+        // Get the authenticated employee directly
+        $employee = Auth::guard('employee')->user() ?? Employee::find(1); // Fallback for testing
         
         // Dashboard statistics
         $stats = [
@@ -131,10 +131,8 @@ class DashboardController extends Controller
     }
 
     public function clockIn(Request $request)
-{{ ... }}
     {
-        $user = Auth::user();
-        $employee = $user->employee ?? Employee::find(1);
+        $employee = Auth::guard('employee')->user() ?? Employee::find(1);
         
         $todayEntry = $employee->getTodayTimeEntry();
         
@@ -165,8 +163,7 @@ class DashboardController extends Controller
 
     public function clockOut(Request $request)
     {
-        $user = Auth::user();
-        $employee = $user->employee ?? Employee::find(1);
+        $employee = Auth::guard('employee')->user() ?? Employee::find(1);
         
         $todayEntry = $employee->getTodayTimeEntry();
         
@@ -300,8 +297,7 @@ class DashboardController extends Controller
 
     public function getLeaveData()
     {
-        $user = Auth::user();
-        $employee = $user->employee ?? Employee::find(1);
+        $employee = Auth::guard('employee')->user() ?? Employee::find(1);
 
         // Leave balances
         $leaveBalances = LeaveBalance::with('leaveType')
@@ -359,8 +355,7 @@ class DashboardController extends Controller
 
     public function getClaimsData()
     {
-        $user = Auth::user();
-        $employee = $user->employee ?? Employee::find(1);
+        $employee = Auth::guard('employee')->user() ?? Employee::find(1);
 
         // Pending claims
         $pendingClaims = Claim::with('claimType')
@@ -594,8 +589,7 @@ class DashboardController extends Controller
             'reason' => 'required|string|max:500'
         ]);
 
-        $user = Auth::user();
-        $employee = $user->employee ?? Employee::find(1);
+        $employee = Auth::guard('employee')->user() ?? Employee::find(1);
 
         try {
             // Check if entry exists for this date
@@ -639,8 +633,7 @@ class DashboardController extends Controller
             'reason' => 'required|string|max:500'
         ]);
 
-        $user = Auth::user();
-        $employee = $user->employee ?? Employee::find(1);
+        $employee = Auth::guard('employee')->user() ?? Employee::find(1);
 
         try {
             // Check if entry exists for this date

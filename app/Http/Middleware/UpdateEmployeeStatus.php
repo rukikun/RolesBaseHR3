@@ -16,13 +16,14 @@ class UpdateEmployeeStatus
      */
     public function handle(Request $request, Closure $next): Response
     {
-        // Update employee activity if authenticated
-        if (Auth::check() && Auth::user()->employee) {
-            Auth::user()->employee->updateActivity();
+        // Update employee activity if authenticated with employee guard
+        if (Auth::guard('employee')->check()) {
+            $employee = Auth::guard('employee')->user();
+            $employee->updateActivity();
             
             // Set online status if not already online
-            if (!Auth::user()->employee->isOnline()) {
-                Auth::user()->employee->setOnline();
+            if (!$employee->isOnline()) {
+                $employee->setOnline();
             }
         }
 

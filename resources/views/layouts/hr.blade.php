@@ -61,8 +61,8 @@
                 <i class="fas fa-key me-3" style="color:#f0b429;font-size:1.25rem;"></i> <span class="fw-medium">Change Password</span>
               </a>
               @if(Auth::user()->isSuperAdmin())
-                <a href="{{ route('admin.profile.manage-admins') }}" class="list-group-item list-group-item-action border-0 py-2 d-flex align-items-center">
-                  <i class="fas fa-users-cog me-3" style="color:#1f7aec;font-size:1.25rem;"></i> <span class="fw-medium">Manage Admins</span>
+                <a href="{{ route('settings') }}" class="list-group-item list-group-item-action border-0 py-2 d-flex align-items-center">
+                  <i class="fas fa-cog me-3" style="color:#1f7aec;font-size:1.25rem;"></i> <span class="fw-medium">Settings</span>
                 </a>
               @endif
               <form method="POST" action="{{ route('logout') }}" class="d-inline">
@@ -81,11 +81,11 @@
           .fw-medium { font-weight: 500; }
           
           /* Employee dropdown slide-down animation */
-          .employee-dropdown {
+          .employee-dropdown, .claims-dropdown {
             position: relative;
           }
           
-          .employee-submenu {
+          .employee-submenu, .claims-submenu {
             max-height: 0;
             overflow: hidden;
             transition: max-height 0.3s ease-in-out, padding 0.3s ease-in-out;
@@ -95,7 +95,7 @@
             border-radius: 0 8px 8px 0;
           }
           
-          .employee-submenu.show {
+          .employee-submenu.show, .claims-submenu.show {
             max-height: 200px;
             padding: 0.5rem 0;
           }
@@ -117,6 +117,13 @@
             text-decoration: none;
           }
           
+          .submenu-item.active {
+            background-color: #007bff;
+            color: white;
+            border-left-color: #0056b3;
+            font-weight: 500;
+          }
+          
           .submenu-item i {
             width: 16px;
             text-align: center;
@@ -124,11 +131,13 @@
           }
           
           /* Dropdown toggle arrow animation */
-          .employee-dropdown .dropdown-toggle::after {
+          .employee-dropdown .dropdown-toggle::after,
+          .claims-dropdown .dropdown-toggle::after {
             transition: transform 0.3s ease;
           }
           
-          .employee-dropdown.open .dropdown-toggle::after {
+          .employee-dropdown.open .dropdown-toggle::after,
+          .claims-dropdown.open .dropdown-toggle::after {
             transform: rotate(180deg);
           }
         </style>
@@ -168,12 +177,25 @@
       </li>
       <li class="nav-item">
         <a href="{{ route('leave-management') }}" class="nav-link text-dark {{ request()->routeIs('leave-management') ? 'active' : '' }}">
-          <i class="fas fa-umbrella-beach me-2"></i> Leave Management
+          <i class="fas fa-umbrella-beach me-2"></i> Leave
         </a>
       </li>
-      <li class="nav-item">
-        <a href="{{ route('claims-reimbursement') }}" class="nav-link text-dark {{ request()->routeIs('claims-reimbursement') ? 'active' : '' }}">
+      <li class="nav-item claims-dropdown">
+        <a href="#" class="nav-link text-dark dropdown-toggle {{ request()->routeIs('claims-reimbursement') || request()->routeIs('validate-attachment') ? 'active' : '' }}" onclick="toggleClaimsDropdown(event)" aria-expanded="false">
           <i class="fas fa-file-invoice-dollar me-2"></i> Claims & Reimbursement
+        </a>
+        <div class="claims-submenu" id="claims-submenu">
+          <a class="submenu-item {{ request()->routeIs('claims-reimbursement') ? 'active' : '' }}" href="{{ route('claims-reimbursement') }}">
+            <i class="fas fa-receipt me-2"></i>Claim Request
+          </a>
+          <a class="submenu-item {{ request()->routeIs('validate-attachment') ? 'active' : '' }}" href="{{ route('validate-attachment') }}">
+            <i class="fas fa-check-circle me-2"></i>Validate Attachment
+          </a>
+        </div>
+      </li>
+      <li class="nav-item">
+        <a href="{{ route('payroll-management') }}" class="nav-link text-dark {{ request()->routeIs('payroll-management') ? 'active' : '' }}">
+          <i class="fas fa-money-bill-wave me-2"></i> Payroll
         </a>
       </li>
       <li class="nav-item employee-dropdown">
@@ -276,6 +298,39 @@
       const dropdown = document.querySelector('.employee-dropdown');
       const submenu = document.getElementById('employee-submenu');
       
+      // Close claims dropdown if open
+      const claimsDropdown = document.querySelector('.claims-dropdown');
+      const claimsSubmenu = document.getElementById('claims-submenu');
+      if (claimsSubmenu && claimsSubmenu.classList.contains('show')) {
+        claimsSubmenu.classList.remove('show');
+        claimsDropdown.classList.remove('open');
+      }
+      
+      if (submenu.classList.contains('show')) {
+        submenu.classList.remove('show');
+        dropdown.classList.remove('open');
+      } else {
+        submenu.classList.add('show');
+        dropdown.classList.add('open');
+      }
+    }
+    
+    // Claims dropdown toggle function
+    function toggleClaimsDropdown(event) {
+      event.preventDefault();
+      event.stopPropagation();
+      
+      const dropdown = document.querySelector('.claims-dropdown');
+      const submenu = document.getElementById('claims-submenu');
+      
+      // Close employee dropdown if open
+      const employeeDropdown = document.querySelector('.employee-dropdown');
+      const employeeSubmenu = document.getElementById('employee-submenu');
+      if (employeeSubmenu && employeeSubmenu.classList.contains('show')) {
+        employeeSubmenu.classList.remove('show');
+        employeeDropdown.classList.remove('open');
+      }
+      
       if (submenu.classList.contains('show')) {
         submenu.classList.remove('show');
         dropdown.classList.remove('open');
@@ -287,12 +342,21 @@
     
     // Close dropdown when clicking outside
     document.addEventListener('click', function(event) {
-      const dropdown = document.querySelector('.employee-dropdown');
-      const submenu = document.getElementById('employee-submenu');
+      const employeeDropdown = document.querySelector('.employee-dropdown');
+      const employeeSubmenu = document.getElementById('employee-submenu');
+      const claimsDropdown = document.querySelector('.claims-dropdown');
+      const claimsSubmenu = document.getElementById('claims-submenu');
       
-      if (!dropdown.contains(event.target)) {
-        submenu.classList.remove('show');
-        dropdown.classList.remove('open');
+      // Close employee dropdown if clicking outside
+      if (employeeDropdown && !employeeDropdown.contains(event.target)) {
+        employeeSubmenu.classList.remove('show');
+        employeeDropdown.classList.remove('open');
+      }
+      
+      // Close claims dropdown if clicking outside
+      if (claimsDropdown && !claimsDropdown.contains(event.target)) {
+        claimsSubmenu.classList.remove('show');
+        claimsDropdown.classList.remove('open');
       }
     });
   </script>

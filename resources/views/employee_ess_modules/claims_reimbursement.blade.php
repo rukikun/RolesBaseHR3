@@ -82,7 +82,7 @@
       <div class="stats-icon info">
         <i class="bi bi-currency-dollar"></i>
       </div>
-      <div class="stats-value">$1,250</div>
+      <div class="stats-value">₱18,500</div>
       <p class="stats-label">Total Amount</p>
       <p class="stats-sublabel">This Month</p>
     </div>
@@ -200,7 +200,7 @@
             @foreach($directClaims as $claim)
             <tr>
               <td>{{ $claim->claim_type_name ?? 'Unknown Type' }}</td>
-              <td>${{ number_format($claim->amount ?? 0, 2) }}</td>
+              <td>₱{{ number_format($claim->amount ?? 0, 2) }}</td>
               <td>{{ isset($claim->description) ? Str::limit($claim->description, 50) : 'N/A' }}</td>
               <td>{{ isset($claim->created_at) ? date('M d, Y', strtotime($claim->created_at)) : 'N/A' }}</td>
               <td>
@@ -293,7 +293,7 @@
                         </select>
                     </div>
                     <div class="mb-3">
-                        <label for="claim-amount" class="form-label">Amount ($)</label>
+                        <label for="claim-amount" class="form-label">Amount (₱)</label>
                         <input type="number" class="form-control" id="claim-amount" name="amount" step="0.01" min="0" required>
                     </div>
                     <div class="mb-3">
@@ -496,7 +496,7 @@ function loadClaimDetails(claimId) {
       document.getElementById('claim-details-content').innerHTML = `
         <div class="row">
           <div class="col-md-6"><strong>Type:</strong> ${data.claim_type_name || 'N/A'}</div>
-          <div class="col-md-6"><strong>Amount:</strong> $${data.amount || '0.00'}</div>
+          <div class="col-md-6"><strong>Amount:</strong> ₱${data.amount || '0.00'}</div>
         </div>
         <div class="row mt-2">
           <div class="col-md-6"><strong>Status:</strong> <span class="badge bg-${data.status === 'approved' ? 'success' : data.status === 'pending' ? 'warning' : 'danger'}">${data.status || 'pending'}</span></div>

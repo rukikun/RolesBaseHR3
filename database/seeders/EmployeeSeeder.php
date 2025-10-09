@@ -14,21 +14,21 @@ class EmployeeSeeder extends Seeder
     public function run(): void
     {
         // Clear existing data
-        DB::table('employee_notifications')->delete();
         DB::table('employees')->delete();
         
-        // Insert sample employees
+        // Insert sample employees with different roles
         $employees = [
             [
-                'first_name' => 'John',
-                'last_name' => 'Doe',
-                'email' => 'john.doe@jetlouge.com',
+                'first_name' => 'Super',
+                'last_name' => 'Admin',
+                'email' => 'admin@jetlouge.com',
                 'phone' => '+63 912 345 6789',
-                'position' => 'Software Developer',
+                'position' => 'System Administrator',
                 'department' => 'IT',
                 'hire_date' => '2023-01-15',
-                'salary' => 50000.00,
+                'salary' => 120000.00,
                 'status' => 'active',
+                'role' => 'super_admin',
                 'online_status' => 'offline',
                 'password' => Hash::make('password123'),
                 'created_at' => now(),
@@ -42,8 +42,9 @@ class EmployeeSeeder extends Seeder
                 'position' => 'HR Manager',
                 'department' => 'Human Resources',
                 'hire_date' => '2022-06-10',
-                'salary' => 60000.00,
+                'salary' => 85000.00,
                 'status' => 'active',
+                'role' => 'hr_manager',
                 'online_status' => 'online',
                 'password' => Hash::make('password123'),
                 'created_at' => now(),
@@ -54,11 +55,12 @@ class EmployeeSeeder extends Seeder
                 'last_name' => 'Johnson',
                 'email' => 'mike.johnson@jetlouge.com',
                 'phone' => '+63 918 345 6789',
-                'position' => 'Accountant',
-                'department' => 'Finance',
+                'position' => 'Admin',
+                'department' => 'Administration',
                 'hire_date' => '2023-03-20',
-                'salary' => 45000.00,
+                'salary' => 75000.00,
                 'status' => 'active',
+                'role' => 'admin',
                 'online_status' => 'offline',
                 'password' => Hash::make('password123'),
                 'created_at' => now(),
@@ -69,26 +71,28 @@ class EmployeeSeeder extends Seeder
                 'last_name' => 'Wilson',
                 'email' => 'sarah.wilson@jetlouge.com',
                 'phone' => '+63 919 456 7890',
-                'position' => 'Marketing Specialist',
-                'department' => 'Marketing',
+                'position' => 'HR Scheduler',
+                'department' => 'Human Resources',
                 'hire_date' => '2023-08-05',
-                'salary' => 42000.00,
+                'salary' => 65000.00,
                 'status' => 'active',
+                'role' => 'hr_scheduler',
                 'online_status' => 'online',
                 'password' => Hash::make('password123'),
                 'created_at' => now(),
                 'updated_at' => now()
             ],
             [
-                'first_name' => 'David',
-                'last_name' => 'Brown',
-                'email' => 'david.brown@jetlouge.com',
+                'first_name' => 'John',
+                'last_name' => 'Doe',
+                'email' => 'john.doe@jetlouge.com',
                 'phone' => '+63 920 567 8901',
-                'position' => 'Sales Representative',
-                'department' => 'Sales',
+                'position' => 'Software Developer',
+                'department' => 'IT',
                 'hire_date' => '2022-11-12',
-                'salary' => 40000.00,
-                'status' => 'inactive',
+                'salary' => 70000.00,
+                'status' => 'active',
+                'role' => 'employee',
                 'online_status' => 'offline',
                 'password' => Hash::make('password123'),
                 'created_at' => now(),
@@ -97,31 +101,7 @@ class EmployeeSeeder extends Seeder
         ];
 
         foreach ($employees as $employee) {
-            $employeeId = DB::table('employees')->insertGetId($employee);
-            
-            // Add sample notifications for each employee
-            DB::table('employee_notifications')->insert([
-                [
-                    'employee_id' => $employeeId,
-                    'type' => 'info',
-                    'title' => 'Welcome to HR System',
-                    'message' => 'Welcome to the Jetlouge HR Management System. Please update your profile information.',
-                    'sent_at' => now(),
-                    'priority' => 'medium',
-                    'created_at' => now(),
-                    'updated_at' => now()
-                ],
-                [
-                    'employee_id' => $employeeId,
-                    'type' => 'reminder',
-                    'title' => 'Timesheet Reminder',
-                    'message' => 'Please submit your timesheet for this week.',
-                    'sent_at' => now()->subDays(1),
-                    'priority' => 'high',
-                    'created_at' => now(),
-                    'updated_at' => now()
-                ]
-            ]);
+            DB::table('employees')->insert($employee);
         }
     }
 }

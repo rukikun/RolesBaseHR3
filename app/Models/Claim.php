@@ -23,6 +23,7 @@ class Claim extends Model
         'description',
         'business_purpose',
         'receipt_path',
+        'attachment_path',
         'receipt_metadata',
         'status',
         'approved_by',
@@ -32,7 +33,10 @@ class Claim extends Model
         'reference_number',
         'payment_date',
         'payment_method',
-        'notes'
+        'notes',
+        'attachment_validated',
+        'validated_at',
+        'validated_by'
     ];
     
     public function __construct(array $attributes = [])
@@ -48,7 +52,9 @@ class Claim extends Model
     protected $casts = [
         'amount' => 'decimal:2',
         'approved_at' => 'datetime',
-        'paid_at' => 'datetime'
+        'paid_at' => 'datetime',
+        'validated_at' => 'datetime',
+        'attachment_validated' => 'boolean'
     ];
 
     // Relationships
@@ -67,6 +73,11 @@ class Claim extends Model
         return $this->belongsTo(Employee::class, 'approved_by');
     }
 
+    public function validator()
+    {
+        return $this->belongsTo(Employee::class, 'validated_by');
+    }
+
     // Scopes
     public function scopePending($query)
     {
@@ -81,5 +92,25 @@ class Claim extends Model
     public function scopePaid($query)
     {
         return $query->where('status', 'paid');
+    }
+
+    public function scopeWithAttachment($query)
+    {
+        return $query->where(function($q) {
+            $q->whereNotNull('receipt_path')
+              ->orWhereNotNull('attachment_path');
+        });
+    }
+
+    public function scopeValidated($query)
+    {
+        return $query->where('attachment_validated', true);
+    }
+
+    public function scopePendingValidation($query)
+    {
+        return $query->where('status', 'approved')
+                    ->where('attachment_validated', false)
+                    ->withAttachment();
     }
 }
