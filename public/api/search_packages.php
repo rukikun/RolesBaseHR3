@@ -127,7 +127,7 @@ function getSamplePackages() {
             'title' => 'Bali Cultural Heritage Tour',
             'description' => 'Immerse yourself in the rich cultural heritage of Bali with visits to ancient temples, traditional villages, and local artisan workshops. Experience authentic Balinese cuisine and witness traditional dance performances.',
             'destination' => 'Bali, Indonesia',
-            'price' => 1299,
+            'price' => 72744,
             'duration' => '7',
             'group_size' => '12'
         ],
@@ -136,7 +136,7 @@ function getSamplePackages() {
             'title' => 'Maldives Beach Paradise',
             'description' => 'Escape to pristine white sand beaches and crystal-clear turquoise waters. Enjoy luxury overwater bungalows, world-class diving, and unforgettable sunset views in this tropical paradise.',
             'destination' => 'Maldives',
-            'price' => 2499,
+            'price' => 139944,
             'duration' => '5',
             'group_size' => '8'
         ],
@@ -145,7 +145,7 @@ function getSamplePackages() {
             'title' => 'Nepal Mountain Trekking Adventure',
             'description' => 'Challenge yourself with an epic mountain trekking adventure in the Himalayas. Experience breathtaking mountain vistas, local Sherpa culture, and the thrill of high-altitude hiking.',
             'destination' => 'Nepal Himalayas',
-            'price' => 1899,
+            'price' => 106344,
             'duration' => '14',
             'group_size' => '10'
         ],
@@ -154,7 +154,7 @@ function getSamplePackages() {
             'title' => 'Costa Rica Adventure Sports',
             'description' => 'Get your adrenaline pumping with zip-lining through rainforest canopies, white-water rafting, volcano hiking, and wildlife spotting in one of the world\'s most biodiverse countries.',
             'destination' => 'Costa Rica',
-            'price' => 1699,
+            'price' => 95144,
             'duration' => '10',
             'group_size' => '15'
         ],
@@ -163,7 +163,7 @@ function getSamplePackages() {
             'title' => 'Japan Cultural Discovery',
             'description' => 'Discover the perfect blend of ancient traditions and modern innovation. Visit historic temples, experience traditional tea ceremonies, explore bustling Tokyo, and witness the beauty of cherry blossoms.',
             'destination' => 'Tokyo & Kyoto, Japan',
-            'price' => 2199,
+            'price' => 123144,
             'duration' => '12',
             'group_size' => '16'
         ],
@@ -172,7 +172,7 @@ function getSamplePackages() {
             'title' => 'Iceland Northern Lights',
             'description' => 'Witness the magical Northern Lights dancing across the Arctic sky. Explore ice caves, geothermal hot springs, dramatic waterfalls, and the unique landscapes of the Land of Fire and Ice.',
             'destination' => 'Reykjavik, Iceland',
-            'price' => 1799,
+            'price' => 100744,
             'duration' => '8',
             'group_size' => '12'
         ],
@@ -181,7 +181,7 @@ function getSamplePackages() {
             'title' => 'Thailand Island Hopping',
             'description' => 'Explore the stunning islands of Thailand with crystal-clear waters, white sandy beaches, vibrant coral reefs, and delicious street food. Perfect for beach lovers and adventure seekers.',
             'destination' => 'Phuket & Phi Phi Islands, Thailand',
-            'price' => 1399,
+            'price' => 78344,
             'duration' => '9',
             'group_size' => '14'
         ],
@@ -190,7 +190,7 @@ function getSamplePackages() {
             'title' => 'Peru Machu Picchu Trek',
             'description' => 'Embark on the classic Inca Trail to reach the ancient citadel of Machu Picchu. Experience breathtaking Andean landscapes, rich history, and the achievement of a lifetime.',
             'destination' => 'Cusco & Machu Picchu, Peru',
-            'price' => 1999,
+            'price' => 111944,
             'duration' => '11',
             'group_size' => '12'
         ]

@@ -8,7 +8,8 @@
     <meta name="keywords" content="travel, tours, packages, adventure, beach, mountain, cultural, Jetlouge">
     
     <!-- Favicon -->
-    <link rel="icon" type="image/x-icon" href="{{ asset('assets/images/favicon.ico') }}">
+    <link rel="icon" type="image/png" href="{{ asset('assets/images/jetlouge_logo.png') }}">
+    <link rel="shortcut icon" type="image/png" href="{{ asset('assets/images/jetlouge_logo.png') }}">
     
     <!-- Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -37,7 +38,7 @@
                 <li><a href="#features" class="nav-link">Features</a></li>
                 <li><a href="#testimonials" class="nav-link">Reviews</a></li>
                 <li><a href="#contact" class="nav-link">Contact</a></li>
-                <li><a href="{{ route('portal.selection') }}" class="nav-link btn-portal">Portal Access</a></li>
+                <li><a href="{{ route('portal.selection') }}" class="nav-link btn-portal">Login</a></li>
             </ul>
             
             <div class="nav-toggle">
@@ -157,7 +158,7 @@
                                 
                                 <div class="package-footer">
                                     <div class="package-info">
-                                        <div class="package-price">${{ number_format($package['price']) }}</div>
+                                        <div class="package-price">₱{{ number_format($package['price']) }}</div>
                                         @if(!empty($package['duration']))
                                             <div class="package-duration">{{ $package['duration'] }} days</div>
                                         @endif

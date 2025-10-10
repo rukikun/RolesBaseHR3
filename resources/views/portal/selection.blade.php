@@ -5,6 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Portal Selection - Jetlouge Travels</title>
     
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="{{ asset('assets/images/jetlouge_logo.png') }}">
+    <link rel="shortcut icon" type="image/png" href="{{ asset('assets/images/jetlouge_logo.png') }}">
+    
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Bootstrap Icons -->
@@ -243,7 +247,7 @@
                             <div class="portal-icon employee">
                                 <i class="bi bi-person-badge"></i>
                             </div>
-                            <h3>Employee Portal</h3>
+                            <h3>Self Service Portal</h3>
                             <p>Access your personal dashboard, manage leave applications, view payslips, and handle employee-related tasks.</p>
                             
                             <ul class="portal-features">
@@ -255,9 +259,9 @@
                             </ul>
                         </div>
                         
-                        <a href="/employee/login" class="portal-btn">
+                        <a href="https://hr2.jetlougetravels-ph.com/employee/login" class="portal-btn">
                             <i class="bi bi-person-circle"></i>
-                            Employee Login
+                            Self Service Login
                         </a>
                     </div>
                 </div>
@@ -269,7 +273,7 @@
                             <div class="portal-icon admin">
                                 <i class="bi bi-shield-check"></i>
                             </div>
-                            <h3>Admin Portal</h3>
+                            <h3>Employee Portal</h3>
                             <p>Manage the entire system, handle bookings, oversee employees, and access administrative functions.</p>
                             
                             <ul class="portal-features">
@@ -283,7 +287,7 @@
                         
                         <a href="{{ route('admin.login') }}" class="portal-btn admin">
                             <i class="bi bi-gear-fill"></i>
-                            Admin Login
+                            Employee Login
                         </a>
                     </div>
                 </div>
