@@ -44,6 +44,38 @@ use App\Http\Controllers\TimesheetManagementController;
 Route::get('/register', [RegisterController::class, 'showRegistrationForm'])->name('register');
 Route::post('/register', [RegisterController::class, 'register'])->name('register.store');
 
+// Email configuration test route
+Route::get('/test-email-config', function() {
+    ob_start();
+    include base_path('test_email_config.php');
+    $output = ob_get_clean();
+    return '<pre>' . htmlspecialchars($output) . '</pre>';
+});
+
+// 2FA Debug route
+Route::get('/test-2fa-debug', function() {
+    ob_start();
+    include base_path('debug_2fa_login.php');
+    $output = ob_get_clean();
+    return '<pre>' . htmlspecialchars($output) . '</pre>';
+});
+
+// Employee credentials check
+Route::get('/check-employee-credentials', function() {
+    ob_start();
+    include base_path('check_employee_credentials.php');
+    $output = ob_get_clean();
+    return '<pre>' . htmlspecialchars($output) . '</pre>';
+});
+
+// Comprehensive 2FA test
+Route::get('/test-comprehensive-2fa', function() {
+    ob_start();
+    include base_path('comprehensive_2fa_test.php');
+    $output = ob_get_clean();
+    return '<pre>' . htmlspecialchars($output) . '</pre>';
+});
+
 // Authentication routes for admin portal (uses 'users' table)
 Route::get('/admin/login', [AuthController::class, 'showLoginForm'])->name('admin.login');
 Route::post('/admin/login', [AuthController::class, 'login'])->name('admin.login.submit');

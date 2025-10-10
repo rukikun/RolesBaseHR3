@@ -213,7 +213,7 @@ function createPackageCard(package) {
             
             <div class="package-footer">
                 <div class="package-info">
-                    <div class="package-price">$${parseFloat(package.price).toLocaleString()}</div>
+                    <div class="package-price">₱${parseFloat(package.price).toLocaleString()}</div>
                     ${package.duration ? `<div class="package-duration">${package.duration} days</div>` : ''}
                 </div>
                 <button class="book-btn" onclick="openBookingModal(${package.id})">
