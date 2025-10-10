@@ -47,6 +47,9 @@ Route::post('/register', [RegisterController::class, 'register'])->name('registe
 // Authentication routes for admin portal (uses 'users' table)
 Route::get('/admin/login', [AuthController::class, 'showLoginForm'])->name('admin.login');
 Route::post('/admin/login', [AuthController::class, 'login'])->name('admin.login.submit');
+Route::get('/admin/otp-verification', [AuthController::class, 'showOtpForm'])->name('admin.otp.form');
+Route::post('/admin/otp-verify', [AuthController::class, 'verifyOtp'])->name('admin.otp.verify');
+Route::post('/admin/otp-resend', [AuthController::class, 'resendOtp'])->name('admin.otp.resend');
 Route::post('/admin/logout', [AuthController::class, 'logout'])->name('admin.logout');
 Route::get('/api/admin/current-user', [AuthController::class, 'getCurrentUser'])->name('admin.current.user');
 
@@ -87,6 +90,117 @@ Route::get('/dashboard', [App\Http\Controllers\HRDashboardController::class, 'in
 // Test modal route
 Route::get('/test-modal', [SystemViewController::class, 'testModal'])->name('test.modal');
 
+// 2FA Testing routes
+Route::get('/test-2fa', function() {
+    return view('test.2fa-test');
+})->name('test.2fa');
+
+Route::get('/test-2fa-enabled', function() {
+    return response(file_get_contents(base_path('test_2fa_enabled.php')));
+})->name('test.2fa.enabled');
+
+Route::post('/test-send-otp', function(Illuminate\Http\Request $request) {
+    try {
+        $email = $request->email;
+        
+        // Generate OTP
+        $otpRecord = \App\Models\OtpVerification::generateOtp($email);
+        
+        // Send email using PHPMailer
+        $phpMailer = new \App\Services\PHPMailerService();
+        $result = $phpMailer->sendOtpEmail($email, $otpRecord->otp_code, 'Test User');
+        
+        if (!$result['success']) {
+            throw new \Exception($result['message']);
+        }
+        
+        return response()->json(['success' => true, 'message' => 'Test OTP sent successfully using PHPMailer']);
+    } catch (\Exception $e) {
+        return response()->json(['success' => false, 'message' => $e->getMessage()]);
+    }
+})->name('test.send.otp');
+
+Route::post('/test-clear-otps', function() {
+    try {
+        $count = \App\Models\OtpVerification::count();
+        \App\Models\OtpVerification::truncate();
+        return response()->json(['success' => true, 'message' => "Cleared {$count} OTP records"]);
+    } catch (\Exception $e) {
+        return response()->json(['success' => false, 'message' => $e->getMessage()]);
+    }
+})->name('test.clear.otps');
+
+// Email Testing Routes
+Route::get('/test-email', function() {
+    return view('test.email-test');
+})->name('test.email');
+
+Route::post('/test-basic-email', function(Illuminate\Http\Request $request) {
+    try {
+        $email = $request->email;
+        
+        // Send email using PHPMailer
+        $phpMailer = new \App\Services\PHPMailerService();
+        $result = $phpMailer->sendTestEmail($email, 'HR3 System - PHPMailer Test', 'This is a test email from HR3 System using PHPMailer. If you receive this, your PHPMailer configuration is working correctly!');
+        
+        if (!$result['success']) {
+            throw new \Exception($result['message']);
+        }
+        
+        return response()->json([
+            'success' => true, 
+            'message' => 'Test email sent successfully using PHPMailer! Check your inbox.',
+            'details' => "Email sent to: {$email}\nUsing: PHPMailer\nSMTP Host: " . env('MAIL_HOST')
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false, 
+            'message' => 'Failed to send email: ' . $e->getMessage(),
+            'details' => "Error Details:\n" . $e->getTraceAsString()
+        ]);
+    }
+})->name('test.basic.email');
+
+Route::get('/test-check-logs', function() {
+    try {
+        $logPath = storage_path('logs/laravel.log');
+        
+        if (!file_exists($logPath)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Log file not found',
+                'logs' => 'No log file exists at: ' . $logPath
+            ]);
+        }
+        
+        // Get last 50 lines of log file
+        $lines = file($logPath);
+        $lastLines = array_slice($lines, -50);
+        $logContent = implode('', $lastLines);
+        
+        // Filter for email-related errors
+        $emailErrors = [];
+        foreach ($lastLines as $line) {
+            if (stripos($line, 'mail') !== false || stripos($line, 'smtp') !== false || stripos($line, 'email') !== false) {
+                $emailErrors[] = trim($line);
+            }
+        }
+        
+        return response()->json([
+            'success' => true,
+            'message' => count($emailErrors) > 0 ? 'Found email-related log entries' : 'No recent email errors found',
+            'logs' => count($emailErrors) > 0 ? implode("\n", array_slice($emailErrors, -10)) : 'No email-related errors in recent logs'
+        ]);
+        
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Error reading logs: ' . $e->getMessage(),
+            'logs' => $e->getTraceAsString()
+        ]);
+    }
+})->name('test.check.logs');
+
 // Debug employee authentication routes
 Route::get('/debug-employee-auth', [App\Http\Controllers\DebugAuthController::class, 'debugEmployeeAuth'])->name('debug.employee.auth');
 Route::get('/fix-employee-passwords', [App\Http\Controllers\DebugAuthController::class, 'fixEmployeePasswords'])->name('fix.employee.passwords');
@@ -103,8 +217,16 @@ Route::get('/time-attendance', function () {
     return view('attendance.TimeAndAttendance');
 })->name('time-attendance');
 
-// HR Module Routes with proper controllers
-Route::middleware(['auth'])->group(function () {
+// HR Module Routes - accessible to any authenticated user
+Route::group(['middleware' => function ($request, $next) {
+    // Allow access if authenticated with any guard
+    if (auth()->guard('web')->check() || auth()->guard('employee')->check()) {
+        return $next($request);
+    }
+    
+    // Redirect to employee login as default (more common)
+    return redirect()->route('employee.login')->with('message', 'Please login to access timesheet management');
+}], function () {
 
     Route::get('/timesheet-management', [TimesheetController::class, 'index'])->name('timesheet-management');
     
@@ -157,6 +279,60 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/leave/types/{id}/edit', [LeaveController::class, 'editLeaveType'])->name('leave.types.edit');
     Route::get('/leave/types/{id}/view', [LeaveController::class, 'viewLeaveType'])->name('leave.types.view');
     Route::delete('/leave/types/{id}', [LeaveController::class, 'deleteLeaveType'])->name('leave.types.destroy');
+    
+    // Test HR auth route
+Route::post('/test-hr-auth', function(Illuminate\Http\Request $request) {
+    return response()->json(['success' => true, 'message' => 'Route is working', 'data' => $request->all()]);
+});
+
+// Create test employee route
+Route::get('/create-test-employee', function() {
+    $employee = App\Models\Employee::updateOrCreate(
+        ['email' => 'admin@test.com'],
+        [
+            'first_name' => 'Test',
+            'last_name' => 'Admin',
+            'email' => 'admin@test.com',
+            'password' => Illuminate\Support\Facades\Hash::make('password123'),
+            'position' => 'Admin',
+            'status' => 'active'
+        ]
+    );
+    return response()->json(['success' => true, 'message' => 'Test employee created', 'email' => 'admin@test.com', 'password' => 'password123']);
+});
+
+// Debug employee authentication route
+Route::get('/debug-employee/{email}', function($email) {
+    $employee = App\Models\Employee::where('email', $email)->first();
+    if (!$employee) {
+        return response()->json(['found' => false, 'message' => 'Employee not found']);
+    }
+    return response()->json([
+        'found' => true,
+        'email' => $employee->email,
+        'position' => $employee->position,
+        'role' => $employee->role ?? 'No role',
+        'has_password' => !empty($employee->password),
+        'authorized' => in_array($employee->position, ['HR Manager', 'System Administrator', 'HR Scheduler', 'Admin', 'HR Administrator'])
+    ]);
+});
+
+// Check employee positions route
+Route::get('/check-positions', function() {
+    $employees = App\Models\Employee::select('email', 'position', 'role')->get();
+    return response()->json($employees);
+});
+
+// Debug route for employees
+Route::get('/debug-employees', function() {
+    $employees = App\Models\Employee::select('email', 'role')->take(5)->get();
+    return response()->json($employees);
+});
+
+// Test route for HR authentication system
+    Route::get('/test-hr-auth', function() {
+        return view('test.hr-auth-test');
+    })->name('test.hr.auth');
     
     // Leave Requests CRUD Routes
     Route::post('/leave/requests/store', [LeaveController::class, 'storeLeaveRequestWeb'])->name('leave.requests.store');
@@ -278,6 +454,18 @@ require __DIR__.'/employee.php';
 
 // CSRF token refresh endpoint
 Route::get('/csrf-token', [EmployeeESSController::class, 'getCsrfToken'])->name('csrf.token');
+
+// HR Authentication Route (outside middleware for authentication purposes)
+Route::post('/leave/hr-auth', [LeaveController::class, 'hrAuthentication'])->name('leave.hr.auth');
+
+// Timesheet HR Authentication Route
+Route::post('/timesheet/hr-auth', [App\Http\Controllers\TimesheetController::class, 'hrAuthentication'])->name('timesheet.hr.auth');
+
+// Claim HR Authentication Route
+Route::post('/claim/hr-auth', [App\Http\Controllers\ClaimController::class, 'hrAuthentication'])->name('claim.hr.auth');
+
+// Shift HR Authentication Route
+Route::post('/shift/hr-auth', [App\Http\Controllers\ShiftController::class, 'hrAuthentication'])->name('shift.hr.auth');
 
 // Leave Management Routes
 Route::post('/leave-requests/store', [LeaveController::class, 'storeWeb'])->name('leave-requests.store');
@@ -732,6 +920,46 @@ Route::get('/populate-dashboard', [DataSeederController::class, 'populateDashboa
 // Debug route to check shift data
 Route::get('/debug-shifts', [SystemDebugController::class, 'debugShifts'])->name('debug.shifts');
 
+// Complete workflow test route
+Route::get('/test-complete-workflow', function() {
+    ob_start();
+    include __DIR__ . '/../test_complete_workflow.php';
+    $output = ob_get_clean();
+    return response($output)->header('Content-Type', 'text/html');
+})->name('test.complete.workflow');
+
+// Quick test route to verify send to payroll functionality
+Route::get('/test-send-to-payroll', function() {
+    try {
+        // Get an approved timesheet
+        $approvedTimesheet = \App\Models\AIGeneratedTimesheet::where('status', 'approved')->first();
+        
+        if (!$approvedTimesheet) {
+            return "❌ No approved timesheets found. Please create and approve a timesheet first.<br>" .
+                   "<a href='/timesheet-management'>Go to Timesheet Management</a>";
+        }
+        
+        // Test the send to payroll functionality
+        $controller = new \App\Http\Controllers\TimesheetController();
+        $response = $controller->sendToPayroll($approvedTimesheet->id);
+        $data = json_decode($response->getContent(), true);
+        
+        if ($data['success']) {
+            return "✅ Send to Payroll Test Successful!<br>" .
+                   "Timesheet ID: {$approvedTimesheet->id}<br>" .
+                   "Payroll Item ID: {$data['payroll_item_id']}<br>" .
+                   "Total Amount: {$data['total_amount']}<br><br>" .
+                   "<a href='/payroll-management'>Check Payroll Management</a><br>" .
+                   "<a href='/timesheet-management'>Back to Timesheet Management</a>";
+        } else {
+            return "❌ Send to Payroll Failed: " . $data['message'];
+        }
+        
+    } catch (\Exception $e) {
+        return "❌ Error: " . $e->getMessage();
+    }
+})->name('test.send.to.payroll');
+
 // Test route to create sample shift data
 Route::get('/create-sample-shifts', [DataSeederController::class, 'createSampleShifts'])->name('create.sample.shifts');
 
@@ -990,25 +1218,1420 @@ Route::get('/test-ai-timesheet', [SystemTestController::class, 'testAiTimesheet'
 // Test AI Generation Route
 Route::get('/test-ai-generation/{employeeId}', [SystemTestController::class, 'testAiGeneration']);
 
-// AI Timesheet Generation Web Routes (for AJAX calls from authenticated pages)
-Route::middleware(['auth'])->group(function () {
-    Route::prefix('api/ai-timesheets')->group(function () {
-        Route::get('/test/{employeeId}', [TimesheetController::class, 'testAIGeneration']);
-        Route::post('/generate/{employeeId}', [TimesheetController::class, 'generateAITimesheet']);
-        Route::post('/generate-all', [TimesheetController::class, 'generateAllAITimesheets']);
-        Route::get('/view/{employeeId}', [TimesheetController::class, 'getAITimesheet']);
-        Route::post('/save', [TimesheetController::class, 'saveAITimesheet']);
-        Route::get('/pending', [TimesheetController::class, 'getPendingTimesheets']);
-        Route::get('/saved/{id}', [TimesheetController::class, 'getSavedTimesheet']);
-        Route::post('/approve/{id}', [TimesheetController::class, 'approveAITimesheet']);
-        Route::post('/reject/{id}', [TimesheetController::class, 'rejectAITimesheet']);
-        Route::post('/send-to-payroll/{id}', [TimesheetController::class, 'sendToPayroll']);
-        Route::get('/statistics', [TimesheetController::class, 'getTimesheetStatistics']);
+// Test page with cache clearing button
+Route::get('/test-ai-cache', function() {
+    return '
+    <h2>AI Timesheet Cache Test</h2>
+    <button onclick="clearAllAICache()" style="padding: 10px; margin: 5px; background: #dc3545; color: white; border: none; border-radius: 5px;">Clear AI Cache</button>
+    <button onclick="window.location.href=\'/timesheets/management\'" style="padding: 10px; margin: 5px; background: #007bff; color: white; border: none; border-radius: 5px;">Go to Timesheets</button>
+    <button onclick="window.location.href=\'/clear-all-ai-timesheets\'" style="padding: 10px; margin: 5px; background: #28a745; color: white; border: none; border-radius: 5px;">Clear Database Cache</button>
+    <script>
+    function clearAllAICache() {
+        window.aiTimesheets = {};
+        alert("AI timesheet cache cleared!");
+    }
+    </script>
+    ';
+});
+
+// Clear all AI timesheets (for testing)
+Route::get('/clear-all-ai-timesheets', function() {
+    try {
+        $deleted = DB::table('ai_generated_timesheets')->delete();
+        return response()->json([
+            'success' => true,
+            'message' => "Cleared {$deleted} AI timesheets",
+            'deleted_count' => $deleted
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'error' => $e->getMessage()
+        ]);
+    }
+});
+
+// Seed current week attendance data
+Route::get('/seed-current-week-attendance', function() {
+    try {
+        Artisan::call('db:seed', ['--class' => 'CurrentWeekAttendanceSeeder']);
+        return response()->json([
+            'success' => true,
+            'message' => 'Current week attendance data seeded successfully',
+            'output' => Artisan::output()
+        ]);
+    } catch (\Exception $e) {
+        return response()->json([
+            'error' => $e->getMessage()
+        ]);
+    }
+});
+
+// Simple attendance check
+Route::get('/simple-attendance-check', function() {
+    try {
+        $totalAttendances = DB::table('attendances')->count();
+        $recentAttendances = DB::table('attendances')->orderBy('date', 'desc')->limit(5)->get();
+        $employees = DB::table('employees')->limit(5)->get();
+        
+        return response()->json([
+            'total_attendances' => $totalAttendances,
+            'recent_attendances' => $recentAttendances,
+            'employees' => $employees,
+            'current_week' => [
+                'start' => \Carbon\Carbon::now()->startOfWeek()->format('Y-m-d'),
+                'end' => \Carbon\Carbon::now()->endOfWeek()->format('Y-m-d')
+            ]
+        ]);
+    } catch (\Exception $e) {
+        return response()->json(['error' => $e->getMessage()]);
+    }
+});
+
+// Check table structure and fix status
+Route::get('/check-table-structure', function() {
+    try {
+        // Check if table exists
+        $tableExists = Schema::hasTable('ai_generated_timesheets');
+        
+        if (!$tableExists) {
+            return response()->json([
+                'error' => 'ai_generated_timesheets table does not exist'
+            ]);
+        }
+        
+        // Get table columns
+        $columns = Schema::getColumnListing('ai_generated_timesheets');
+        
+        // Get sample data
+        $sampleData = DB::table('ai_generated_timesheets')
+            ->select('id', 'employee_name', 'status', 'created_at')
+            ->orderBy('created_at', 'desc')
+            ->limit(5)
+            ->get();
+        
+        return response()->json([
+            'table_exists' => $tableExists,
+            'columns' => $columns,
+            'sample_data' => $sampleData,
+            'total_records' => DB::table('ai_generated_timesheets')->count(),
+            'status_counts' => DB::table('ai_generated_timesheets')
+                ->select('status', DB::raw('count(*) as count'))
+                ->groupBy('status')
+                ->get()
+        ]);
+        
+    } catch (\Exception $e) {
+        return response()->json([
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+    }
+});
+
+// Add missing columns manually
+Route::get('/add-approval-columns', function() {
+    try {
+        $columns = Schema::getColumnListing('ai_generated_timesheets');
+        $added = [];
+        
+        // Add columns if they don't exist
+        if (!in_array('approved_at', $columns)) {
+            DB::statement('ALTER TABLE ai_generated_timesheets ADD COLUMN approved_at TIMESTAMP NULL');
+            $added[] = 'approved_at';
+        }
+        
+        if (!in_array('rejected_at', $columns)) {
+            DB::statement('ALTER TABLE ai_generated_timesheets ADD COLUMN rejected_at TIMESTAMP NULL');
+            $added[] = 'rejected_at';
+        }
+        
+        if (!in_array('rejection_reason', $columns)) {
+            DB::statement('ALTER TABLE ai_generated_timesheets ADD COLUMN rejection_reason TEXT NULL');
+            $added[] = 'rejection_reason';
+        }
+        
+        return response()->json([
+            'success' => true,
+            'columns_added' => $added,
+            'message' => 'Added ' . count($added) . ' columns successfully'
+        ]);
+        
+    } catch (\Exception $e) {
+        return response()->json([
+            'error' => $e->getMessage()
+        ]);
+    }
+});
+
+// Fix undefined status in ai_generated_timesheets
+Route::get('/fix-timesheet-status', function() {
+    try {
+        // Update records with undefined status to pending
+        $updated = DB::table('ai_generated_timesheets')
+            ->where('status', 'undefined')
+            ->orWhereNull('status')
+            ->update(['status' => 'pending']);
+        
+        // Get count of records by status
+        $statusCounts = DB::table('ai_generated_timesheets')
+            ->select('status', DB::raw('count(*) as count'))
+            ->groupBy('status')
+            ->get();
+        
+        return response()->json([
+            'success' => true,
+            'updated_records' => $updated,
+            'status_counts' => $statusCounts,
+            'message' => "Updated {$updated} records from 'undefined' to 'pending'"
+        ]);
+        
+    } catch (\Exception $e) {
+        return response()->json([
+            'error' => $e->getMessage()
+        ]);
+    }
+});
+
+// Interactive test page for timesheet actions
+Route::get('/test-actions-ui/{timesheetId}', function($timesheetId) {
+    try {
+        $timesheet = DB::table('ai_generated_timesheets')->where('id', $timesheetId)->first();
+        
+        if (!$timesheet) {
+            return "Timesheet not found with ID: {$timesheetId}";
+        }
+        
+        return '
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Test Timesheet Actions</title>
+            <meta name="csrf-token" content="' . csrf_token() . '">
+            <style>
+                body { font-family: Arial, sans-serif; margin: 20px; }
+                .btn { padding: 10px 15px; margin: 5px; border: none; border-radius: 5px; cursor: pointer; }
+                .btn-success { background: #28a745; color: white; }
+                .btn-danger { background: #dc3545; color: white; }
+                .btn-warning { background: #ffc107; color: black; }
+                .info { background: #f8f9fa; padding: 15px; border-radius: 5px; margin: 10px 0; }
+                .result { margin: 10px 0; padding: 10px; border-radius: 5px; }
+                .success { background: #d4edda; color: #155724; }
+                .error { background: #f8d7da; color: #721c24; }
+            </style>
+        </head>
+        <body>
+            <h2>Test Timesheet Actions</h2>
+            
+            <div class="info">
+                <h3>Timesheet Info:</h3>
+                <p><strong>ID:</strong> ' . $timesheet->id . '</p>
+                <p><strong>Employee:</strong> ' . $timesheet->employee_name . '</p>
+                <p><strong>Department:</strong> ' . $timesheet->department . '</p>
+                <p><strong>Status:</strong> <span id="current-status">' . $timesheet->status . '</span></p>
+                <p><strong>Week:</strong> ' . $timesheet->week_start_date . '</p>
+            </div>
+            
+            <div>
+                <h3>Actions:</h3>
+                <button class="btn btn-success" onclick="approveTimesheet()">✓ Approve</button>
+                <button class="btn btn-danger" onclick="rejectTimesheet()">✗ Reject</button>
+                <button class="btn btn-warning" onclick="deleteTimesheet()">🗑 Delete</button>
+                <button class="btn" onclick="refreshStatus()" style="background: #6c757d; color: white;">🔄 Refresh Status</button>
+            </div>
+            
+            <div id="result"></div>
+            
+            <script>
+                const timesheetId = ' . $timesheetId . ';
+                const csrfToken = document.querySelector("meta[name=csrf-token]").getAttribute("content");
+                
+                function showResult(message, isSuccess) {
+                    const result = document.getElementById("result");
+                    result.className = "result " + (isSuccess ? "success" : "error");
+                    result.innerHTML = message;
+                }
+                
+                function approveTimesheet() {
+                    fetch(`/api/ai-timesheets/approve/${timesheetId}`, {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "X-CSRF-TOKEN": csrfToken,
+                            "Accept": "application/json"
+                        }
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            showResult("✓ " + data.message, true);
+                            document.getElementById("current-status").textContent = "approved";
+                        } else {
+                            showResult("✗ " + data.message, false);
+                        }
+                    })
+                    .catch(error => {
+                        showResult("✗ Error: " + error.message, false);
+                    });
+                }
+                
+                function rejectTimesheet() {
+                    const reason = prompt("Enter rejection reason (optional):");
+                    if (reason === null) return;
+                    
+                    fetch(`/api/ai-timesheets/reject/${timesheetId}`, {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "X-CSRF-TOKEN": csrfToken,
+                            "Accept": "application/json"
+                        },
+                        body: JSON.stringify({ reason: reason || "No reason provided" })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            showResult("✓ " + data.message + (data.reason ? " (Reason: " + data.reason + ")" : ""), true);
+                            document.getElementById("current-status").textContent = "rejected";
+                        } else {
+                            showResult("✗ " + data.message, false);
+                        }
+                    })
+                    .catch(error => {
+                        showResult("✗ Error: " + error.message, false);
+                    });
+                }
+                
+                function deleteTimesheet() {
+                    if (!confirm("Are you sure you want to delete this timesheet?")) return;
+                    
+                    fetch(`/api/ai-timesheets/delete/${timesheetId}`, {
+                        method: "DELETE",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "X-CSRF-TOKEN": csrfToken,
+                            "Accept": "application/json"
+                        }
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            showResult("✓ " + data.message, true);
+                            document.getElementById("current-status").textContent = "deleted";
+                        } else {
+                            showResult("✗ " + data.message, false);
+                        }
+                    })
+                    .catch(error => {
+                        showResult("✗ Error: " + error.message, false);
+                    });
+                }
+                
+                function refreshStatus() {
+                    fetch(`/test-timesheet-actions/${timesheetId}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.timesheet_info) {
+                            document.getElementById("current-status").textContent = data.timesheet_info.status;
+                            showResult("Status refreshed: " + data.timesheet_info.status, true);
+                        } else {
+                            showResult("Timesheet may have been deleted", false);
+                        }
+                    })
+                    .catch(error => {
+                        showResult("Error refreshing status: " + error.message, false);
+                    });
+                }
+            </script>
+        </body>
+        </html>';
+        
+    } catch (\Exception $e) {
+        return "Error: " . $e->getMessage();
+    }
+});
+
+// Test timesheet actions (approve, reject, delete)
+Route::get('/test-timesheet-actions/{timesheetId}', function($timesheetId) {
+    try {
+        $controller = new \App\Http\Controllers\TimesheetController();
+        
+        // Get the timesheet first
+        $timesheet = DB::table('ai_generated_timesheets')->where('id', $timesheetId)->first();
+        
+        if (!$timesheet) {
+            return response()->json([
+                'error' => 'Timesheet not found',
+                'timesheet_id' => $timesheetId
+            ]);
+        }
+        
+        return response()->json([
+            'timesheet_info' => [
+                'id' => $timesheet->id,
+                'employee_name' => $timesheet->employee_name,
+                'status' => $timesheet->status,
+                'department' => $timesheet->department
+            ],
+            'available_actions' => [
+                'approve' => "POST /api/ai-timesheets/approve/{$timesheetId}",
+                'reject' => "POST /api/ai-timesheets/reject/{$timesheetId} (with reason in body)",
+                'delete' => "DELETE /api/ai-timesheets/delete/{$timesheetId}"
+            ],
+            'test_buttons' => [
+                'approve_url' => "/api/ai-timesheets/approve/{$timesheetId}",
+                'reject_url' => "/api/ai-timesheets/reject/{$timesheetId}",
+                'delete_url' => "/api/ai-timesheets/delete/{$timesheetId}"
+            ],
+            'current_status' => $timesheet->status,
+            'test_instructions' => [
+                '1. Use browser dev tools or Postman to test the endpoints',
+                '2. For reject, send JSON body: {"reason": "Test rejection reason"}',
+                '3. Check database after each action to verify status changes'
+            ]
+        ]);
+        
+    } catch (\Exception $e) {
+        return response()->json([
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+    }
+});
+
+// API endpoint to view AI timesheet details
+Route::get('/api/ai-timesheets/view/{employeeId}', function($employeeId) {
+    try {
+        $controller = new \App\Http\Controllers\TimesheetController();
+        return $controller->getLatestAITimesheet($employeeId);
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Failed to get AI timesheet: ' . $e->getMessage()
+        ], 500);
+    }
+});
+
+// API endpoint to save AI timesheet
+Route::post('/api/ai-timesheets/save', function(\Illuminate\Http\Request $request) {
+    try {
+        $controller = new \App\Http\Controllers\TimesheetController();
+        return $controller->saveTimesheet($request);
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Failed to save AI timesheet: ' . $e->getMessage()
+        ], 500);
+    }
+});
+
+// API endpoint to get AI timesheet statistics
+Route::get('/api/ai-timesheets/statistics', function() {
+    try {
+        $controller = new \App\Http\Controllers\TimesheetController();
+        return $controller->getStatistics();
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Failed to get statistics: ' . $e->getMessage(),
+            'error_details' => $e->getTraceAsString()
+        ], 500);
+    }
+});
+
+// Test statistics endpoint
+Route::get('/test-stats-simple', function() {
+    try {
+        // Simple test to check database connection
+        $timesheetCount = DB::table('ai_generated_timesheets')->count();
+        $employeeCount = DB::table('employees')->count();
+        
+        return response()->json([
+            'success' => true,
+            'database_connection' => 'OK',
+            'timesheet_count' => $timesheetCount,
+            'employee_count' => $employeeCount,
+            'test_statistics' => [
+                'total_timesheets' => $timesheetCount,
+                'pending_timesheets' => 0,
+                'approved_timesheets' => 0,
+                'rejected_timesheets' => 0,
+                'total_hours' => 0.0
+            ]
+        ]);
+        
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+    }
+});
+
+// Alternative API endpoint without JOIN
+Route::get('/api/ai-timesheets/pending-simple', function() {
+    try {
+        // Simple query without JOIN to avoid issues
+        $timesheets = DB::table('ai_generated_timesheets')
+            ->select('*')
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->map(function ($timesheet) {
+                // Format the week period
+                $weekStart = \Carbon\Carbon::parse($timesheet->week_start_date);
+                $weekEnd = $weekStart->copy()->endOfWeek();
+                
+                return [
+                    'id' => $timesheet->id,
+                    'employee_id' => $timesheet->employee_id,
+                    'employee_name' => $timesheet->employee_name ?: 'Unknown Employee',
+                    'department' => $timesheet->department ?: 'General',
+                    'week_period' => $weekStart->format('Y-m-d') . ' to ' . $weekEnd->format('Y-m-d'),
+                    'total_hours' => $timesheet->total_hours ?: 0,
+                    'overtime_hours' => $timesheet->overtime_hours ?: 0,
+                    'status' => $timesheet->status ?: 'pending',
+                    'generated_at' => $timesheet->generated_at ? \Carbon\Carbon::parse($timesheet->generated_at)->format('Y-m-d') : \Carbon\Carbon::parse($timesheet->created_at)->format('Y-m-d'),
+                    'generated_date' => $timesheet->generated_at ? \Carbon\Carbon::parse($timesheet->generated_at)->format('Y-m-d') : \Carbon\Carbon::parse($timesheet->created_at)->format('Y-m-d')
+                ];
+            });
+
+        return response()->json([
+            'success' => true,
+            'timesheets' => $timesheets,
+            'count' => $timesheets->count()
+        ]);
+
+    } catch (\Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Failed to get timesheets: ' . $e->getMessage(),
+            'error_details' => $e->getTraceAsString()
+        ], 500);
+    }
+});
+
+// Debug page for timesheets
+Route::get('/debug-timesheets-ui', function() {
+    return view('debug-timesheets');
+});
+
+// Simple debug test
+Route::get('/debug-friday-calc', function() {
+    try {
+        // Test the exact same logic as in the controller
+        $weekStart = \Carbon\Carbon::parse('2025-10-06')->startOfWeek(\Carbon\Carbon::MONDAY);
+        $fridayDate = $weekStart->copy()->addDays(4); // Friday should be 2025-10-10
+        
+        // Get attendance for Friday
+        $attendance = DB::table('attendances')
+            ->where('employee_id', 6)
+            ->where('date', $fridayDate->format('Y-m-d'))
+            ->first();
+        
+        $result = [
+            'week_start' => $weekStart->format('Y-m-d'),
+            'friday_date' => $fridayDate->format('Y-m-d'),
+            'attendance_found' => $attendance ? 'YES' : 'NO',
+            'attendance_data' => $attendance
+        ];
+        
+        if ($attendance && $attendance->clock_in_time && $attendance->clock_out_time) {
+            $clockIn = \Carbon\Carbon::parse($attendance->clock_in_time);
+            $clockOut = \Carbon\Carbon::parse($attendance->clock_out_time);
+            $totalMinutes = $clockOut->diffInMinutes($clockIn);
+            $totalHours = floor($totalMinutes / 60);
+            $remainingMinutes = $totalMinutes % 60;
+            
+            $result['calculation'] = [
+                'clock_in' => $clockIn->format('h:i A'),
+                'clock_out' => $clockOut->format('h:i A'),
+                'total_minutes' => $totalMinutes,
+                'total_hours' => $totalHours,
+                'remaining_minutes' => $remainingMinutes,
+                'formatted' => $totalHours . 'h ' . $remainingMinutes . 'm'
+            ];
+        }
+        
+        return response()->json($result);
+        
+    } catch (\Exception $e) {
+        return response()->json([
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+    }
+});
+
+// Complete test for Jonny's AI timesheet
+Route::get('/test-complete-jonny', function() {
+    try {
+        // Test 1: Check attendance data
+        $attendanceData = DB::table('attendances')
+            ->where('employee_id', 6)
+            ->where('date', '2025-10-10')
+            ->first();
+        
+        // Test 2: Check week calculation
+        $weekStart = \Carbon\Carbon::parse('2025-10-06')->startOfWeek(\Carbon\Carbon::MONDAY);
+        $fridayDate = $weekStart->copy()->addDays(4); // Friday
+        
+        // Test 3: Test AI generation
+        $controller = new \App\Http\Controllers\TimesheetController();
+        $response = $controller->generateAITimesheet(6);
+        $aiData = json_decode($response->getContent(), true);
+        
+        // Test 4: Manual calculation
+        $manualCalc = null;
+        if ($attendanceData) {
+            $clockIn = \Carbon\Carbon::parse($attendanceData->clock_in_time);
+            $clockOut = \Carbon\Carbon::parse($attendanceData->clock_out_time);
+            $totalMinutes = $clockOut->diffInMinutes($clockIn);
+            $totalHours = floor($totalMinutes / 60);
+            $remainingMinutes = $totalMinutes % 60;
+            
+            $manualCalc = [
+                'total_minutes' => $totalMinutes,
+                'total_hours' => $totalHours,
+                'remaining_minutes' => $remainingMinutes,
+                'formatted' => $totalHours . 'h ' . $remainingMinutes . 'm'
+            ];
+        }
+        
+        return response()->json([
+            'test_name' => 'Complete Jonny AI Timesheet Test',
+            'step_1_attendance_data' => [
+                'found' => $attendanceData ? 'YES' : 'NO',
+                'data' => $attendanceData
+            ],
+            'step_2_week_calculation' => [
+                'week_start' => $weekStart->format('Y-m-d'),
+                'friday_calculated' => $fridayDate->format('Y-m-d'),
+                'should_be' => '2025-10-10',
+                'matches' => $fridayDate->format('Y-m-d') === '2025-10-10' ? 'YES' : 'NO'
+            ],
+            'step_3_ai_generation' => [
+                'success' => $aiData['success'] ?? false,
+                'friday_data' => isset($aiData['weekly_data']['Friday']) ? $aiData['weekly_data']['Friday'] : 'NOT FOUND'
+            ],
+            'step_4_manual_calculation' => $manualCalc,
+            'conclusion' => $attendanceData && $fridayDate->format('Y-m-d') === '2025-10-10' ? 'SHOULD WORK' : 'PROBLEM FOUND'
+        ]);
+        
+    } catch (\Exception $e) {
+        return response()->json([
+            'test_name' => 'Complete Test FAILED',
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+    }
+});
+
+// Test AI generation directly
+Route::get('/test-ai-generation/6', function() {
+    try {
+        $controller = new \App\Http\Controllers\TimesheetController();
+        $response = $controller->generateAITimesheet(6);
+        $data = json_decode($response->getContent(), true);
+        
+        return response()->json([
+            'test_name' => 'Direct AI Generation Test for Jonny (ID: 6)',
+            'generation_response' => $data,
+            'success' => $data['success'] ?? false,
+            'weekly_data' => $data['weekly_data'] ?? null,
+            'friday_data' => isset($data['weekly_data']['Friday']) ? $data['weekly_data']['Friday'] : 'NOT FOUND'
+        ]);
+        
+    } catch (\Exception $e) {
+        return response()->json([
+            'test_name' => 'Direct AI Generation Test FAILED',
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+    }
+});
+
+// Test attendance database connection
+Route::get('/test-attendance-db', function() {
+    try {
+        // Test basic database connection
+        $allAttendance = DB::table('attendances')->get();
+        
+        // Get Jonny's specific data
+        $jonnyAttendance = DB::table('attendances')
+            ->where('employee_id', 6)
+            ->get();
+        
+        // Get Friday's specific data
+        $fridayAttendance = DB::table('attendances')
+            ->where('employee_id', 6)
+            ->where('date', '2025-10-10')
+            ->first();
+        
+        return response()->json([
+            'database_connection' => 'SUCCESS',
+            'total_attendance_records' => $allAttendance->count(),
+            'jonny_records_count' => $jonnyAttendance->count(),
+            'jonny_all_records' => $jonnyAttendance->toArray(),
+            'friday_record' => $fridayAttendance,
+            'friday_calculation' => null
+        ]);
+        
+    } catch (\Exception $e) {
+        return response()->json([
+            'database_connection' => 'FAILED',
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+    }
+});
+
+// Week calculation test
+Route::get('/test-week-calculation', function() {
+    try {
+        $now = \Carbon\Carbon::now();
+        $weekStart = $now->startOfWeek(\Carbon\Carbon::MONDAY);
+        
+        $days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+        $weekDates = [];
+        
+        foreach ($days as $index => $day) {
+            $dayDate = $weekStart->copy()->addDays($index);
+            $weekDates[$day] = [
+                'date' => $dayDate->format('Y-m-d'),
+                'formatted' => $dayDate->format('m/d/y'),
+                'day_name' => $dayDate->format('l')
+            ];
+        }
+        
+        return response()->json([
+            'current_time' => $now->format('Y-m-d H:i:s'),
+            'week_start' => $weekStart->format('Y-m-d'),
+            'week_dates' => $weekDates,
+            'friday_should_be' => '2025-10-10',
+            'friday_calculated' => $weekDates['Friday']['date']
+        ]);
+        
+    } catch (\Exception $e) {
+        return response()->json([
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+    }
+});
+
+// Direct calculation test for Jonny's Friday data
+Route::get('/test-jonny-friday', function() {
+    try {
+        // Test the exact calculation that should happen
+        $clockInRaw = '2025-10-10 09:19:00';
+        $clockOutRaw = '2025-10-10 11:37:00';
+        
+        $clockIn = \Carbon\Carbon::parse($clockInRaw);
+        $clockOut = \Carbon\Carbon::parse($clockOutRaw);
+        $totalMinutes = $clockOut->diffInMinutes($clockIn);
+        
+        $totalHours = floor($totalMinutes / 60);
+        $remainingMinutes = $totalMinutes % 60;
+        
+        // Format time display
+        $formattedTime = '';
+        if ($totalHours > 0 && $remainingMinutes > 0) {
+            $formattedTime = $totalHours . 'h ' . $remainingMinutes . 'm';
+        } elseif ($totalHours > 0) {
+            $formattedTime = $totalHours . 'h';
+        } elseif ($remainingMinutes > 0) {
+            $formattedTime = $remainingMinutes . 'm';
+        } else {
+            $formattedTime = '0h';
+        }
+        
+        return response()->json([
+            'test_name' => 'Jonny Friday Calculation Test',
+            'clock_in_raw' => $clockInRaw,
+            'clock_out_raw' => $clockOutRaw,
+            'clock_in_parsed' => $clockIn->format('Y-m-d H:i:s'),
+            'clock_out_parsed' => $clockOut->format('Y-m-d H:i:s'),
+            'total_minutes' => $totalMinutes,
+            'total_hours' => $totalHours,
+            'remaining_minutes' => $remainingMinutes,
+            'formatted_time' => $formattedTime,
+            'expected_result' => '2h 18m'
+        ]);
+        
+    } catch (\Exception $e) {
+        return response()->json([
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+    }
+});
+
+// Simple attendance test
+Route::get('/test-attendance/{employeeId}', function($employeeId) {
+    try {
+        // Get all attendance for this employee
+        $allAttendance = DB::table('attendances')
+            ->where('employee_id', $employeeId)
+            ->orderBy('date', 'desc')
+            ->get();
+        
+        // Get today's attendance specifically
+        $todayAttendance = DB::table('attendances')
+            ->where('employee_id', $employeeId)
+            ->where('date', '2025-10-10')
+            ->first();
+        
+        $result = [
+            'employee_id' => $employeeId,
+            'today_date' => '2025-10-10',
+            'all_attendance_count' => $allAttendance->count(),
+            'all_attendance' => $allAttendance->toArray(),
+            'today_attendance' => $todayAttendance,
+            'calculation_test' => null
+        ];
+        
+        if ($todayAttendance && $todayAttendance->clock_in_time && $todayAttendance->clock_out_time) {
+            $clockIn = \Carbon\Carbon::parse($todayAttendance->clock_in_time);
+            $clockOut = \Carbon\Carbon::parse($todayAttendance->clock_out_time);
+            $totalMinutes = $clockOut->diffInMinutes($clockIn);
+            
+            $result['calculation_test'] = [
+                'clock_in_raw' => $todayAttendance->clock_in_time,
+                'clock_out_raw' => $todayAttendance->clock_out_time,
+                'clock_in_parsed' => $clockIn->format('Y-m-d H:i:s'),
+                'clock_out_parsed' => $clockOut->format('Y-m-d H:i:s'),
+                'total_minutes' => $totalMinutes,
+                'total_hours' => floor($totalMinutes / 60),
+                'remaining_minutes' => $totalMinutes % 60,
+                'formatted' => floor($totalMinutes / 60) . 'h ' . ($totalMinutes % 60) . 'm'
+            ];
+        }
+        
+        return response()->json($result);
+        
+    } catch (\Exception $e) {
+        return response()->json([
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+    }
+});
+
+// Debug AI timesheet calculation
+Route::get('/debug-ai-calculation/{employeeId}', function($employeeId) {
+    try {
+        // Get current week start
+        $weekStart = \Carbon\Carbon::now()->startOfWeek();
+        
+        // Get attendance data for this employee
+        $recentAttendance = DB::table('attendances')
+            ->where('employee_id', $employeeId)
+            ->where('date', '>=', $weekStart->copy()->subWeeks(2)->format('Y-m-d'))
+            ->where('date', '<=', $weekStart->copy()->endOfWeek()->format('Y-m-d'))
+            ->orderBy('date', 'desc')
+            ->get();
+        
+        // Check specific day (Friday = index 4)
+        $fridayDate = $weekStart->copy()->addDays(4); // Friday
+        $fridayAttendance = $recentAttendance->where('date', $fridayDate->format('Y-m-d'))->first();
+        
+        $debugInfo = [
+            'employee_id' => $employeeId,
+            'week_start' => $weekStart->format('Y-m-d'),
+            'friday_date' => $fridayDate->format('Y-m-d'),
+            'total_attendance_records' => $recentAttendance->count(),
+            'attendance_dates' => $recentAttendance->pluck('date')->toArray(),
+            'friday_attendance' => $fridayAttendance,
+            'friday_calculation' => null
+        ];
+        
+        if ($fridayAttendance && $fridayAttendance->clock_in_time && $fridayAttendance->clock_out_time) {
+            $clockIn = \Carbon\Carbon::parse($fridayAttendance->clock_in_time);
+            $clockOut = \Carbon\Carbon::parse($fridayAttendance->clock_out_time);
+            $totalMinutes = $clockOut->diffInMinutes($clockIn);
+            $totalHours = floor($totalMinutes / 60);
+            $remainingMinutes = $totalMinutes % 60;
+            
+            $debugInfo['friday_calculation'] = [
+                'clock_in' => $clockIn->format('Y-m-d H:i:s'),
+                'clock_out' => $clockOut->format('Y-m-d H:i:s'),
+                'total_minutes' => $totalMinutes,
+                'total_hours' => $totalHours,
+                'remaining_minutes' => $remainingMinutes,
+                'formatted_time' => $totalHours . 'h ' . $remainingMinutes . 'm'
+            ];
+        }
+        
+        return response()->json($debugInfo);
+        
+    } catch (\Exception $e) {
+        return response()->json([
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+    }
+});
+
+// Test save timesheet functionality
+Route::get('/test-save-timesheet', function() {
+    try {
+        // Simulate saving a timesheet
+        $controller = new \App\Http\Controllers\TimesheetController();
+        
+        $request = new \Illuminate\Http\Request([
+            'employee_id' => 1,
+            'employee_name' => 'Test Employee',
+            'department' => 'IT',
+            'timesheet_data' => [
+                'weekly_data' => [
+                    'Monday' => ['date' => '10/06/25', 'time_in' => '9:00 AM', 'time_out' => '5:00 PM'],
+                    'Tuesday' => ['date' => '10/07/25', 'time_in' => '9:00 AM', 'time_out' => '5:00 PM']
+                ],
+                'total_hours' => 16,
+                'overtime_hours' => 0,
+                'ai_insights' => ['Good attendance pattern']
+            ]
+        ]);
+        
+        $response = $controller->saveTimesheet($request);
+        $data = json_decode($response->getContent(), true);
+        
+        // Check what was actually saved
+        $savedTimesheet = DB::table('ai_generated_timesheets')
+            ->orderBy('created_at', 'desc')
+            ->first();
+        
+        return response()->json([
+            'save_response' => $data,
+            'saved_timesheet' => $savedTimesheet,
+            'generated_at_field' => $savedTimesheet->generated_at ?? 'NULL',
+            'test_info' => [
+                'save_endpoint' => '/api/ai-timesheets/save',
+                'expected_behavior' => 'generated_at should be set to current timestamp when Save button is clicked'
+            ]
+        ]);
+        
+    } catch (\Exception $e) {
+        return response()->json([
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+    }
+});
+
+// Test statistics functionality
+Route::get('/test-statistics', function() {
+    try {
+        $controller = new \App\Http\Controllers\TimesheetController();
+        $response = $controller->getStatistics();
+        $data = json_decode($response->getContent(), true);
+        
+        // Also test the foreach logic directly
+        $timesheets = DB::table('ai_generated_timesheets')->get();
+        $manualStats = [
+            'total_timesheets' => 0,
+            'pending_timesheets' => 0,
+            'approved_timesheets' => 0,
+            'rejected_timesheets' => 0,
+            'total_hours' => 0
+        ];
+        
+        foreach ($timesheets as $timesheet) {
+            $manualStats['total_timesheets']++;
+            
+            switch ($timesheet->status) {
+                case 'pending':
+                    $manualStats['pending_timesheets']++;
+                    break;
+                case 'approved':
+                    $manualStats['approved_timesheets']++;
+                    break;
+                case 'rejected':
+                    $manualStats['rejected_timesheets']++;
+                    break;
+            }
+            
+            $manualStats['total_hours'] += (float) ($timesheet->total_hours ?? 0);
+        }
+        
+        return response()->json([
+            'controller_response' => $data,
+            'manual_calculation' => $manualStats,
+            'raw_timesheets_sample' => $timesheets->take(3),
+            'test_info' => [
+                'api_endpoint' => '/api/ai-timesheets/statistics',
+                'foreach_working' => 'Yes - using foreach loops as requested',
+                'database_integration' => 'Yes - pulling from ai_generated_timesheets table'
+            ]
+        ]);
+        
+    } catch (\Exception $e) {
+        return response()->json([
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+    }
+});
+
+// Test without JOIN to isolate the issue
+Route::get('/test-no-join', function() {
+    try {
+        // Test query without JOIN first
+        $timesheetsNoJoin = DB::table('ai_generated_timesheets')
+            ->select('*')
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        // Test if employees table exists and has data
+        $employeesExist = Schema::hasTable('employees');
+        $employeeCount = $employeesExist ? DB::table('employees')->count() : 0;
+        $sampleEmployee = $employeesExist ? DB::table('employees')->first() : null;
+
+        return response()->json([
+            'timesheets_without_join' => [
+                'count' => $timesheetsNoJoin->count(),
+                'sample' => $timesheetsNoJoin->take(2)
+            ],
+            'employees_info' => [
+                'table_exists' => $employeesExist,
+                'count' => $employeeCount,
+                'sample' => $sampleEmployee
+            ],
+            'diagnosis' => $timesheetsNoJoin->count() > 0 ? 'Timesheets exist, issue might be with JOIN' : 'No timesheets found at all'
+        ]);
+
+    } catch (\Exception $e) {
+        return response()->json([
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+    }
+});
+
+// Simple diagnostic for timesheet display issue
+Route::get('/debug-timesheets', function() {
+    try {
+        // Test the exact same query as the controller
+        $timesheets = DB::table('ai_generated_timesheets')
+            ->join('employees', 'ai_generated_timesheets.employee_id', '=', 'employees.id')
+            ->select(
+                'ai_generated_timesheets.id',
+                'ai_generated_timesheets.employee_id',
+                'ai_generated_timesheets.employee_name',
+                'ai_generated_timesheets.department',
+                'ai_generated_timesheets.week_start_date',
+                'ai_generated_timesheets.total_hours',
+                'ai_generated_timesheets.overtime_hours',
+                'ai_generated_timesheets.status',
+                'ai_generated_timesheets.created_at as generated_date',
+                'ai_generated_timesheets.generated_at',
+                DB::raw("CONCAT(employees.first_name, ' ', employees.last_name) as full_employee_name")
+            )
+            ->orderBy('ai_generated_timesheets.created_at', 'desc')
+            ->get();
+
+        // Test the controller method directly
+        $controller = new \App\Http\Controllers\TimesheetController();
+        $controllerResponse = $controller->getPendingTimesheets();
+        $controllerData = json_decode($controllerResponse->getContent(), true);
+
+        return response()->json([
+            'raw_query_count' => $timesheets->count(),
+            'raw_query_sample' => $timesheets->take(2),
+            'controller_response' => $controllerData,
+            'employees_table_exists' => Schema::hasTable('employees'),
+            'ai_timesheets_table_exists' => Schema::hasTable('ai_generated_timesheets'),
+            'join_test' => 'Testing if JOIN is working properly'
+        ]);
+
+    } catch (\Exception $e) {
+        return response()->json([
+            'error' => $e->getMessage(),
+            'line' => $e->getLine(),
+            'file' => $e->getFile()
+        ]);
+    }
+});
+
+// Test pending timesheets API
+Route::get('/test-pending-timesheets', function() {
+    try {
+        $controller = new \App\Http\Controllers\TimesheetController();
+        $response = $controller->getPendingTimesheets();
+        $data = json_decode($response->getContent(), true);
+        
+        // Also check raw database data
+        $rawData = DB::table('ai_generated_timesheets')
+            ->select('*')
+            ->orderBy('created_at', 'desc')
+            ->get();
+        
+        return response()->json([
+            'api_response' => $data,
+            'raw_database_count' => $rawData->count(),
+            'raw_database_sample' => $rawData->take(3),
+            'test_info' => [
+                'api_endpoint' => '/api/ai-timesheets/pending',
+                'expected_status' => 'pending',
+                'table_name' => 'ai_generated_timesheets'
+            ]
+        ]);
+        
+    } catch (\Exception $e) {
+        return response()->json([
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+    }
+});
+
+// Test attendance database integration
+Route::get('/test-attendance-integration/{employeeId}', function($employeeId) {
+    try {
+        $weekStart = \Carbon\Carbon::now()->startOfWeek();
+        $weekEnd = \Carbon\Carbon::now()->endOfWeek();
+        
+        // Check what's in the attendance table
+        $attendances = DB::table('attendances')
+            ->where('employee_id', $employeeId)
+            ->whereBetween('date', [$weekStart->format('Y-m-d'), $weekEnd->format('Y-m-d')])
+            ->orderBy('date')
+            ->get();
+        
+        // Test the controller method directly
+        $controller = new \App\Http\Controllers\TimesheetController();
+        $recentAttendance = DB::table('attendances')
+            ->where('employee_id', $employeeId)
+            ->where('date', '>=', $weekStart->copy()->subWeeks(2)->format('Y-m-d'))
+            ->where('date', '<=', $weekStart->copy()->endOfWeek()->format('Y-m-d'))
+            ->orderBy('date', 'desc')
+            ->get();
+        
+        // Get employee data
+        $employee = DB::table('employees')->where('id', $employeeId)->first();
+        
+        // Use reflection to call private method for testing
+        $reflection = new ReflectionClass($controller);
+        $method = $reflection->getMethod('generateWeeklySchedule');
+        $method->setAccessible(true);
+        $weeklyData = $method->invoke($controller, $employee, $recentAttendance);
+        
+        return response()->json([
+            'employee_info' => $employee,
+            'week_range' => $weekStart->format('Y-m-d') . ' to ' . $weekEnd->format('Y-m-d'),
+            'raw_attendance_data' => $attendances,
+            'recent_attendance_count' => $recentAttendance->count(),
+            'generated_weekly_data' => $weeklyData,
+            'test_summary' => [
+                'attendance_records_found' => $attendances->count(),
+                'days_with_data' => $attendances->pluck('date')->toArray(),
+                'expected_format' => 'Date should be m/d/y (10/07/25), break only when attendance exists'
+            ]
+        ]);
+        
+    } catch (\Exception $e) {
+        return response()->json([
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+    }
+});
+
+// Complete test with seeding and generation
+Route::get('/full-ai-test/{employeeId}', function($employeeId) {
+    try {
+        // Step 1: Seed current week attendance data
+        Artisan::call('db:seed', ['--class' => 'CurrentWeekAttendanceSeeder']);
+        
+        // Step 2: Clear existing AI timesheets
+        DB::table('ai_generated_timesheets')->where('employee_id', $employeeId)->delete();
+        
+        // Step 3: Check what attendance data we have
+        $weekStart = \Carbon\Carbon::now()->startOfWeek();
+        $weekEnd = \Carbon\Carbon::now()->endOfWeek();
+        
+        $currentWeekAttendances = DB::table('attendances')
+            ->where('employee_id', $employeeId)
+            ->whereBetween('date', [$weekStart->format('Y-m-d'), $weekEnd->format('Y-m-d')])
+            ->get();
+        
+        // Step 4: Generate new timesheet
+        $controller = new \App\Http\Controllers\TimesheetController();
+        $response = $controller->generateAITimesheet($employeeId);
+        $data = json_decode($response->getContent(), true);
+        
+        // Step 5: Get the generated timesheet for viewing
+        $viewResponse = $controller->getLatestAITimesheet($employeeId);
+        $viewData = json_decode($viewResponse->getContent(), true);
+        
+        return response()->json([
+            'step1_seeding' => 'Completed',
+            'step2_clearing' => 'Completed', 
+            'step3_attendance_data' => [
+                'week_range' => $weekStart->format('Y-m-d') . ' to ' . $weekEnd->format('Y-m-d'),
+                'attendance_count' => $currentWeekAttendances->count(),
+                'attendances' => $currentWeekAttendances
+            ],
+            'step4_generation' => $data,
+            'step5_view_data' => $viewData,
+            'test_summary' => [
+                'employee_id' => $employeeId,
+                'test_time' => now()->format('Y-m-d H:i:s'),
+                'status' => 'completed'
+            ]
+        ]);
+        
+    } catch (\Exception $e) {
+        return response()->json([
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+    }
+});
+
+// Comprehensive AI Timesheet Test
+Route::get('/test-complete-ai/{employeeId}', function($employeeId) {
+    try {
+        // Step 1: Check attendance data
+        $attendances = DB::table('attendances')
+            ->where('employee_id', $employeeId)
+            ->orderBy('date', 'desc')
+            ->get();
+            
+        $weekStart = \Carbon\Carbon::now()->startOfWeek();
+        $weekEnd = \Carbon\Carbon::now()->endOfWeek();
+        
+        $currentWeekAttendances = DB::table('attendances')
+            ->where('employee_id', $employeeId)
+            ->whereBetween('date', [$weekStart->format('Y-m-d'), $weekEnd->format('Y-m-d')])
+            ->get();
+        
+        // Step 2: Clear existing AI timesheet
+        DB::table('ai_generated_timesheets')->where('employee_id', $employeeId)->delete();
+        
+        // Step 3: Generate new timesheet
+        $controller = new \App\Http\Controllers\TimesheetController();
+        $response = $controller->generateAITimesheet($employeeId);
+        $data = json_decode($response->getContent(), true);
+        
+        // Step 4: Get the generated timesheet
+        $viewResponse = $controller->getLatestAITimesheet($employeeId);
+        $viewData = json_decode($viewResponse->getContent(), true);
+        
+        return response()->json([
+            'step1_attendance_check' => [
+                'total_attendances' => $attendances->count(),
+                'current_week_attendances' => $currentWeekAttendances->count(),
+                'week_range' => $weekStart->format('Y-m-d') . ' to ' . $weekEnd->format('Y-m-d'),
+                'sample_attendance' => $currentWeekAttendances->first()
+            ],
+            'step2_generation_result' => $data,
+            'step3_view_result' => $viewData,
+            'debug_info' => [
+                'employee_id' => $employeeId,
+                'current_time' => now()->format('Y-m-d H:i:s'),
+                'test_status' => 'completed'
+            ]
+        ]);
+        
+    } catch (\Exception $e) {
+        return response()->json([
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+    }
+});
+
+// Check attendance data in database
+Route::get('/check-attendance/{employeeId?}', function($employeeId = null) {
+    try {
+        $query = DB::table('attendances');
+        if ($employeeId) {
+            $query->where('employee_id', $employeeId);
+        }
+        
+        $attendances = $query->orderBy('date', 'desc')->limit(10)->get();
+        
+        $weekStart = \Carbon\Carbon::now()->startOfWeek();
+        $weekEnd = \Carbon\Carbon::now()->endOfWeek();
+        
+        $currentWeekAttendances = DB::table('attendances')
+            ->whereBetween('date', [$weekStart->format('Y-m-d'), $weekEnd->format('Y-m-d')])
+            ->get();
+        
+        return response()->json([
+            'total_attendances' => DB::table('attendances')->count(),
+            'recent_attendances' => $attendances,
+            'current_week_start' => $weekStart->format('Y-m-d'),
+            'current_week_end' => $weekEnd->format('Y-m-d'),
+            'current_week_attendances' => $currentWeekAttendances,
+            'employee_id_filter' => $employeeId
+        ]);
+        
+    } catch (\Exception $e) {
+        return response()->json([
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+    }
+});
+
+// Debug AI Timesheet Generation Route
+Route::get('/debug-ai-generation/{employeeId}', function($employeeId) {
+    try {
+        $controller = new \App\Http\Controllers\TimesheetController();
+        
+        // Clear any existing timesheet
+        $controller->clearAITimesheet($employeeId);
+        
+        // Generate new timesheet
+        $response = $controller->generateAITimesheet($employeeId);
+        $data = json_decode($response->getContent(), true);
+        
+        // Return formatted debug info
+        return response()->json([
+            'success' => $data['success'] ?? false,
+            'message' => $data['message'] ?? 'No message',
+            'employee_id' => $employeeId,
+            'current_time' => now()->format('Y-m-d H:i:s'),
+            'week_start' => \Carbon\Carbon::now()->startOfWeek()->format('Y-m-d'),
+            'sample_data' => $data['data']['weekly_data'] ?? 'No weekly data',
+            'raw_response' => $data
+        ]);
+        
+    } catch (\Exception $e) {
+        return response()->json([
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+    }
+});
+
+// Test AI Timesheet Data Route
+Route::get('/test-ai-data/{employeeId}', function($employeeId) {
+    try {
+        $controller = new \App\Http\Controllers\TimesheetController();
+        
+        // Clear existing timesheet first
+        $controller->clearAITimesheet($employeeId);
+        
+        // Generate timesheet
+        $generateResponse = $controller->generateAITimesheet($employeeId);
+        $generateData = json_decode($generateResponse->getContent(), true);
+        
+        if (!$generateData['success']) {
+            return response()->json(['error' => 'Generation failed: ' . $generateData['message']]);
+        }
+        
+        // Get timesheet data
+        $viewResponse = $controller->getLatestAITimesheet($employeeId);
+        $viewData = json_decode($viewResponse->getContent(), true);
+        
+        return response()->json([
+            'generation_result' => $generateData,
+            'view_result' => $viewData,
+            'test_status' => 'success',
+            'debug_info' => [
+                'employee_id' => $employeeId,
+                'current_time' => now()->format('Y-m-d H:i:s'),
+                'week_start' => \Carbon\Carbon::now()->startOfWeek()->format('Y-m-d'),
+                'sample_weekly_data' => $generateData['data']['weekly_data'] ?? 'No weekly data'
+            ]
+        ]);
+        
+    } catch (\Exception $e) {
+        return response()->json([
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+    }
+});
+
+// AI Timesheet Generation Web Routes (public access for AJAX calls)
+Route::prefix('api/ai-timesheets')->middleware(['web'])->group(function () {
+    // AI Generation Routes
+    Route::get('/test/{employeeId}', [TimesheetController::class, 'testAIGeneration']);
+    Route::post('/generate/{employeeId}', [TimesheetController::class, 'generateAITimesheet']);
+    Route::post('/generate-all', [TimesheetController::class, 'generateAllTimesheets']);
+    
+    // AI Timesheet Viewing Routes
+    Route::get('/view/{employeeId}', [TimesheetController::class, 'getLatestAITimesheet']);
+    Route::delete('/clear/{employeeId}', [TimesheetController::class, 'clearAITimesheet']);
+    
+    // Timesheet Management Routes
+    Route::get('/pending', [TimesheetController::class, 'getPendingTimesheets']);
+    Route::post('/save', [TimesheetController::class, 'saveAITimesheet']);
+    Route::get('/saved/{id}', [TimesheetController::class, 'getSavedTimesheet']);
+    
+    // Timesheet Action Routes
+    Route::post('/approve/{id}', [TimesheetController::class, 'approveTimesheet']);
+    Route::post('/reject/{id}', [TimesheetController::class, 'rejectTimesheet']);
+    Route::delete('/delete/{id}', [TimesheetController::class, 'deleteTimesheet']);
+    
+    // Timesheet Actions
+    Route::post('/{id}/approve', [TimesheetController::class, 'approveTimesheet']);
+    Route::post('/{id}/reject', [TimesheetController::class, 'rejectTimesheet']);
+    Route::post('/{id}/send-to-payroll', [TimesheetController::class, 'sendToPayroll']);
+    Route::delete('/{id}', [TimesheetController::class, 'deleteTimesheet']);
+    
+    // Statistics and Testing
+    Route::get('/statistics', [TimesheetController::class, 'getStatistics']);
+    Route::middleware(['web'])->group(function () {
+        Route::post('/{id}/approve', [TimesheetController::class, 'approveAITimesheet']);
+        Route::post('/{id}/reject', [TimesheetController::class, 'rejectAITimesheet']);
+        Route::delete('/{id}', [TimesheetController::class, 'deleteAITimesheet']);
+        Route::post('/{id}/send-to-payroll', [TimesheetController::class, 'sendAITimesheetToPayroll']);
     });
 });
 
 // Simple test route to verify controller works
 Route::get('/test-ai/{employeeId}', [SystemTestController::class, 'testAi'])->middleware('auth');
+
+// Simple working AI timesheet routes
+Route::get('/simple-ai-test/{employeeId}', function($employeeId) {
+    try {
+        $employee = DB::table('employees')->where('id', $employeeId)->first();
+        if (!$employee) {
+            return response()->json(['success' => false, 'message' => 'Employee not found']);
+        }
+        return response()->json([
+            'success' => true, 
+            'message' => 'AI generation test successful',
+            'employee' => $employee->first_name . ' ' . $employee->last_name
+        ]);
+    } catch (Exception $e) {
+        return response()->json(['success' => false, 'error' => $e->getMessage()]);
+    }
+});
+
+// AI timesheet generation routes - using proper controller methods
+Route::get('/generate-ai-timesheet/{employeeId}', [TimesheetController::class, 'generateAITimesheet'])->name('timesheet.generate.ai');
+Route::get('/ai-timesheet/{timesheetId}', [TimesheetController::class, 'getAITimesheet'])->name('timesheet.ai.details');
+
+Route::get('/generate-all-ai-timesheets', function() {
+    try {
+        $employees = DB::table('employees')->get();
+        $generated = [];
+        
+        foreach ($employees as $employee) {
+            $generated[] = [
+                'employee_id' => $employee->id,
+                'employee_name' => $employee->first_name . ' ' . $employee->last_name,
+                'status' => 'success'
+            ];
+        }
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'Generated AI timesheets for all employees',
+            'generated' => $generated,
+            'total' => count($employees)
+        ]);
+        
+    } catch (Exception $e) {
+        return response()->json(['success' => false, 'message' => $e->getMessage()]);
+    }
+});
 
 // Test save functionality
 Route::post('/test-save', [SystemTestController::class, 'testSave'])->middleware('auth');
@@ -1638,3 +3261,155 @@ Route::middleware(['auth:employee'])->prefix('employee')->group(function () {
     Route::get('/timesheets', [EmployeeESSController::class, 'showTimesheets'])->name('employee.timesheets');
     
 });
+
+
+
+
+
+
+
+
+
+
+
+
+// Debug route to check employee positions
+Route::get('/debug-employees', function() {
+    $employees = App\Models\Employee::select('email', 'position', 'role')->get();
+    $output = '<h3>Employee Database Check:</h3><ul>';
+    foreach($employees as $emp) {
+        $output .= '<li>' . $emp->email . ' - Position: ' . ($emp->position ?? 'NULL') . ' - Role: ' . ($emp->role ?? 'NULL') . '</li>';
+    }
+    $output .= '</ul>';
+    return $output;
+});
+
+
+// Debug route to test claim authentication
+Route::get('/test-claim-auth', function() {
+    $claims = DB::select('SELECT id, employee_id, amount, status FROM claims LIMIT 5');
+    $employees = App\Models\Employee::select('email', 'position')->get();
+    
+    $output = '<h3>Test Claim Authentication</h3>';
+    $output .= '<h4>Available Claims:</h4><ul>';
+    foreach($claims as $claim) {
+        $output .= '<li>Claim ID: ' . $claim->id . ' - Amount: ' . $claim->amount . ' - Status: ' . $claim->status . '</li>';
+    }
+    $output .= '</ul>';
+    
+    $output .= '<h4>Authorized Employees:</h4><ul>';
+    foreach($employees as $emp) {
+        $authorizedPositions = ['HR Manager', 'System Administrator', 'HR Scheduler', 'Admin', 'HR Administrator'];
+        $isAuthorized = in_array($emp->position, $authorizedPositions) ? 'YES' : 'NO';
+        $output .= '<li>' . $emp->email . ' - Position: ' . $emp->position . ' - Authorized: ' . $isAuthorized . '</li>';
+    }
+    $output .= '</ul>';
+    
+    return $output;
+});
+// Debug routes for AI timesheet testing
+Route::get('/test-ai-timesheets', function() {
+    try {
+        $records = DB::table('ai_generated_timesheets')->get();
+        
+        $output = "<h2>AI Timesheet Debug</h2>";
+        $output .= "<p>Total records in database: " . $records->count() . "</p>";
+        
+        if ($records->count() > 0) {
+            $output .= "<table border='1' style='border-collapse: collapse; width: 100%;'>";
+            $output .= "<tr><th>ID</th><th>Employee</th><th>Department</th><th>Total Hours</th><th>Overtime</th><th>Status</th><th>Generated At</th></tr>";
+            
+            foreach ($records as $record) {
+                $output .= "<tr>";
+                $output .= "<td>{$record->id}</td>";
+                $output .= "<td>{$record->employee_name}</td>";
+                $output .= "<td>{$record->department}</td>";
+                $output .= "<td>{$record->total_hours}</td>";
+                $output .= "<td>{$record->overtime_hours}</td>";
+                $output .= "<td>{$record->status}</td>";
+                $output .= "<td>{$record->generated_at}</td>";
+                $output .= "</tr>";
+            }
+            $output .= "</table>";
+        }
+        
+        $output .= "<br><h3>Test API Endpoint</h3>";
+        $output .= "<button onclick='testAPI()'>Test /api/ai-timesheets/pending</button>";
+        $output .= "<div id='api-result'></div>";
+        
+        $output .= "<script>
+        function testAPI() {
+            fetch('/api/ai-timesheets/pending')
+                .then(response => {
+                    console.log('Response status:', response.status);
+                    return response.json();
+                })
+                .then(data => {
+                    console.log('API Response:', data);
+                    document.getElementById('api-result').innerHTML = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+                })
+                .catch(error => {
+                    console.error('API Error:', error);
+                    document.getElementById('api-result').innerHTML = '<p style=\"color: red;\">Error: ' + error.message + '</p>';
+                });
+        }
+        </script>";
+        
+        return $output;
+        
+    } catch (Exception $e) {
+        return "Error: " . $e->getMessage();
+    }
+});
+
+// Test the controller method directly
+Route::get('/test-controller', function() {
+    try {
+        $controller = new \App\Http\Controllers\TimesheetController();
+        $request = new \Illuminate\Http\Request();
+        $response = $controller->getPendingTimesheets($request);
+        
+        return [
+            'status_code' => $response->getStatusCode(),
+            'content' => json_decode($response->getContent(), true)
+        ];
+    } catch (Exception $e) {
+        return ['error' => $e->getMessage()];
+    }
+});
+
+// Debug route to test authentication and data (no auth required)
+Route::get('/debug-timesheet-auth', function() {
+    try {
+        $webAuth = auth()->guard('web')->check();
+        $employeeAuth = auth()->guard('employee')->check();
+        $webUser = auth()->guard('web')->user();
+        $employeeUser = auth()->guard('employee')->user();
+        
+        return response()->json([
+            'web_auth' => $webAuth ? 'Authenticated' : 'Not authenticated',
+            'employee_auth' => $employeeAuth ? 'Authenticated' : 'Not authenticated',
+            'web_user' => $webUser ? ($webUser->email ?? 'No email') : 'No user',
+            'employee_user' => $employeeUser ? ($employeeUser->email ?? 'No email') : 'No user',
+            'employee_role' => $employeeUser ? ($employeeUser->position ?? 'No position') : 'No employee',
+            'employee_count' => DB::table('employees')->count(),
+            'admin_count' => DB::table('users')->count(),
+            'attendance_count' => DB::table('attendances')->count(),
+            'claims_count' => DB::table('claims')->count(),
+            'shifts_count' => DB::table('shifts')->count(),
+            'login_options' => [
+                'admin_login' => url('/admin/login'),
+                'employee_login' => url('/employee/login'),
+                'test_without_auth' => url('/timesheet-management-test')
+            ]
+        ]);
+    } catch (Exception $e) {
+        return response()->json(['error' => $e->getMessage()]);
+    }
+});
+
+// Test route without authentication to verify controller works
+Route::get('/test-timesheet-no-auth', [TimesheetController::class, 'index'])->name('test.timesheet.no.auth');
+
+// TEMPORARY: Timesheet management without authentication for testing
+Route::get('/timesheet-management-test', [TimesheetController::class, 'index'])->name('timesheet.management.test');

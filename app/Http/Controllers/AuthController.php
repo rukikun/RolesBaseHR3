@@ -4,7 +4,11 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Mail;
 use App\Models\Employee;
+use App\Models\OtpVerification;
+use App\Mail\OtpMail;
+use App\Services\PHPMailerService;
 
 class AuthController extends Controller
 {
@@ -17,7 +21,7 @@ class AuthController extends Controller
     }
 
     /**
-     * Handle employee login (uses 'employees' table) - redirects to HR dashboard
+     * Handle employee login (uses 'employees' table) - WITH 2FA ENABLED
      */
     public function login(Request $request)
     {
@@ -28,33 +32,45 @@ class AuthController extends Controller
 
         // Use the 'employee' guard which uses 'employees' table
         if (Auth::guard('employee')->attempt($credentials, $request->has('rememberMe'))) {
-            $request->session()->regenerate();
-            // Get the authenticated employee from employees table
             $employee = Auth::guard('employee')->user();
             
-            // Update last activity and set online status
-            try {
-                $employee->update([
-                    'last_activity' => now(),
-                    'online_status' => 'online'
-                ]);
-                
-                // Log login activity
-                \App\Models\EmployeeActivity::logLogin();
-            } catch (\Exception $e) {
-                // Continue login even if activity logging fails
-                \Log::error('Employee activity update failed: ' . $e->getMessage());
-            }
-            
-            // Redirect based on employee role - all roles go to dashboard
-            if ($employee->canAccessDashboard()) {
-                return redirect()->intended(route('dashboard'));
-            } else {
-                // If role doesn't have dashboard access, logout and show error
+            // Check if employee can access dashboard
+            if (!$employee->canAccessDashboard()) {
                 Auth::guard('employee')->logout();
                 return back()->withErrors([
                     'email' => 'Your account does not have permission to access this system.',
                 ]);
+            }
+
+            // Logout immediately after credential verification (2FA required)
+            Auth::guard('employee')->logout();
+
+            try {
+                // Generate OTP for 2FA
+                $otpRecord = OtpVerification::generateOtp($credentials['email']);
+                
+                // Get employee name for email
+                $userName = $employee->first_name . ' ' . $employee->last_name;
+                
+                // Send OTP email using PHPMailer
+                $phpMailer = new PHPMailerService();
+                $result = $phpMailer->sendOtpEmail($credentials['email'], $otpRecord->otp_code, $userName);
+                
+                if (!$result['success']) {
+                    throw new \Exception($result['message']);
+                }
+                
+                // Store email and remember me preference in session for OTP verification
+                $request->session()->put('otp_email', $credentials['email']);
+                $request->session()->put('remember_me', $request->has('rememberMe'));
+                
+                return redirect()->route('admin.otp.form')->with('success', 'Verification code sent to your email. Please check your inbox.');
+                
+            } catch (\Exception $e) {
+                \Log::error('2FA OTP generation failed: ' . $e->getMessage());
+                return back()->withErrors([
+                    'email' => 'Failed to send verification code. Please try again or contact support.',
+                ])->withInput($request->only('email'));
             }
         }
 
@@ -88,6 +104,123 @@ class AuthController extends Controller
         $request->session()->invalidate();
         $request->session()->regenerateToken();
         return redirect('/admin/login');
+    }
+
+    /**
+     * Show OTP verification form
+     */
+    public function showOtpForm()
+    {
+        if (!session('otp_email')) {
+            return redirect()->route('admin.login')->withErrors(['email' => 'Session expired. Please login again.']);
+        }
+        
+        return view('otp_verification');
+    }
+
+    /**
+     * Verify OTP and complete login
+     */
+    public function verifyOtp(Request $request)
+    {
+        $request->validate([
+            'email' => ['required', 'email'],
+            'otp_code' => ['required', 'string', 'size:6'],
+        ]);
+
+        $email = $request->email;
+        $otpCode = $request->otp_code;
+
+        // Check if session email matches
+        if (session('otp_email') !== $email) {
+            return back()->withErrors(['otp_code' => 'Invalid session. Please login again.']);
+        }
+
+        // Check for too many attempts
+        if (OtpVerification::hasExceededAttempts($email)) {
+            return back()->withErrors(['otp_code' => 'Too many failed attempts. Please request a new code.']);
+        }
+
+        // Verify OTP
+        if (!OtpVerification::verifyOtp($email, $otpCode)) {
+            return back()->withErrors(['otp_code' => 'Invalid or expired verification code.']);
+        }
+
+        // Find employee and log them in
+        $employee = Employee::where('email', $email)->first();
+        
+        if (!$employee) {
+            return back()->withErrors(['otp_code' => 'Employee not found.']);
+        }
+
+        // Log the employee in
+        Auth::guard('employee')->login($employee, session('remember_me', false));
+        $request->session()->regenerate();
+
+        // Update last activity and set online status
+        try {
+            $employee->update([
+                'last_activity' => now(),
+                'online_status' => 'online'
+            ]);
+            
+            // Log login activity
+            \App\Models\EmployeeActivity::logLogin();
+        } catch (\Exception $e) {
+            // Continue login even if activity logging fails
+            \Log::error('Employee activity update failed: ' . $e->getMessage());
+        }
+
+        // Clear OTP session data
+        $request->session()->forget(['otp_email', 'remember_me']);
+
+        return redirect()->intended(route('dashboard'))->with('success', 'Login successful!');
+    }
+
+    /**
+     * Resend OTP code
+     */
+    public function resendOtp(Request $request)
+    {
+        $request->validate([
+            'email' => ['required', 'email'],
+        ]);
+
+        $email = $request->email;
+
+        // Check if session email matches
+        if (session('otp_email') !== $email) {
+            return response()->json(['success' => false, 'message' => 'Invalid session.'], 400);
+        }
+
+        // Find employee
+        $employee = Employee::where('email', $email)->first();
+        
+        if (!$employee) {
+            return response()->json(['success' => false, 'message' => 'Employee not found.'], 404);
+        }
+
+        try {
+            // Generate new OTP
+            $otpRecord = OtpVerification::generateOtp($email);
+            
+            // Get employee name for email
+            $userName = $employee->first_name . ' ' . $employee->last_name;
+            
+            // Send OTP email using PHPMailer
+            $phpMailer = new PHPMailerService();
+            $result = $phpMailer->sendOtpEmail($email, $otpRecord->otp_code, $userName);
+            
+            if (!$result['success']) {
+                throw new \Exception($result['message']);
+            }
+            
+            return response()->json(['success' => true, 'message' => 'New verification code sent successfully.']);
+            
+        } catch (\Exception $e) {
+            \Log::error('OTP resend failed: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Failed to send verification code.'], 500);
+        }
     }
 
     /**

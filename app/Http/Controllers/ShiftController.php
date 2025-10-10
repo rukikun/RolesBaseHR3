@@ -13,6 +13,7 @@ use App\Models\Shift;
 use App\Models\Employee;
 use App\Models\ShiftRequest;
 use App\Traits\DatabaseConnectionTrait;
+use Illuminate\Support\Facades\Hash;
 
 class ShiftController extends Controller
 {
@@ -1286,6 +1287,85 @@ class ShiftController extends Controller
                 'success' => false,
                 'message' => 'Failed to load shift: ' . $e->getMessage()
             ], 500);
+        }
+    }
+
+    /**
+     * Handle HR authentication for protected shift actions
+     */
+    public function hrAuthentication(Request $request)
+    {
+        try {
+            // Validate input
+            $validator = Validator::make($request->all(), [
+                'email' => 'required|email',
+                'password' => 'required|string',
+                'action' => 'required|string|in:edit,delete,create',
+                'type' => 'required|string|in:shift',
+                'item_id' => 'nullable|string',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid input data'
+                ], 422);
+            }
+
+            // Authenticate user
+            $employee = Employee::where('email', $request->email)->first();
+            
+            if (!$employee || !Hash::check($request->password, $employee->password)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid email or password'
+                ], 401);
+            }
+
+            // Check authorization
+            $authorizedPositions = ['HR Manager', 'System Administrator', 'HR Scheduler', 'Admin', 'HR Administrator'];
+            if (!in_array($employee->position, $authorizedPositions)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access denied. Only HR Manager, System Administrator, HR Scheduler, Admin, or HR Administrator can perform this action.'
+                ], 403);
+            }
+
+            // Perform action
+            $result = $this->performShiftAction($request->action, $request->item_id, $employee->id);
+            return response()->json($result);
+
+        } catch (\Exception $e) {
+            Log::error('Shift HR Authentication error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred during authentication'
+            ], 500);
+        }
+    }
+
+    private function performShiftAction($action, $shiftId, $authorizedById)
+    {
+        try {
+            switch ($action) {
+                case 'edit':
+                    // For edit, just return success - the actual edit will be handled by the edit modal
+                    return ['success' => true, 'message' => 'Authorization successful. Opening edit form...'];
+                    
+                case 'delete':
+                    DB::delete("DELETE FROM shifts WHERE id = ?", [$shiftId]);
+                    return ['success' => true, 'message' => 'Shift deleted successfully'];
+                    
+                case 'create':
+                    // For create, just return success - the actual creation will be handled by the create modal
+                    return ['success' => true, 'message' => 'Authorization successful. Opening create form...'];
+
+                default:
+                    return ['success' => false, 'message' => 'Unknown action'];
+            }
+        } catch (\Exception $e) {
+            Log::error('Shift action error: ' . $e->getMessage());
+            return ['success' => false, 'message' => 'An error occurred while performing the action'];
         }
     }
 }

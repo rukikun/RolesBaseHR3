@@ -119,14 +119,14 @@
                     <!-- Additional Profile Information -->
                     <div class="row mb-3">
                         <div class="col-md-6">
-                            <label for="role" class="form-label fw-bold">Role</label>
+                            <label for="position" class="form-label fw-bold">Position</label>
                             <input type="text" class="form-control" 
-                                   id="role" name="role" 
-                                   value="{{ ucwords(str_replace('_', ' ', $user->role ?? 'employee')) }}" 
+                                   id="position" name="position" 
+                                   value="{{ $user->position ?? 'Employee' }}" 
                                    readonly 
                                    style="background-color: #f8f9fa; cursor: not-allowed;"
-                                   title="Role cannot be changed. Contact administrator to modify your role.">
-                            <small class="text-muted">Role is assigned by administrator and cannot be changed.</small>
+                                   title="Position determines your access level and cannot be changed. Contact administrator to modify your position.">
+                            <small class="text-muted">Position determines system access and is assigned by administrator.</small>
                         </div>
                         <div class="col-md-6">
                             <label for="department" class="form-label fw-bold">Department</label>

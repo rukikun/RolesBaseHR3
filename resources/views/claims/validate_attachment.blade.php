@@ -91,10 +91,10 @@ $pendingValidation = $pendingValidation ?? 0;
     <div class="stat-card-modern">
       <div class="d-flex align-items-center">
         <div class="stat-icon-circle bg-primary">
-          <i class="fas fa-dollar-sign text-white"></i>
+          <i class="fas fa-peso-sign text-white"></i>
         </div>
         <div class="ms-3">
-          <h3 class="fw-bold mb-0 stat-number">${{ number_format($totalApprovedAmount, 2) }}</h3>
+          <h3 class="fw-bold mb-0 stat-number">₱{{ number_format($totalApprovedAmount, 2) }}</h3>
           <p class="text-muted mb-0 small stat-label">Total Amount</p>
         </div>
       </div>
@@ -159,7 +159,7 @@ $pendingValidation = $pendingValidation ?? 0;
             <tr>
               <td>{{ $claim->employee_name ?? 'Unknown Employee' }}</td>
               <td>{{ $claim->claim_type_name ?? 'Unknown Type' }}</td>
-              <td>${{ number_format($claim->amount ?? 0, 2) }}</td>
+              <td>₱{{ number_format($claim->amount ?? 0, 2) }}</td>
               <td>{{ isset($claim->claim_date) ? date('M d, Y', strtotime($claim->claim_date)) : 'N/A' }}</td>
               <td>{{ isset($claim->description) ? Str::limit($claim->description, 30) : 'N/A' }}</td>
               <td>

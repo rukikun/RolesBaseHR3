@@ -91,7 +91,7 @@
                         ['label' => 'Email Address', 'value' => $user->email, 'icon' => 'fas fa-envelope'],
                         ['label' => 'Username', 'value' => $user->username ?? 'Not set', 'icon' => 'fas fa-at'],
                         ['label' => 'Phone Number', 'value' => $user->phone ?? 'Not set', 'icon' => 'fas fa-phone'],
-                        ['label' => 'Role', 'value' => ucwords(str_replace('_', ' ', $user->role ?? 'employee')), 'icon' => 'fas fa-user-tag'],
+                        ['label' => 'Position', 'value' => $user->position ?? 'Employee', 'icon' => 'fas fa-user-tag'],
                         ['label' => 'Department', 'value' => $user->department ?? 'Not set', 'icon' => 'fas fa-building'],
                         ['label' => 'Work Location', 'value' => $user->work_location ?? 'Not set', 'icon' => 'fas fa-map-marker-alt'],
                         ['label' => 'Last Login', 'value' => $user->last_login ? $user->last_login->format('M d, Y h:i A') : 'Never', 'icon' => 'fas fa-clock'],

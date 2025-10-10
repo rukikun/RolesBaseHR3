@@ -32,31 +32,31 @@
                   <img src="{{ asset('assets/images/jetlouge_logo.png') }}" alt="Jetlouge Travels">
                 </div>
                 <h1 class="brand-text">Jetlouge Travels</h1>
-                <p class="brand-subtitle">Admin Portal</p>
+                <p class="brand-subtitle">Employee Portal</p>
               </div>
 
               <h2 class="welcome-text">Welcome Back!</h2>
               <p class="welcome-subtitle">
-                Access your travel management dashboard to monitor bookings,
-                manage customers, and grow your travel business.
+                Access your HR management dashboard to monitor employee attendance,
+                process payroll, and streamline your HR operations.
               </p>
 
               <ul class="feature-list">
                 <li>
                   <i class="bi bi-check"></i>
-                  <span>Manage bookings & reservations</span>
+                  <span>Employee timesheets</span>
                 </li>
                 <li>
                   <i class="bi bi-check"></i>
-                  <span>Track customer interactions</span>
+                  <span>Payroll processing</span>
                 </li>
                 <li>
                   <i class="bi bi-check"></i>
-                  <span>Monitor business analytics</span>
+                  <span>AI timesheet generation</span>
                 </li>
                 <li>
                   <i class="bi bi-check"></i>
-                  <span>Secure admin access</span>
+                  <span>Claims management</span>
                 </li>
               </ul>
             </div>

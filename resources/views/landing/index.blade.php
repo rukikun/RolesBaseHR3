@@ -231,7 +231,7 @@
                 
                 <div class="feature-card">
                     <div class="feature-icon">
-                        <i class="fas fa-dollar-sign"></i>
+                        <i class="fas fa-peso-sign"></i>
                     </div>
                     <h3 class="feature-title">Best Value</h3>
                     <p class="feature-description">

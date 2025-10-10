@@ -11,6 +11,8 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 
 class ClaimController extends Controller
 {
@@ -1407,4 +1409,98 @@ class ClaimController extends Controller
             }
         }
     }
+
+    /**
+     * Handle HR authentication for protected claim actions
+     */
+    public function hrAuthentication(Request $request)
+    {
+        try {
+            Log::info('Claim HR Authentication started', [
+                'email' => $request->email,
+                'action' => $request->action,
+                'type' => $request->type,
+                'item_id' => $request->item_id
+            ]);
+            
+            // Validate input
+            $validator = Validator::make($request->all(), [
+                'email' => 'required|email',
+                'password' => 'required|string',
+                'action' => 'required|string|in:approve,reject,delete',
+                'type' => 'required|string|in:claim',
+                'item_id' => 'nullable|string',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid input data'
+                ], 422);
+            }
+
+            // Authenticate user
+            $employee = Employee::where('email', $request->email)->first();
+            
+            if (!$employee || !Hash::check($request->password, $employee->password)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid email or password'
+                ], 401);
+            }
+
+            // Check authorization
+            $authorizedPositions = ['HR Manager', 'System Administrator', 'HR Scheduler', 'Admin', 'HR Administrator'];
+            if (!in_array($employee->position, $authorizedPositions)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access denied. Only HR Manager, System Administrator, HR Scheduler, Admin, or HR Administrator can perform this action.'
+                ], 403);
+            }
+
+            // Perform action
+            $result = $this->performClaimAction($request->action, $request->item_id, $employee->id);
+            return response()->json($result);
+
+        } catch (\Exception $e) {
+            Log::error('Claim HR Authentication error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred during authentication'
+            ], 500);
+        }
+    }
+
+    private function performClaimAction($action, $claimId, $authorizedById)
+    {
+        Log::info('Performing claim action', [
+            'action' => $action,
+            'claim_id' => $claimId,
+            'authorized_by' => $authorizedById
+        ]);
+        
+        try {
+            switch ($action) {
+                case 'approve':
+                    DB::update("UPDATE claims SET status = 'approved', updated_at = NOW() WHERE id = ?", [$claimId]);
+                    return ['success' => true, 'message' => 'Claim approved successfully'];
+                    
+                case 'reject':
+                    DB::update("UPDATE claims SET status = 'rejected', updated_at = NOW() WHERE id = ?", [$claimId]);
+                    return ['success' => true, 'message' => 'Claim rejected successfully'];
+                    
+                case 'delete':
+                    DB::delete("DELETE FROM claims WHERE id = ?", [$claimId]);
+                    return ['success' => true, 'message' => 'Claim deleted successfully'];
+
+                default:
+                    return ['success' => false, 'message' => 'Unknown action'];
+            }
+        } catch (\Exception $e) {
+            Log::error('Claim action error: ' . $e->getMessage());
+            return ['success' => false, 'message' => 'An error occurred while performing the action'];
+        }
+    }
 }
+
+

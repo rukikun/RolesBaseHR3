@@ -113,7 +113,8 @@ class DashboardController extends Controller
                 ->where('employee_id', $employee->id)
                 ->whereDate('work_date', today())
                 ->first();
-        
+        }
+
         $isClockedIn = $todayTimeEntry && $todayTimeEntry->clock_in_time && !$todayTimeEntry->clock_out_time;
 
         return view('dashboard.index', compact(
@@ -707,3 +708,7 @@ class DashboardController extends Controller
         }
     }
 }
+
+
+
+

@@ -38,17 +38,25 @@
         <!-- Jetlouge Neat Profile Dropdown -->
         <div class="dropdown">
           <button class="btn btn-outline-light d-flex align-items-center px-2 py-1" type="button" id="profileDropdown" data-bs-toggle="dropdown" aria-expanded="false" style="border-radius: 24px;">
-            <span class="rounded-circle d-flex align-items-center justify-content-center me-2" style="width:36px;height:36px;font-size:18px;background:var(--jetlouge-primary);color:#fff;font-weight:bold;box-shadow:0 2px 8px rgba(0,0,0,0.10);">
-              {{ strtoupper(substr(Auth::user()->name ?? 'A', 0, 1)) }}
-            </span>
+            @if(Auth::user()->profile_picture_url)
+              <img src="{{ Auth::user()->profile_picture_url }}" alt="Profile" class="rounded-circle me-2" style="width:36px;height:36px;object-fit:cover;box-shadow:0 2px 8px rgba(0,0,0,0.10);">
+            @else
+              <span class="rounded-circle d-flex align-items-center justify-content-center me-2" style="width:36px;height:36px;font-size:14px;background:var(--jetlouge-primary);color:#fff;font-weight:bold;box-shadow:0 2px 8px rgba(0,0,0,0.10);">
+                {{ Auth::user()->initials ?? 'A' }}
+              </span>
+            @endif
             <span class="fw-semibold d-none d-md-inline">{{ Auth::user()->name ?? 'Admin' }}</span>
             <i class="fas fa-chevron-down ms-2"></i>
           </button>
           <div class="dropdown-menu dropdown-menu-end p-0" aria-labelledby="profileDropdown" style="min-width:300px;max-width:340px;box-shadow:0 6px 32px rgba(0,80,160,0.10);border-radius:16px;overflow:hidden;border:1px solid #e3e8f0;">
             <div class="px-4 pt-4 pb-2 text-center" style="background: #fff; border-radius: 16px 16px 0 0;">
-              <span class="rounded-circle d-flex align-items-center justify-content-center mb-2 mx-auto" style="width:56px;height:56px;font-size:28px;background:var(--jetlouge-primary);color:#fff;font-weight:bold;box-shadow:0 2px 8px rgba(0,0,0,0.10);">
-                {{ strtoupper(substr(Auth::user()->name ?? 'A', 0, 1)) }}
-              </span>
+              @if(Auth::user()->profile_picture_url)
+                <img src="{{ Auth::user()->profile_picture_url }}" alt="Profile" class="rounded-circle mb-2 mx-auto" style="width:56px;height:56px;object-fit:cover;box-shadow:0 2px 8px rgba(0,0,0,0.10);">
+              @else
+                <span class="rounded-circle d-flex align-items-center justify-content-center mb-2 mx-auto" style="width:56px;height:56px;font-size:24px;background:var(--jetlouge-primary);color:#fff;font-weight:bold;box-shadow:0 2px 8px rgba(0,0,0,0.10);">
+                  {{ Auth::user()->initials ?? 'A' }}
+                </span>
+              @endif
               <div class="fw-bold fs-5" style="color:#222;">{{ Auth::user()->name ?? 'Admin' }}</div>
               <div class="small text-muted mb-2">{{ Auth::user()->email ?? '' }}</div>
             </div>
@@ -60,11 +68,9 @@
               <a href="{{ route('admin.profile.change-password') }}" class="list-group-item list-group-item-action border-0 py-2 d-flex align-items-center">
                 <i class="fas fa-key me-3" style="color:#f0b429;font-size:1.25rem;"></i> <span class="fw-medium">Change Password</span>
               </a>
-              @if(Auth::user()->isSuperAdmin())
-                <a href="{{ route('settings') }}" class="list-group-item list-group-item-action border-0 py-2 d-flex align-items-center">
-                  <i class="fas fa-cog me-3" style="color:#1f7aec;font-size:1.25rem;"></i> <span class="fw-medium">Settings</span>
-                </a>
-              @endif
+              <a href="{{ route('settings') }}" class="list-group-item list-group-item-action border-0 py-2 d-flex align-items-center">
+                <i class="fas fa-cog me-3" style="color:#1f7aec;font-size:1.25rem;"></i> <span class="fw-medium">Settings</span>
+              </a>
               <form method="POST" action="{{ route('logout') }}" class="d-inline">
                 @csrf
                 <button type="submit" class="list-group-item list-group-item-action border-0 py-2 d-flex align-items-center text-danger" style="background:none;">
@@ -152,10 +158,15 @@
   <aside id="sidebar" class="bg-white border-end p-3 shadow-sm">
     <!-- Profile Section -->
     <div class="profile-section text-center">
-      <img src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face"
-           alt="Admin Profile" class="profile-img mb-2">
+      @if(Auth::user()->profile_picture_url)
+        <img src="{{ Auth::user()->profile_picture_url }}" alt="Profile" class="profile-img mb-2" style="object-fit: cover;">
+      @else
+        <div class="profile-img mb-2 d-flex align-items-center justify-content-center" style="background: var(--jetlouge-primary); color: white; font-weight: bold; font-size: 2rem;">
+          {{ Auth::user()->initials ?? 'A' }}
+        </div>
+      @endif
       <h6 class="fw-semibold mb-1">{{ Auth::user()->name ?? 'John Anderson' }}</h6>
-      <small class="text-muted">HR Administrator</small>
+      <small class="text-muted">{{ Auth::user()->position ?? 'HR Administrator' }}</small>
     </div>
 
     <!-- Navigation Menu -->

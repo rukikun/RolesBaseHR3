@@ -216,7 +216,7 @@
         <div class="mt-5">
           <div class="d-flex justify-content-between align-items-center mb-3">
             <h5 class="mb-0">
-              <i class="fas fa-clipboard-check me-2"></i>Saved AI Timesheets - Pending Approval
+              <i class="fas fa-clipboard-check me-2"></i>Saved AI Timesheets - All Status
             </h5>
             <button class="btn btn-outline-primary btn-sm" onclick="refreshSavedTimesheets()">
               <i class="fas fa-refresh me-1"></i>Refresh
@@ -345,7 +345,7 @@
                   @if(!empty($leave->employee_name) && trim($leave->employee_name) !== '')
                     {{ trim($leave->employee_name) }}
                   @else
-                    <span class="text-warning">Employee #{{ $leave->employee_id ?? 'N/A' }}</span>
+                    <span class="text-warning">Employee #{{ $leave->emp_code ?? 'N/A' }}</span>
                   @endif
                 </td>
                 <td>
@@ -495,7 +495,7 @@
                           $lastName = $employee->last_name ?? 'Employee';
                           $initials = substr($firstName, 0, 1) . substr($lastName, 0, 1);
                           $colors = ['FF6B6B', '4ECDC4', '45B7D1', '96CEB4', 'FFEAA7', 'DDA0DD', 'FFB347', '87CEEB'];
-                          $colorIndex = crc32($attendance->employee_id) % count($colors);
+                          $colorIndex = crc32($attendance->emp_code) % count($colors);
                           $bgColor = $colors[$colorIndex];
                         @endphp
                         <img src="https://ui-avatars.com/api/?name={{ urlencode($initials) }}&background={{ $bgColor }}&color=ffffff&size=32&bold=true" 
@@ -503,7 +503,7 @@
                       </div>
                       <div>
                         <div class="fw-medium">{{ $firstName }} {{ $lastName }}</div>
-                        <small class="text-muted">ID: {{ $attendance->employee_id }}</small>
+                        <small class="text-muted">ID: {{ $attendance->emp_code }}</small>
                       </div>
                     </div>
                   </td>
@@ -729,7 +729,7 @@
                         <select class="form-select" id="attendance_employee_id" name="employee_id" required>
                             <option value="">Select Employee</option>
                             @foreach($employees ?? [] as $employee)
-                                <option value="{{ $employee->id }}">{{ $employee->first_name }} {{ $employee->last_name }} ({{ $employee->employee_id }})</option>
+                                <option value="{{ $employee->id }}">{{ $employee->first_name }} {{ $employee->last_name }} (ID: {{ $employee->id }})</option>
                             @endforeach
                         </select>
                     </div>
@@ -1902,6 +1902,8 @@
     </div>
 </div>
 
+@endsection
+
 @push('styles')
 <!-- Working Modal CSS -->
 <style>
@@ -1911,16 +1913,20 @@
     left: 0;
     width: 100%;
     height: 100%;
-    z-index: 2000;
     background: rgba(0, 0, 0, 0.5);
+    z-index: 2000;
     display: none;
-    align-items: center;
-    justify-content: center;
-    padding: 20px;
+    padding: 100px 20px 20px 20px;
+    box-sizing: border-box;
+    overflow-y: auto;
 }
 
 .working-modal.show {
-    display: flex !important;
+    display: block !important;
+}
+
+.working-modal[style*="display: block"] {
+    display: block !important;
 }
 
 .working-modal-backdrop {
@@ -1930,22 +1936,20 @@
     width: 100%;
     height: 100%;
 }
-
 .working-modal-dialog {
     position: relative;
     width: 100%;
-    max-width: 600px;
-    max-height: 90vh;
+    max-width: 800px;
     z-index: 2001;
-    margin: 0;
+    margin: 80px auto 0 auto;
 }
 
 .working-modal-content {
     background-color: white;
     border-radius: 8px;
-    width: 90%;
-    max-width: 600px;
-    max-height: 90vh;
+    width: 95%;
+    max-width: 800px;
+    max-height: 85vh;
     overflow-y: auto;
     position: relative;
     overflow: hidden;
@@ -4757,6 +4761,12 @@ function printTimesheet() {
 function generateAITimesheet(employeeId) {
     console.log('Generating AI timesheet for employee:', employeeId);
     
+    // Clear any cached data for this employee to ensure fresh generation
+    if (window.aiTimesheets && window.aiTimesheets[employeeId]) {
+        delete window.aiTimesheets[employeeId];
+        console.log('Cleared cached data before generation for employee:', employeeId);
+    }
+    
     // Update UI to show generating state
     const generateBtn = document.getElementById(`generate-btn-${employeeId}`);
     const viewBtn = document.getElementById(`view-btn-${employeeId}`);
@@ -4795,9 +4805,21 @@ function generateAITimesheet(employeeId) {
     .then(data => {
         console.log('API Response data:', data);
         if (data.success) {
-            // Store generated data
+            // Store generated data in the correct format for the modal
             window.aiTimesheets = window.aiTimesheets || {};
-            window.aiTimesheets[employeeId] = data.data;
+            window.aiTimesheets[employeeId] = {
+                employee_id: data.employee_id,
+                employee_name: data.employee_name,
+                department: data.department,
+                supervisor_name: 'N/A', // Default supervisor
+                week_period: data.week_period,
+                week_start_date: data.week_start_date,
+                weekly_data: data.weekly_data,
+                total_hours: data.total_hours,
+                overtime_hours: data.overtime_hours,
+                ai_insights: data.ai_insights,
+                generated_at: data.generated_at
+            };
             
             // Update UI to show completed state
             generateBtn.classList.remove('btn-loading');
@@ -4992,16 +5014,31 @@ function generateAIInsights(weeklyData) {
 
 function viewAITimesheet(employeeId) {
     console.log('Viewing AI timesheet for employee:', employeeId);
+    console.log('Current aiTimesheets cache:', window.aiTimesheets);
     
-    // Try to get from cache first
-    const cachedData = window.aiTimesheets && window.aiTimesheets[employeeId];
-    if (cachedData) {
-        populateAITimesheetModal(cachedData);
-        openWorkingModal('ai-timesheet-modal');
-        return;
+    // Check if we have cached data from recent generation
+    if (window.aiTimesheets && window.aiTimesheets[employeeId]) {
+        console.log('Using cached AI timesheet data for employee:', employeeId);
+        console.log('Cached data:', window.aiTimesheets[employeeId]);
+        
+        // Validate cached data has required fields
+        const cachedData = window.aiTimesheets[employeeId];
+        if (cachedData.employee_name && cachedData.employee_name !== 'N/A' && cachedData.weekly_data) {
+            try {
+                populateAITimesheetModal(cachedData);
+                console.log('Modal populated successfully with cached data');
+                openWorkingModal('ai-timesheet-modal');
+                console.log('Modal opened successfully');
+                return;
+            } catch (error) {
+                console.error('Error in modal operations with cached data:', error);
+            }
+        } else {
+            console.log('Cached data is incomplete, fetching from API instead');
+        }
     }
     
-    // Fetch from API
+    // If no cached data, try to fetch from API (for saved timesheets)
     fetch(`/api/ai-timesheets/view/${employeeId}`, {
         method: 'GET',
         headers: {
@@ -5011,33 +5048,71 @@ function viewAITimesheet(employeeId) {
     })
     .then(response => response.json())
     .then(data => {
+        console.log('API Response for employee', employeeId, ':', data);
+        
         if (data.success) {
-            // Cache the data
-            window.aiTimesheets = window.aiTimesheets || {};
-            window.aiTimesheets[employeeId] = data.data;
+            console.log('Raw API data.data:', data.data);
+            console.log('Employee name from API:', data.data.employee_name);
+            console.log('Department from API:', data.data.department);
+            console.log('Weekly data from API:', data.data.weekly_data);
+            console.log('Weekly data type:', typeof data.data.weekly_data);
             
-            // Populate modal with AI data
-            populateAITimesheetModal(data.data);
+            // Validate that we have the essential data
+            if (!data.data.employee_name || data.data.employee_name === 'N/A' || !data.data.weekly_data) {
+                console.error('API returned incomplete data:', data.data);
+                showAlert('error', 'Incomplete timesheet data found. Please regenerate the timesheet.');
+                return;
+            }
+            
+            // Ensure the data structure is consistent with generated timesheets
+            const normalizedData = {
+                employee_id: data.data.employee_id,
+                employee_name: data.data.employee_name,
+                department: data.data.department,
+                supervisor_name: data.data.supervisor_name || 'N/A',
+                week_period: data.data.week_period,
+                week_start_date: data.data.week_start_date,
+                weekly_data: data.data.weekly_data,
+                total_hours: data.data.total_hours,
+                overtime_hours: data.data.overtime_hours,
+                ai_insights: data.data.ai_insights,
+                generated_at: data.data.generated_at,
+                status: data.data.status || 'pending'
+            };
+            
+            console.log('Normalized data:', normalizedData);
+            
+            // Cache the normalized data
+            window.aiTimesheets = window.aiTimesheets || {};
+            window.aiTimesheets[employeeId] = normalizedData;
+            
+            console.log('Cached data for employee', employeeId, ':', window.aiTimesheets[employeeId]);
+            
+            // Populate modal with normalized data
+            populateAITimesheetModal(normalizedData);
             
             // Show modal
             openWorkingModal('ai-timesheet-modal');
         } else {
-            showAlert('error', data.message || 'No AI timesheet found. Please generate one first.');
+            console.error('API returned error:', data.message);
+            showAlert('error', 'No AI timesheet found. Please generate one first by clicking "Generate AI Timesheet".');
         }
     })
     .catch(error => {
         console.error('Error loading AI timesheet:', error);
-        showAlert('error', 'Failed to load AI timesheet: ' + error.message);
+        showAlert('error', 'No AI timesheet available. Please generate one first by clicking "Generate AI Timesheet".');
     });
 }
 
 function populateAITimesheetModal(data) {
     try {
+        console.log('Populating modal with data:', data);
+        
         // Populate header info
         document.getElementById('ai-employee-name').textContent = data.employee_name || 'N/A';
         document.getElementById('ai-department').textContent = data.department || 'N/A';
         document.getElementById('ai-supervisor-name').textContent = data.supervisor_name || 'N/A';
-        document.getElementById('ai-generation-time').textContent = `Generated on ${data.generated_at}`;
+        document.getElementById('ai-generation-time').textContent = `Generated on ${data.generated_at || 'unknown date'}`;
         
         // Show all 7 days and populate data (real data or dashes)
         const allDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
@@ -5057,7 +5132,7 @@ function populateAITimesheetModal(data) {
                         // Real attendance data
                         document.getElementById(`ai-${day}-date`).textContent = dayData.date || '--';
                         document.getElementById(`ai-${day}-time-in`).textContent = dayData.time_in || '--';
-                        document.getElementById(`ai-${day}-break`).textContent = dayData.break || '12:00 PM - 1:00 PM';
+                        document.getElementById(`ai-${day}-break`).textContent = dayData.break || '--';
                         document.getElementById(`ai-${day}-time-out`).textContent = dayData.time_out || '--';
                         document.getElementById(`ai-${day}-total-hours`).textContent = dayData.total_hours || '--';
                         document.getElementById(`ai-${day}-overtime`).textContent = dayData.overtime || '--';
@@ -5379,22 +5454,23 @@ function extractTimesheetDataFromModal() {
 function saveAITimesheet() {
     const employeeName = document.getElementById('ai-employee-name').textContent;
     
-    // Extract timesheet data from the modal
-    let timesheetData = extractTimesheetDataFromModal();
+    // Find employee ID and cached data
     let employeeId = null;
+    let cachedData = null;
     
-    // Find employee ID from cached data or extract from modal
+    // Find employee ID from cached data
     if (window.aiTimesheets) {
         for (const [id, data] of Object.entries(window.aiTimesheets)) {
             if (data.employee_name === employeeName) {
                 employeeId = id;
+                cachedData = data;
                 break;
             }
         }
     }
     
-    if (!employeeId || !timesheetData) {
-        showAlert('error', 'No timesheet data found to save');
+    if (!employeeId || !cachedData) {
+        showAlert('error', 'No timesheet data found to save. Please generate a timesheet first.');
         return;
     }
     
@@ -5404,7 +5480,7 @@ function saveAITimesheet() {
     saveButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
     saveButton.disabled = true;
     
-    console.log('Saving timesheet data:', { employee_id: employeeId, timesheet_data: timesheetData });
+    console.log('Saving timesheet data:', cachedData);
     
     fetch('/api/ai-timesheets/save', {
         method: 'POST',
@@ -5414,8 +5490,14 @@ function saveAITimesheet() {
             'Accept': 'application/json'
         },
         body: JSON.stringify({
-            employee_id: employeeId,
-            timesheet_data: timesheetData
+            employee_id: cachedData.employee_id,
+            employee_name: cachedData.employee_name,
+            department: cachedData.department,
+            week_start_date: cachedData.week_start_date,
+            weekly_data: cachedData.weekly_data,
+            total_hours: cachedData.total_hours,
+            overtime_hours: cachedData.overtime_hours,
+            ai_insights: cachedData.ai_insights
         })
     })
     .then(response => {
@@ -5436,6 +5518,13 @@ function saveAITimesheet() {
         saveButton.disabled = false;
         
         if (data.success) {
+            // Update the cache with the saved data structure to maintain consistency
+            if (window.aiTimesheets && window.aiTimesheets[employeeId]) {
+                // Keep the cached data but mark it as saved
+                window.aiTimesheets[employeeId].timesheet_id = data.timesheet_id;
+                window.aiTimesheets[employeeId].status = 'pending';
+            }
+            
             showAlert('success', `AI timesheet saved successfully for ${data.employee_name || employeeName}! Total: ${formatHoursToTime(data.total_hours || 0)}, Overtime: ${formatHoursToTime(data.overtime_hours || 0)}. It now appears in the pending approval table below.`);
             closeWorkingModal('ai-timesheet-modal');
             refreshSavedTimesheets();
@@ -5460,7 +5549,7 @@ function saveAITimesheet() {
 function refreshSavedTimesheets() {
     console.log('Refreshing saved timesheets...');
     
-    fetch('/api/ai-timesheets/pending', {
+    fetch('/api/ai-timesheets/pending-simple', {
         method: 'GET',
         headers: {
             'Accept': 'application/json',
@@ -5623,7 +5712,7 @@ function populateSavedTimesheetsTable(timesheets) {
             <td><span class="badge bg-info">${formatHoursToTime(timesheet.total_hours || 0)}</span></td>
             <td><span class="badge bg-warning">${formatHoursToTime(timesheet.overtime_hours || 0)}</span></td>
             <td>
-                <small>${timesheet.generated_at}</small>
+                <small>${timesheet.generated_date || timesheet.generated_at || 'Not available'}</small>
             </td>
             <td>
                 ${getStatusBadge(timesheet.status)}
@@ -5758,12 +5847,7 @@ function sendToPayroll(timesheetId) {
             'Accept': 'application/json'
         },
         body: JSON.stringify({
-            timesheet_id: timesheetId,
-            employee_id: timesheetData.employee_id,
-            department: timesheetData.department || 'Unknown',
-            week_period: timesheetData.week_period,
-            total_hours: timesheetData.total_hours || 0,
-            overtime_hours: timesheetData.overtime_hours || 0
+            timesheet_id: timesheetId
         })
     })
     .then(response => {
@@ -5777,7 +5861,7 @@ function sendToPayroll(timesheetId) {
         button.disabled = false;
         
         if (data.success) {
-            showAlert('success', `Timesheet sent to payroll successfully! Payroll ID: ${data.payroll_id}`);
+            showAlert('success', `Timesheet sent to payroll successfully! Payroll ID: ${data.payroll_item_id}`);
             refreshSavedTimesheets();
             refreshStatisticsAfterAction();
         } else {
@@ -5969,12 +6053,51 @@ function deleteTimesheet(timesheetId) {
     });
 }
 
+// Clear all AI timesheet cache (for debugging)
+function clearAllAICache() {
+    window.aiTimesheets = {};
+    console.log('All AI timesheet cache cleared');
+    showAlert('success', 'AI timesheet cache cleared. Generate new timesheets to see updated format.');
+}
+
+// Test modal functionality (for debugging)
+function testAIModal() {
+    console.log('Testing AI modal...');
+    try {
+        // Create test data
+        const testData = {
+            employee_name: 'Test Employee',
+            department: 'IT',
+            supervisor_name: 'N/A',
+            generated_at: '2025-10-11 00:42:12',
+            weekly_data: {
+                Friday: {
+                    date: '10/10/25',
+                    time_in: '9:19 AM',
+                    time_out: '11:37 AM',
+                    break: '12:00 PM - 1:00 PM',
+                    total_hours: '2h 18m',
+                    overtime: '--'
+                }
+            }
+        };
+        
+        populateAITimesheetModal(testData);
+        openWorkingModal('ai-timesheet-modal');
+        console.log('Test modal opened successfully');
+    } catch (error) {
+        console.error('Test modal failed:', error);
+    }
+}
+
 // Load saved timesheets on page load
 document.addEventListener('DOMContentLoaded', function() {
     refreshSavedTimesheets();
+    refreshStatistics(); // Load statistics on page load
+    
+    // Clear cache on page load to ensure fresh data
+    window.aiTimesheets = {};
 });
 </script>
 
 @endpush
-
-@endsection

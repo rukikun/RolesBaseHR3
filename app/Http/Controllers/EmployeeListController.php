@@ -8,6 +8,7 @@ use App\Traits\DatabaseConnectionTrait;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Hash;
 
 class EmployeeListController extends Controller
 {
@@ -84,6 +85,7 @@ class EmployeeListController extends Controller
                 'hire_date' => $request->hire_date,
                 'salary' => $request->salary,
                 'status' => $request->status,
+                'password' => Hash::make('password123'), // Default password for new employees
             ]);
 
             Log::info('Employee created successfully: ' . $employee->full_name);

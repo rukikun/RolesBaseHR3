@@ -261,6 +261,27 @@ class Employee extends Authenticatable implements AuthenticatableContract
         return $this->first_name . ' ' . $this->last_name;
     }
 
+    // Get profile picture URL or generate initials
+    public function getProfilePictureUrlAttribute()
+    {
+        if ($this->profile_picture && file_exists(public_path('storage/' . $this->profile_picture))) {
+            return asset('storage/' . $this->profile_picture);
+        }
+        return null;
+    }
+
+    // Get user initials for fallback
+    public function getInitialsAttribute()
+    {
+        $firstName = $this->first_name ?? '';
+        $lastName = $this->last_name ?? '';
+        
+        $firstInitial = $firstName ? strtoupper(substr($firstName, 0, 1)) : '';
+        $lastInitial = $lastName ? strtoupper(substr($lastName, 0, 1)) : '';
+        
+        return $firstInitial . $lastInitial;
+    }
+
     // Activity relationship
     public function activities()
     {

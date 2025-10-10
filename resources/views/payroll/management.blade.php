@@ -2,6 +2,10 @@
 
 @section('title', 'Payroll Management - HR System')
 
+@php
+use Illuminate\Support\Str;
+@endphp
+
 @section('content')
 <!-- Page Header -->
 <div class="page-header-container mb-4">
@@ -138,8 +142,8 @@ $processedPayroll = $payrollItems->where('status', 'processed')->count() ?? 0;
         <option value="processed">Processed</option>
         <option value="paid">Paid</option>
       </select>
-      <button class="btn btn-sm btn-outline-secondary" onclick="refreshPayrollTable()">
-        <i class="fas fa-sync-alt"></i> Refresh
+      <button class="btn btn-sm btn-outline-primary" onclick="refreshPayrollTable()">
+        <i class="fas fa-refresh me-1"></i>Refresh
       </button>
     </div>
   </div>
@@ -272,8 +276,8 @@ $processedPayroll = $payrollItems->where('status', 'processed')->count() ?? 0;
         <option value="sent_to_payroll">Sent to Payroll</option>
         <option value="processed">Processed</option>
       </select>
-      <button class="btn btn-sm btn-outline-secondary" onclick="refreshAttachmentTable()">
-        <i class="fas fa-sync-alt"></i> Refresh
+      <button class="btn btn-sm btn-outline-primary" onclick="refreshAttachmentTable()">
+        <i class="fas fa-refresh me-1"></i>Refresh
       </button>
     </div>
   </div>

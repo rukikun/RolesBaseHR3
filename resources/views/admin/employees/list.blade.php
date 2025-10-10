@@ -566,14 +566,22 @@
   height: 100% !important;
   background: rgba(0, 0, 0, 0.5) !important;
   z-index: 9999 !important;
-  align-items: center !important;
-  justify-content: center !important;
+  padding: 60px 20px 20px 20px !important;
+  box-sizing: border-box !important;
+  overflow-y: auto !important;
+}
+
+.working-modal[style*="display: block"] {
+  display: block !important;
 }
 
 .working-modal-dialog {
   max-width: 600px !important;
   width: 90% !important;
-  margin: 0 !important;
+  margin: 0 auto !important;
+  position: relative !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
 }
 
 .working-modal-content {

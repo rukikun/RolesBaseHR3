@@ -34,11 +34,11 @@ class PopulateTypeData extends Command
             // DB::table('claim_types')->truncate(); // Skip truncate for now
             
             $claimTypes = [
-                ['name' => 'Travel Expenses', 'code' => 'TRAVEL', 'description' => 'Business travel related expenses', 'max_amount' => 5000.00, 'requires_attachment' => 1, 'auto_approve' => 0, 'is_active' => 1],
-                ['name' => 'Office Supplies', 'code' => 'OFFICE', 'description' => 'Office supplies and equipment', 'max_amount' => 1000.00, 'requires_attachment' => 1, 'auto_approve' => 0, 'is_active' => 1],
-                ['name' => 'Meal Allowance', 'code' => 'MEAL', 'description' => 'Business meal expenses', 'max_amount' => 500.00, 'requires_attachment' => 1, 'auto_approve' => 0, 'is_active' => 1],
-                ['name' => 'Training Costs', 'code' => 'TRAINING', 'description' => 'Professional development and training', 'max_amount' => 2000.00, 'requires_attachment' => 1, 'auto_approve' => 0, 'is_active' => 1],
-                ['name' => 'Medical Expenses', 'code' => 'MEDICAL', 'description' => 'Medical and health related expenses', 'max_amount' => 3000.00, 'requires_attachment' => 1, 'auto_approve' => 0, 'is_active' => 1],
+                ['name' => 'Travel Expenses', 'code' => 'TRAVEL', 'description' => 'Business travel related expenses', 'max_amount' => 15000.00, 'requires_attachment' => 1, 'auto_approve' => 0, 'is_active' => 1],
+                ['name' => 'Office Supplies', 'code' => 'OFFICE', 'description' => 'Office supplies and equipment', 'max_amount' => 5000.00, 'requires_attachment' => 1, 'auto_approve' => 0, 'is_active' => 1],
+                ['name' => 'Meal Allowance', 'code' => 'MEAL', 'description' => 'Business meal expenses', 'max_amount' => 2000.00, 'requires_attachment' => 1, 'auto_approve' => 0, 'is_active' => 1],
+                ['name' => 'Training Costs', 'code' => 'TRAINING', 'description' => 'Professional development and training', 'max_amount' => 25000.00, 'requires_attachment' => 1, 'auto_approve' => 0, 'is_active' => 1],
+                ['name' => 'Medical Expenses', 'code' => 'MEDICAL', 'description' => 'Medical and health related expenses', 'max_amount' => 10000.00, 'requires_attachment' => 1, 'auto_approve' => 0, 'is_active' => 1],
             ];
 
             foreach ($claimTypes as $claimType) {
@@ -74,11 +74,11 @@ class PopulateTypeData extends Command
             // DB::table('shift_types')->truncate(); // Skip truncate for now
             
             $shiftTypes = [
-                ['name' => 'Morning Shift', 'code' => 'MORNING', 'description' => 'Standard morning shift for regular operations', 'default_start_time' => '08:00:00', 'default_end_time' => '16:00:00', 'break_duration' => 60, 'hourly_rate' => 25.00, 'color_code' => '#28a745', 'type' => 'day', 'is_active' => 1],
-                ['name' => 'Afternoon Shift', 'code' => 'AFTERNOON', 'description' => 'Afternoon to evening coverage shift', 'default_start_time' => '14:00:00', 'default_end_time' => '22:00:00', 'break_duration' => 45, 'hourly_rate' => 27.50, 'color_code' => '#ffc107', 'type' => 'swing', 'is_active' => 1],
-                ['name' => 'Night Shift', 'code' => 'NIGHT', 'description' => 'Overnight shift with premium pay', 'default_start_time' => '22:00:00', 'default_end_time' => '06:00:00', 'break_duration' => 60, 'hourly_rate' => 32.00, 'color_code' => '#6f42c1', 'type' => 'night', 'is_active' => 1],
-                ['name' => 'Split Shift', 'code' => 'SPLIT', 'description' => 'Split shift with extended break period', 'default_start_time' => '09:00:00', 'default_end_time' => '17:00:00', 'break_duration' => 120, 'hourly_rate' => 24.00, 'color_code' => '#17a2b8', 'type' => 'split', 'is_active' => 1],
-                ['name' => 'Weekend Shift', 'code' => 'WEEKEND', 'description' => 'Weekend coverage with rotating schedule', 'default_start_time' => '10:00:00', 'default_end_time' => '18:00:00', 'break_duration' => 45, 'hourly_rate' => 30.00, 'color_code' => '#fd7e14', 'type' => 'rotating', 'is_active' => 1],
+                ['name' => 'Morning Shift', 'code' => 'MORNING', 'description' => 'Standard morning shift for regular operations', 'default_start_time' => '08:00:00', 'default_end_time' => '16:00:00', 'break_duration' => 60, 'hourly_rate' => 350.00, 'color_code' => '#28a745', 'type' => 'day', 'is_active' => 1],
+                ['name' => 'Afternoon Shift', 'code' => 'AFTERNOON', 'description' => 'Afternoon to evening coverage shift', 'default_start_time' => '14:00:00', 'default_end_time' => '22:00:00', 'break_duration' => 45, 'hourly_rate' => 385.00, 'color_code' => '#ffc107', 'type' => 'swing', 'is_active' => 1],
+                ['name' => 'Night Shift', 'code' => 'NIGHT', 'description' => 'Overnight shift with premium pay', 'default_start_time' => '22:00:00', 'default_end_time' => '06:00:00', 'break_duration' => 60, 'hourly_rate' => 450.00, 'color_code' => '#6f42c1', 'type' => 'night', 'is_active' => 1],
+                ['name' => 'Split Shift', 'code' => 'SPLIT', 'description' => 'Split shift with extended break period', 'default_start_time' => '09:00:00', 'default_end_time' => '17:00:00', 'break_duration' => 120, 'hourly_rate' => 335.00, 'color_code' => '#17a2b8', 'type' => 'split', 'is_active' => 1],
+                ['name' => 'Weekend Shift', 'code' => 'WEEKEND', 'description' => 'Weekend coverage with rotating schedule', 'default_start_time' => '10:00:00', 'default_end_time' => '18:00:00', 'break_duration' => 45, 'hourly_rate' => 420.00, 'color_code' => '#fd7e14', 'type' => 'rotating', 'is_active' => 1],
             ];
 
             foreach ($shiftTypes as $shiftType) {

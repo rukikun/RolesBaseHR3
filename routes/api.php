@@ -191,6 +191,15 @@ Route::middleware('auth')->group(function () {
         Route::post('/{id}/end-break', [App\Http\Controllers\Api\AttendanceController::class, 'endBreak']);
     });
 
+    // Leave Management API routes
+    Route::prefix('leave')->group(function () {
+        Route::post('/hr-auth', [App\Http\Controllers\LeaveController::class, 'hrAuthentication']);
+        Route::get('/types', [App\Http\Controllers\LeaveController::class, 'getLeaveTypes']);
+        Route::get('/requests', [App\Http\Controllers\LeaveController::class, 'getLeaveRequests']);
+        Route::get('/balances', [App\Http\Controllers\LeaveController::class, 'getLeaveBalances']);
+        Route::get('/stats', [App\Http\Controllers\LeaveController::class, 'getLeaveStats']);
+    });
+
     // Unified HR Module API routes
     Route::prefix('unified-hr')->group(function () {
         Route::get('/stats', [UnifiedHRController::class, 'getUnifiedStats']);

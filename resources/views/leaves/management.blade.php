@@ -144,7 +144,7 @@
     <h5 class="card-title mb-0">
       <i class="fas fa-list me-2"></i>Leave Types
     </h5>
-    <button class="btn btn-primary" onclick="openWorkingModal('create-leave-type-modal')">
+    <button class="btn btn-primary" onclick="showAuthModal('create', 'leave_type', 0)">
       <i class="fas fa-plus me-2"></i>Create Leave Type
     </button>
   </div>
@@ -188,16 +188,12 @@
                       <button class="btn btn-sm btn-outline-info" onclick="viewLeaveTypeDetails('{{ addslashes($leaveType->name ?? '') }}', '{{ addslashes($leaveType->code ?? '') }}', {{ $leaveType->max_days_per_year ?? 0 }}, '{{ ($leaveType->carry_forward ?? 0) ? 'Yes' : 'No' }}', '{{ ($leaveType->requires_approval ?? 1) ? 'Yes' : 'No' }}')">
                         <i class="fas fa-eye"></i>
                       </button>
-                      <button class="btn btn-sm btn-outline-primary" onclick="editLeaveTypeForm({{ $leaveType->id }}, '{{ addslashes($leaveType->name ?? '') }}', '{{ addslashes($leaveType->code ?? '') }}', '{{ addslashes($leaveType->description ?? '') }}', {{ $leaveType->max_days_per_year ?? 0 }}, {{ ($leaveType->carry_forward ?? 0) ? 'true' : 'false' }}, {{ ($leaveType->requires_approval ?? 1) ? 'true' : 'false' }})">
+                      <button class="btn btn-sm btn-outline-primary" onclick="showAuthModal('edit', 'leave_type', {{ $leaveType->id }}, { name: '{{ addslashes($leaveType->name ?? '') }}', code: '{{ addslashes($leaveType->code ?? '') }}', description: '{{ addslashes($leaveType->description ?? '') }}', max_days: {{ $leaveType->max_days_per_year ?? 0 }}, carry_forward: {{ ($leaveType->carry_forward ?? 0) ? 'true' : 'false' }}, requires_approval: {{ ($leaveType->requires_approval ?? 1) ? 'true' : 'false' }} })">
                         <i class="fas fa-edit"></i>
                       </button>
-                      <form method="POST" action="{{ route('leave-types.destroy', $leaveType->id) }}" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this leave type?')">
-                        @csrf
-                        @method('DELETE')
-                        <button type="submit" class="btn btn-sm btn-outline-danger">
-                          <i class="fas fa-trash"></i>
-                        </button>
-                      </form>
+                      <button type="button" class="btn btn-sm btn-outline-danger" onclick="showAuthModal('delete', 'leave_type', {{ $leaveType->id }})">
+                        <i class="fas fa-trash"></i>
+                      </button>
                     </div>
                   @endif
                 </td>
@@ -278,29 +274,17 @@
                     <i class="fas fa-eye"></i>
                   </button>
                   @if($status === 'pending')
-                        <form method="POST" action="{{ route('leave-requests.approve', $leave->id) }}" style="display: inline;">
-                          @csrf
-                          @method('PATCH')
-                          <button type="submit" class="btn btn-sm btn-outline-success" title="Approve">
-                            <i class="fas fa-check"></i>
-                          </button>
-                        </form>
-                        <form method="POST" action="{{ route('leave-requests.reject', $leave->id) }}" style="display: inline;">
-                          @csrf
-                          @method('PATCH')
-                          <button type="submit" class="btn btn-sm btn-outline-warning" title="Reject">
-                            <i class="fas fa-times"></i>
-                          </button>
-                        </form>
+                        <button type="button" class="btn btn-sm btn-outline-success" title="Approve" onclick="showAuthModal('approve', 'leave_request', {{ $leave->id }})">
+                          <i class="fas fa-check"></i>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-warning" title="Reject" onclick="showAuthModal('reject', 'leave_request', {{ $leave->id }})">
+                          <i class="fas fa-times"></i>
+                        </button>
                         @endif
                         @if(isset($leave->id))
-                        <form method="POST" action="{{ route('leave-requests.destroy', $leave->id) }}" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this leave request?')">
-                          @csrf
-                          @method('DELETE')
-                          <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete">
-                            <i class="fas fa-trash"></i>
-                          </button>
-                        </form>
+                        <button type="button" class="btn btn-sm btn-outline-danger" title="Delete" onclick="showAuthModal('delete', 'leave_request', {{ $leave->id }})">
+                          <i class="fas fa-trash"></i>
+                        </button>
                         @endif
                 </div>
               </td>
@@ -421,6 +405,46 @@
                 <div class="working-modal-footer">
                     <button type="button" class="btn btn-secondary" onclick="closeWorkingModal('create-leave-request-modal')">Cancel</button>
                     <button type="submit" class="btn btn-primary">Submit Request</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- HR Authentication Modal -->
+<div class="working-modal" id="hr-auth-modal" style="display: none;">
+    <div class="working-modal-backdrop" onclick="closeWorkingModal('hr-auth-modal')"></div>
+    <div class="working-modal-dialog">
+        <div class="working-modal-content">
+            <div class="working-modal-header">
+                <h5 class="working-modal-title">HR Authorization Required</h5>
+                <button type="button" class="working-modal-close" onclick="closeWorkingModal('hr-auth-modal')">&times;</button>
+            </div>
+            <form id="hr-auth-form" method="POST">
+                @csrf
+                <div class="working-modal-body">
+                    <div class="alert alert-info mb-3">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>Authorization Required:</strong> Only HR Manager, System Administrator, HR Scheduler, Admin, or HR Administrator can perform this action.
+                    </div>
+                    <div class="mb-3">
+                        <label for="auth-email" class="form-label">Email Address</label>
+                        <input type="email" class="form-control" id="auth-email" name="email" required placeholder="Enter your email address">
+                    </div>
+                    <div class="mb-3">
+                        <label for="auth-password" class="form-label">Password</label>
+                        <input type="password" class="form-control" id="auth-password" name="password" required placeholder="Enter your password">
+                    </div>
+                    <input type="hidden" id="auth-action" name="action" value="">
+                    <input type="hidden" id="auth-type" name="type" value="">
+                    <input type="hidden" id="auth-item-id" name="item_id" value="">
+                    <input type="hidden" id="auth-extra-data" name="extra_data" value="">
+                </div>
+                <div class="working-modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeWorkingModal('hr-auth-modal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-lock me-2"></i>Authenticate & Proceed
+                    </button>
                 </div>
             </form>
         </div>
@@ -786,7 +810,31 @@ document.addEventListener('DOMContentLoaded', function() {
         statusFilter.addEventListener('change', filterLeaveRequests);
     }
 });
+
+// Check for session-based modal opening
+
+
+
+
+@if(session('show_edit_modal'))
+document.addEventListener('DOMContentLoaded', function() {
+    const editData = @json(session('edit_leave_type'));
+    if (editData) {
+        editLeaveTypeForm(
+            editData.id, 
+            editData.name || '', 
+            editData.code || '', 
+            editData.description || '', 
+            editData.max_days_per_year || 0, 
+            editData.carry_forward ? 'true' : 'false', 
+            editData.requires_approval ? 'true' : 'false'
+        );
+    }
+});
+@endif
 </script>
+
+
 @endpush
 
 @push('styles')
@@ -1415,5 +1463,180 @@ function scrollToLeaveRequests() {
     }, 2000);
   }
 }
+
+// HR Authentication Modal Functions
+function showAuthModal(action, type, itemId, extraData = null) {
+    // Set the form data
+    document.getElementById('auth-action').value = action;
+    document.getElementById('auth-type').value = type;
+    document.getElementById('auth-item-id').value = itemId;
+    document.getElementById('auth-extra-data').value = extraData ? JSON.stringify(extraData) : '';
+    
+    // Clear previous form data
+    document.getElementById('auth-email').value = '';
+    document.getElementById('auth-password').value = '';
+    
+    // Update modal title based on action
+    const modalTitle = document.querySelector('#hr-auth-modal .working-modal-title');
+    const actionText = {
+        'approve': 'Approve Leave Request',
+        'reject': 'Reject Leave Request', 
+        'delete': 'Delete Record',
+        'edit': 'Edit Record',
+        'create': type === 'leave_type' ? 'Create Leave Type' : 'Create Leave Request'
+    };
+    modalTitle.textContent = `HR Authorization Required - ${actionText[action] || 'Perform Action'}`;
+    
+    // Set form action URL based on type and action
+    const form = document.getElementById('hr-auth-form');
+    form.action = '/leave/hr-auth';
+    
+    // Show modal
+    openWorkingModal('hr-auth-modal');
+}
+
+// Handle HR authentication form submission
+document.addEventListener('DOMContentLoaded', function() {
+    const hrAuthForm = document.getElementById('hr-auth-form');
+    if (hrAuthForm) {
+        hrAuthForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            const submitBtn = this.querySelector('button[type="submit"]');
+            const originalText = submitBtn.innerHTML;
+            
+            // Show loading state
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Authenticating...';
+            
+            fetch('/leave/hr-auth', {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                }
+            })
+            .then(response => {
+                console.log('Response status:', response.status);
+                console.log('Response headers:', response.headers);
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    // Clear all modals first
+                    clearAllModals();
+                    
+                    // Show success message
+                    showAlert('success', data.message || 'Authentication successful!');
+                    
+                    // Get the action and type from the form
+                    const action = document.getElementById('auth-action').value;
+                    const type = document.getElementById('auth-type').value;
+                    const itemId = document.getElementById('auth-item-id').value;
+                    const extraData = document.getElementById('auth-extra-data').value;
+                    
+                    // Open the appropriate modal based on action and type
+                    setTimeout(() => {
+                        if (action === 'create' && type === 'leave_type') {
+                            openWorkingModal('create-leave-type-modal');
+                        } else if (action === 'create' && type === 'leave_request') {
+                            openWorkingModal('create-leave-request-modal');
+                        } else if (action === 'edit' && type === 'leave_type' && extraData) {
+                            const editData = JSON.parse(extraData);
+                            editLeaveTypeForm(itemId, editData.name, editData.code, editData.description, editData.max_days, editData.carry_forward, editData.requires_approval);
+                        } else {
+                            // For other actions, reload the page to see changes
+                            window.location.reload();
+                        }
+                    }, 500);
+                } else {
+                    showAlert('error', data.message || 'Authentication failed. Please check your credentials.');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showAlert('error', 'An error occurred. Please try again.');
+            })
+            .finally(() => {
+                // Reset button state
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalText;
+            });
+        });
+    }
+});
+
+// Helper function to clear all modal states
+function clearAllModals() {
+    const modals = document.querySelectorAll('.working-modal');
+    modals.forEach(modal => {
+        modal.style.display = 'none';
+        modal.classList.remove('show');
+    });
+    document.body.classList.remove('modal-open');
+    const backdrops = document.querySelectorAll('.modal-backdrop');
+    backdrops.forEach(backdrop => backdrop.remove());
+}
+
+// Helper function to show alerts
+function showAlert(type, message) {
+    const alertClass = type === 'success' ? 'alert-success' : 'alert-danger';
+    const iconClass = type === 'success' ? 'fa-check-circle' : 'fa-exclamation-triangle';
+    
+    const alertHtml = `
+        <div class="alert ${alertClass} alert-dismissible fade show" role="alert">
+            <i class="fas ${iconClass} me-2"></i>${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    `;
+    
+    // Insert alert at the top of the page
+    const pageHeader = document.querySelector('.page-header-container');
+    if (pageHeader) {
+        pageHeader.insertAdjacentHTML('afterend', alertHtml);
+        
+        // Auto-dismiss after 5 seconds
+        setTimeout(() => {
+            const alert = document.querySelector('.alert');
+            if (alert) {
+                alert.remove();
+            }
+        }, 5000);
+    }
+}
+
+// Check for session-based modal opening
+
+
+
+
+@if(session('show_edit_modal'))
+document.addEventListener('DOMContentLoaded', function() {
+    const editData = @json(session('edit_leave_type'));
+    if (editData) {
+        editLeaveTypeForm(
+            editData.id, 
+            editData.name || '', 
+            editData.code || '', 
+            editData.description || '', 
+            editData.max_days_per_year || 0, 
+            editData.carry_forward ? 'true' : 'false', 
+            editData.requires_approval ? 'true' : 'false'
+        );
+    }
+});
+@endif
 </script>
+
+
+
+
+
+
+
+
+
+
 

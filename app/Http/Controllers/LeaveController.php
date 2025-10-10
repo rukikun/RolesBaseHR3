@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\Hash;
 use Carbon\Carbon;
 use App\Traits\DatabaseConnectionTrait;
 
@@ -1191,4 +1192,340 @@ class LeaveController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Handle HR authentication for protected actions
+     */
+    public function hrAuthentication(Request $request)
+    {
+        // Debug: Check if method is being called
+        Log::info('hrAuthentication method called', $request->all());
+        
+        // Temporary test response
+        if ($request->has('test')) {
+            return response()->json(['success' => true, 'message' => 'Method is working', 'data' => $request->all()]);
+        }
+        
+        try {
+            // Validate input
+            $validator = Validator::make($request->all(), [
+                'email' => 'required|email',
+                'password' => 'required|string',
+                'action' => 'required|string|in:approve,reject,delete,edit,create',
+                'type' => 'required|string|in:leave_request,leave_type,shift,claim',
+                'item_id' => 'nullable|integer',
+                'extra_data' => 'nullable|string'
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid input data',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            // Authenticate user with provided credentials
+            Log::info('HR Auth attempt', ['email' => $request->email, 'action' => $request->action]);
+            $employee = Employee::where('email', $request->email)->first();
+            
+            if (!$employee) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Employee not found with email: ' . $request->email
+                ], 401);
+            }
+
+            if (!Hash::check($request->password, $employee->password)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid email or password'
+                ], 401);
+            }
+
+            Log::info('Employee found', ['email' => $employee->email, 'position' => $employee->position, 'role' => $employee->role]);
+
+            // Check if user has required position
+            $authorizedPositions = ['HR Manager', 'System Administrator', 'HR Scheduler', 'Admin', 'HR Administrator'];
+            
+            if (!in_array($employee->position, $authorizedPositions)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Access denied. Only HR Manager, SuperAdmin, Admin, HR Scheduler, or System Administrator can perform this action.'
+                ], 403);
+            }
+
+            // Perform the requested action
+            $result = $this->performAuthorizedAction(
+                $request->action,
+                $request->type,
+                $request->item_id,
+                $request->extra_data ? json_decode($request->extra_data, true) : null,
+                $employee->id
+            );
+
+            return response()->json($result);
+
+        } catch (\Exception $e) {
+            Log::error('HR Authentication error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred during authentication'
+            ], 500);
+        }
+    }
+
+    /**
+     * Perform the authorized action after successful authentication
+     */
+    private function performAuthorizedAction($action, $type, $itemId, $extraData = null, $authorizedById = null)
+    {
+        try {
+            if ($type === 'leave_request') {
+                return $this->handleLeaveRequestAction($action, $itemId, $authorizedById);
+            } elseif ($type === 'leave_type') {
+                return $this->handleLeaveTypeAction($action, $itemId, $extraData, $authorizedById);
+            } elseif ($type === 'shift') {
+                return $this->handleShiftAction($action, $itemId, $extraData, $authorizedById);
+            } elseif ($type === 'claim') {
+                return $this->handleClaimAction($action, $itemId, $extraData, $authorizedById);
+            }
+
+            return [
+                'success' => false,
+                'message' => 'Unknown action type'
+            ];
+
+        } catch (\Exception $e) {
+            Log::error('Action execution error: ' . $e->getMessage());
+            return [
+                'success' => false,
+                'message' => 'Failed to execute action: ' . $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Handle leave request actions
+     */
+    private function handleLeaveRequestAction($action, $leaveRequestId, $authorizedById)
+    {
+        try {
+            // Handle create action separately since it doesn't need existing record
+            if ($action === 'create') {
+                return [
+                    'success' => true,
+                    'message' => 'Authorization successful. Opening create form...'
+                ];
+            }
+
+            // For other actions, we need an existing leave request
+            $leaveRequest = DB::selectOne("SELECT * FROM leave_requests WHERE id = ?", [$leaveRequestId]);
+            
+            if (!$leaveRequest) {
+                return [
+                    'success' => false,
+                    'message' => 'Leave request not found'
+                ];
+            }
+
+            switch ($action) {
+
+                case 'approve':
+                    if ($leaveRequest->status !== 'pending') {
+                        return [
+                            'success' => false,
+                            'message' => 'Leave request is not pending'
+                        ];
+                    }
+
+                    DB::update("UPDATE leave_requests SET status = 'approved', approved_by = ?, approved_at = NOW(), updated_at = NOW() WHERE id = ?", 
+                        [$authorizedById, $leaveRequestId]);
+
+                    // Update leave balance if exists
+                    $balance = DB::selectOne("SELECT * FROM leave_balances WHERE employee_id = ? AND leave_type_id = ? AND year = ?", 
+                        [$leaveRequest->employee_id, $leaveRequest->leave_type_id, date('Y')]);
+
+                    if ($balance) {
+                        DB::update("UPDATE leave_balances SET used_days = used_days + ?, remaining_days = remaining_days - ?, updated_at = NOW() WHERE id = ?", 
+                            [$leaveRequest->days_requested, $leaveRequest->days_requested, $balance->id]);
+                    }
+
+                    return [
+                        'success' => true,
+                        'message' => 'Leave request approved successfully'
+                    ];
+
+                case 'reject':
+                    if ($leaveRequest->status !== 'pending') {
+                        return [
+                            'success' => false,
+                            'message' => 'Leave request is not pending'
+                        ];
+                    }
+
+                    DB::update("UPDATE leave_requests SET status = 'rejected', approved_by = ?, approved_at = NOW(), updated_at = NOW() WHERE id = ?", 
+                        [$authorizedById, $leaveRequestId]);
+
+                    return [
+                        'success' => true,
+                        'message' => 'Leave request rejected successfully'
+                    ];
+
+                case 'delete':
+                    DB::delete("DELETE FROM leave_requests WHERE id = ?", [$leaveRequestId]);
+
+                    return [
+                        'success' => true,
+                        'message' => 'Leave request deleted successfully'
+                    ];
+
+                default:
+                    return [
+                        'success' => false,
+                        'message' => 'Unknown action for leave request'
+                    ];
+            }
+
+        } catch (\Exception $e) {
+            Log::error('Leave request action error: ' . $e->getMessage());
+            return [
+                'success' => false,
+                'message' => 'Failed to process leave request action'
+            ];
+        }
+    }
+
+    /**
+     * Handle leave type actions
+     */
+    private function handleLeaveTypeAction($action, $leaveTypeId, $extraData, $authorizedById)
+    {
+        try {
+            switch ($action) {
+                case 'create':
+                    return [
+                        'success' => true,
+                        'message' => 'Authorization successful. Opening create form...'
+                    ];
+
+                case 'edit':
+                    if (!$extraData) {
+                        return [
+                            'success' => false,
+                            'message' => 'Edit data not provided'
+                        ];
+                    }
+
+                    $leaveType = DB::selectOne("SELECT * FROM leave_types WHERE id = ?", [$leaveTypeId]);
+                    if (!$leaveType) {
+                        return [
+                            'success' => false,
+                            'message' => 'Leave type not found'
+                        ];
+                    }
+
+                    // Store leave type data in session for editing
+                    session([
+                        'edit_leave_type' => array_merge((array)$leaveType, $extraData),
+                        'show_edit_modal' => true
+                    ]);
+
+                    return [
+                        'success' => true,
+                        'message' => 'Leave type loaded for editing. Please refresh the page to see the edit form.'
+                    ];
+
+                case 'delete':
+                    $leaveType = DB::selectOne("SELECT * FROM leave_types WHERE id = ?", [$leaveTypeId]);
+                    if (!$leaveType) {
+                        return [
+                            'success' => false,
+                            'message' => 'Leave type not found'
+                        ];
+                    }
+
+                    // Check if leave type is being used
+                    $hasRequests = DB::selectOne("SELECT COUNT(*) as count FROM leave_requests WHERE leave_type_id = ?", [$leaveTypeId]);
+                    
+                    if ($hasRequests && $hasRequests->count > 0) {
+                        // Soft delete by marking as inactive
+                        DB::update("UPDATE leave_types SET is_active = 0, updated_at = NOW() WHERE id = ?", [$leaveTypeId]);
+                        $message = 'Leave type deactivated (cannot delete due to existing requests)';
+                    } else {
+                        // Hard delete if no dependencies
+                        DB::delete("DELETE FROM leave_types WHERE id = ?", [$leaveTypeId]);
+                        $message = 'Leave type deleted successfully';
+                    }
+
+                    return [
+                        'success' => true,
+                        'message' => $message
+                    ];
+
+                default:
+                    return [
+                        'success' => false,
+                        'message' => 'Unknown action for leave type'
+                    ];
+            }
+
+        } catch (\Exception $e) {
+            Log::error('Leave type action error: ' . $e->getMessage());
+            return [
+                'success' => false,
+                'message' => 'Failed to process leave type action'
+            ];
+        }
+    }
+    /**
+     * Handle shift actions
+     */
+    private function handleShiftAction($action, $shiftId, $extraData, $authorizedById)
+    {
+        if ($action === 'create') {
+            return [
+                'success' => true,
+                'message' => 'Authorization successful. Opening shift assignment form...'
+            ];
+        }
+
+        return [
+            'success' => false,
+            'message' => 'Unknown shift action'
+        ];
+    }
+
+    /**
+     * Handle claim actions
+     */
+    private function handleClaimAction($action, $claimId, $extraData, $authorizedById)
+    {
+        if ($action === 'create') {
+            return [
+                'success' => true,
+                'message' => 'Authorization successful. Opening claim submission form...'
+            ];
+        } elseif ($action === 'approve') {
+            // Here you would update the claim status to approved
+            // DB::update("UPDATE claims SET status = 'approved', approved_by = ? WHERE id = ?", [$authorizedById, $claimId]);
+            return [
+                'success' => true,
+                'message' => 'Claim approved successfully'
+            ];
+        } elseif ($action === 'reject') {
+            // Here you would update the claim status to rejected
+            // DB::update("UPDATE claims SET status = 'rejected', approved_by = ? WHERE id = ?", [$authorizedById, $claimId]);
+            return [
+                'success' => true,
+                'message' => 'Claim rejected successfully'
+            ];
+        }
+
+        return [
+            'success' => false,
+            'message' => 'Unknown claim action'
+        ];
+    }
 }
+

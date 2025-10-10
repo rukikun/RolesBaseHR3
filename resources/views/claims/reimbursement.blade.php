@@ -108,10 +108,10 @@ $totalAmount = $totalAmount ?? 0;
     <div class="stat-card-modern">
       <div class="d-flex align-items-center">
         <div class="stat-icon-circle bg-info">
-          <i class="fas fa-dollar-sign text-white"></i>
+          <i class="fas fa-peso-sign text-white"></i>
         </div>
         <div class="ms-3">
-          <h3 class="fw-bold mb-0 stat-number">${{ number_format($totalAmount, 2) }}</h3>
+          <h3 class="fw-bold mb-0 stat-number">₱{{ number_format($totalAmount, 2) }}</h3>
           <p class="text-muted mb-0 small stat-label">Total Amount</p>
         </div>
       </div>
@@ -169,7 +169,7 @@ $totalAmount = $totalAmount ?? 0;
             <tr>
               <td>{{ $claimType->name ?? 'N/A' }}</td>
               <td><span class="badge bg-primary">{{ $claimType->code ?? 'N/A' }}</span></td>
-              <td>${{ number_format($claimType->max_amount ?? 0, 2) }}</td>
+              <td>₱{{ number_format($claimType->max_amount ?? 0, 2) }}</td>
               <td>
                 <span class="badge bg-{{ ($claimType->requires_attachment ?? 1) ? 'warning' : 'secondary' }}">
                   {{ ($claimType->requires_attachment ?? 1) ? 'Yes' : 'No' }}
@@ -261,7 +261,7 @@ $totalAmount = $totalAmount ?? 0;
             <tr>
               <td>{{ $claim->employee_name ?? 'Unknown Employee' }}</td>
               <td>{{ $claim->claim_type_name ?? 'Unknown Type' }}</td>
-              <td>${{ number_format($claim->amount ?? 0, 2) }}</td>
+              <td>₱{{ number_format($claim->amount ?? 0, 2) }}</td>
               <td>{{ isset($claim->claim_date) ? date('M d, Y', strtotime($claim->claim_date)) : 'N/A' }}</td>
               <td>{{ isset($claim->description) ? Str::limit($claim->description, 30) : 'N/A' }}</td>
               <td>
@@ -648,7 +648,7 @@ document.addEventListener('DOMContentLoaded', function() {
 function viewClaimTypeDetails(name, code, maxAmount, requiresAttachment, autoApprove) {
     document.getElementById('view-claim-type-name').textContent = name || 'N/A';
     document.getElementById('view-claim-type-code').textContent = code || 'N/A';
-    document.getElementById('view-claim-type-max-amount').textContent = maxAmount ? `$${parseFloat(maxAmount).toFixed(2)}` : 'No limit';
+    document.getElementById('view-claim-type-max-amount').textContent = maxAmount ? `₱${parseFloat(maxAmount).toFixed(2)}` : 'No limit';
     document.getElementById('view-claim-type-attachment').textContent = requiresAttachment || 'No';
     document.getElementById('view-claim-type-auto-approve').textContent = autoApprove || 'No';
     document.getElementById('view-claim-type-status').textContent = 'Active';
