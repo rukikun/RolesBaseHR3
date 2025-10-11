@@ -42,36 +42,19 @@ class AuthController extends Controller
                 ]);
             }
 
+            // Store email and remember me preference in session BEFORE logout
+            $request->session()->put('otp_email', $credentials['email']);
+            $request->session()->put('remember_me', $request->has('rememberMe'));
+            $request->session()->put('employee_name', $employee->first_name . ' ' . $employee->last_name);
+            
             // Logout immediately after credential verification (2FA required)
             Auth::guard('employee')->logout();
 
-            try {
-                // Generate OTP for 2FA
-                $otpRecord = OtpVerification::generateOtp($credentials['email']);
-                
-                // Get employee name for email
-                $userName = $employee->first_name . ' ' . $employee->last_name;
-                
-                // Send OTP email using PHPMailer
-                $phpMailer = new PHPMailerService();
-                $result = $phpMailer->sendOtpEmail($credentials['email'], $otpRecord->otp_code, $userName);
-                
-                if (!$result['success']) {
-                    throw new \Exception($result['message']);
-                }
-                
-                // Store email and remember me preference in session for OTP verification
-                $request->session()->put('otp_email', $credentials['email']);
-                $request->session()->put('remember_me', $request->has('rememberMe'));
-                
-                return redirect()->route('admin.otp.form')->with('success', 'Verification code sent to your email. Please check your inbox.');
-                
-            } catch (\Exception $e) {
-                \Log::error('2FA OTP generation failed: ' . $e->getMessage());
-                return back()->withErrors([
-                    'email' => 'Failed to send verification code. Please try again or contact support.',
-                ])->withInput($request->only('email'));
-            }
+            // Regenerate session to ensure it persists
+            $request->session()->regenerate();
+            
+            // Redirect to OTP form without sending email yet
+            return redirect()->route('admin.otp.form')->with('info', 'Please click "Send Verification Code" to receive your OTP.');
         }
 
         return back()->withErrors([

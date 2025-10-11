@@ -155,8 +155,22 @@
 
               <div class="text-center mb-4">
                 <i class="bi bi-shield-check" style="font-size: 3rem; color: var(--jetlouge-primary);"></i>
-                <p class="mt-3 mb-1">We've sent a verification code to:</p>
+                <p class="mt-3 mb-1">Verification required for:</p>
                 <strong>{{ session('otp_email', $email ?? '') }}</strong>
+                
+                @if(session('success'))
+                  <div class="alert alert-success mt-3" role="alert">
+                    <i class="bi bi-check-circle me-2"></i>
+                    Code sent to your email!
+                  </div>
+                @else
+                  <div class="mt-3">
+                    <button type="button" class="btn btn-login" onclick="sendInitialCode()" id="sendCodeBtn">
+                      <i class="bi bi-shield-check me-2"></i>
+                      Send Verification Code
+                    </button>
+                  </div>
+                @endif
               </div>
 
               <form method="POST" action="{{ route('admin.otp.verify') }}" id="otpForm">
@@ -398,6 +412,63 @@
         setTimeout(() => {
           resendLink.classList.remove('disabled');
         }, 30000);
+      });
+    }
+
+    // Send initial code function
+    function sendInitialCode() {
+      const sendBtn = document.getElementById('sendCodeBtn');
+      if (!sendBtn) return;
+
+      // Show loading state
+      sendBtn.innerHTML = '<i class="bi bi-arrow-clockwise me-2"></i>Sending...';
+      sendBtn.disabled = true;
+
+      // Make AJAX request to resend OTP (same endpoint)
+      fetch('{{ route("admin.otp.resend") }}', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '{{ csrf_token() }}'
+        },
+        body: JSON.stringify({
+          email: '{{ session("otp_email", $email ?? "") }}'
+        })
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          // Hide send button and show success message
+          sendBtn.style.display = 'none';
+          
+          // Show success message
+          const alertDiv = document.createElement('div');
+          alertDiv.className = 'alert alert-success mt-3';
+          alertDiv.innerHTML = `
+            <i class="bi bi-check-circle me-2"></i>
+            Code sent to your email!
+          `;
+          sendBtn.parentElement.appendChild(alertDiv);
+          
+          // Start countdown
+          countdown = 600;
+          document.getElementById('timer').textContent = '10:00';
+          document.getElementById('countdown').innerHTML = 'Code expires in <strong id="timer">10:00</strong>';
+          
+          // Focus first input
+          document.querySelectorAll('.otp-input')[0].focus();
+          
+        } else {
+          alert('Failed to send code. Please try again.');
+          sendBtn.innerHTML = '<i class="bi bi-envelope me-2"></i>Send Verification Code';
+          sendBtn.disabled = false;
+        }
+      })
+      .catch(error => {
+        console.error('Error:', error);
+        alert('Failed to send code. Please try again.');
+        sendBtn.innerHTML = '<i class="bi bi-envelope me-2"></i>Send Verification Code';
+        sendBtn.disabled = false;
       });
     }
   </script>
