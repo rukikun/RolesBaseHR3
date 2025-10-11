@@ -157,11 +157,11 @@
   <!-- Sidebar -->
   <aside id="sidebar" class="bg-white border-end p-3 shadow-sm">
     <!-- Profile Section -->
-    <div class="profile-section text-center">
+    <div class="profile-section text-center d-flex flex-column align-items-center">
       @if(Auth::user()->profile_picture_url)
-        <img src="{{ Auth::user()->profile_picture_url }}" alt="Profile" class="profile-img mb-2" style="object-fit: cover;">
+        <img src="{{ Auth::user()->profile_picture_url }}" alt="Profile" class="profile-img mb-2 mx-auto" style="width: 60px; height: 60px; border-radius: 50%; object-fit: cover; border: 3px solid #fff; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
       @else
-        <div class="profile-img mb-2 d-flex align-items-center justify-content-center" style="background: var(--jetlouge-primary); color: white; font-weight: bold; font-size: 2rem;">
+        <div class="profile-img mb-2 mx-auto d-flex align-items-center justify-content-center" style="width: 60px; height: 60px; border-radius: 50%; background: var(--jetlouge-primary); color: white; font-weight: bold; font-size: 18px; border: 3px solid #fff; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
           {{ Auth::user()->initials ?? 'A' }}
         </div>
       @endif

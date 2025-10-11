@@ -54,6 +54,7 @@ class Employee extends Authenticatable implements AuthenticatableContract
         'last_activity',
         'password',
         'profile_picture',
+        'profile_picture_url',
         'remember_token'
     ];
 
@@ -261,12 +262,22 @@ class Employee extends Authenticatable implements AuthenticatableContract
         return $this->first_name . ' ' . $this->last_name;
     }
 
-    // Get profile picture URL or generate initials
-    public function getProfilePictureUrlAttribute()
+    // Get profile picture URL - use the stored URL directly
+    public function getProfilePictureUrlAttribute($value)
     {
-        if ($this->profile_picture && file_exists(public_path('storage/' . $this->profile_picture))) {
-            return asset('storage/' . $this->profile_picture);
+        // If we have a stored profile_picture_url, return it
+        if ($value && file_exists(public_path($value))) {
+            return $value;
         }
+        
+        // Fallback to old profile_picture field for backward compatibility
+        if ($this->attributes['profile_picture'] ?? null) {
+            $oldPath = 'storage/' . $this->attributes['profile_picture'];
+            if (file_exists(public_path($oldPath))) {
+                return $oldPath;
+            }
+        }
+        
         return null;
     }
 

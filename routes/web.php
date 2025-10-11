@@ -44,52 +44,18 @@ use App\Http\Controllers\TimesheetManagementController;
 Route::get('/register', [RegisterController::class, 'showRegistrationForm'])->name('register');
 Route::post('/register', [RegisterController::class, 'register'])->name('register.store');
 
-// Email configuration test route
-Route::get('/test-email-config', function() {
-    ob_start();
-    include base_path('test_email_config.php');
-    $output = ob_get_clean();
-    return '<pre>' . htmlspecialchars($output) . '</pre>';
+// Profile picture upload page
+Route::middleware(['auth'])->group(function () {
+    Route::get('/admin/profile/upload-picture', function() {
+        return view('admin.profile.upload-profile-picture');
+    })->name('admin.profile.upload-picture');
 });
 
-// 2FA Debug route
-Route::get('/test-2fa-debug', function() {
-    ob_start();
-    include base_path('debug_2fa_login.php');
-    $output = ob_get_clean();
-    return '<pre>' . htmlspecialchars($output) . '</pre>';
-});
-
-// Employee credentials check
-Route::get('/check-employee-credentials', function() {
-    ob_start();
-    include base_path('check_employee_credentials.php');
-    $output = ob_get_clean();
-    return '<pre>' . htmlspecialchars($output) . '</pre>';
-});
-
-// Comprehensive 2FA test
-Route::get('/test-comprehensive-2fa', function() {
-    ob_start();
-    include base_path('comprehensive_2fa_test.php');
-    $output = ob_get_clean();
-    return '<pre>' . htmlspecialchars($output) . '</pre>';
-});
-
-// Production OTP test
-Route::get('/test-production-otp', function() {
-    ob_start();
-    include base_path('test_production_otp.php');
-    $output = ob_get_clean();
-    return '<pre>' . htmlspecialchars($output) . '</pre>';
-});
-
-// Simple server test
-Route::get('/simple-server-test', function() {
-    ob_start();
-    include base_path('simple_server_test.php');
-    $output = ob_get_clean();
-    return '<pre>' . htmlspecialchars($output) . '</pre>';
+// Profile picture API routes
+Route::middleware(['auth'])->group(function () {
+    Route::post('/api/profile-picture/upload', [App\Http\Controllers\ProfilePictureController::class, 'upload']);
+    Route::delete('/api/profile-picture/delete', [App\Http\Controllers\ProfilePictureController::class, 'delete']);
+    Route::get('/api/profile-picture/info', [App\Http\Controllers\ProfilePictureController.class, 'info']);
 });
 
 // Authentication routes for admin portal (uses 'users' table)
@@ -143,9 +109,6 @@ Route::get('/test-2fa', function() {
     return view('test.2fa-test');
 })->name('test.2fa');
 
-Route::get('/test-2fa-enabled', function() {
-    return response(file_get_contents(base_path('test_2fa_enabled.php')));
-})->name('test.2fa.enabled');
 
 Route::post('/test-send-otp', function(Illuminate\Http\Request $request) {
     try {
@@ -968,13 +931,6 @@ Route::get('/populate-dashboard', [DataSeederController::class, 'populateDashboa
 // Debug route to check shift data
 Route::get('/debug-shifts', [SystemDebugController::class, 'debugShifts'])->name('debug.shifts');
 
-// Complete workflow test route
-Route::get('/test-complete-workflow', function() {
-    ob_start();
-    include __DIR__ . '/../test_complete_workflow.php';
-    $output = ob_get_clean();
-    return response($output)->header('Content-Type', 'text/html');
-})->name('test.complete.workflow');
 
 // Quick test route to verify send to payroll functionality
 Route::get('/test-send-to-payroll', function() {
