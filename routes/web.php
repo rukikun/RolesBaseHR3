@@ -76,6 +76,14 @@ Route::get('/test-comprehensive-2fa', function() {
     return '<pre>' . htmlspecialchars($output) . '</pre>';
 });
 
+// Production OTP test
+Route::get('/test-production-otp', function() {
+    ob_start();
+    include base_path('test_production_otp.php');
+    $output = ob_get_clean();
+    return '<pre>' . htmlspecialchars($output) . '</pre>';
+});
+
 // Authentication routes for admin portal (uses 'users' table)
 Route::get('/admin/login', [AuthController::class, 'showLoginForm'])->name('admin.login');
 Route::post('/admin/login', [AuthController::class, 'login'])->name('admin.login.submit');

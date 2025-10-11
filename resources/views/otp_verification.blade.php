@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="csrf-token" content="{{ csrf_token() }}">
   <title>OTP Verification - Jetlouge Travels Admin</title>
   
   <!-- Favicon -->
@@ -435,8 +436,15 @@
           email: '{{ session("otp_email", $email ?? "") }}'
         })
       })
-      .then(response => response.json())
+      .then(response => {
+        console.log('Response status:', response.status);
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+      })
       .then(data => {
+        console.log('Response data:', data);
         if (data.success) {
           // Hide send button and show success message
           sendBtn.style.display = 'none';
@@ -459,15 +467,17 @@
           document.querySelectorAll('.otp-input')[0].focus();
           
         } else {
-          alert('Failed to send code. Please try again.');
-          sendBtn.innerHTML = '<i class="bi bi-envelope me-2"></i>Send Verification Code';
+          const errorMsg = data.message || 'Failed to send code. Please try again.';
+          console.error('Server error:', errorMsg);
+          alert('Error: ' + errorMsg);
+          sendBtn.innerHTML = '<i class="bi bi-shield-check me-2"></i>Send Verification Code';
           sendBtn.disabled = false;
         }
       })
       .catch(error => {
-        console.error('Error:', error);
-        alert('Failed to send code. Please try again.');
-        sendBtn.innerHTML = '<i class="bi bi-envelope me-2"></i>Send Verification Code';
+        console.error('Network/Parse error:', error);
+        alert('Network error: ' + error.message + '. Please check your connection and try again.');
+        sendBtn.innerHTML = '<i class="bi bi-shield-check me-2"></i>Send Verification Code';
         sendBtn.disabled = false;
       });
     }
