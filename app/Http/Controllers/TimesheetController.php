@@ -1043,6 +1043,123 @@ class TimesheetController extends Controller
     }
 
     /**
+     * Get AI timesheet data for modal (uses attendance database)
+     */
+    public function getAITimesheetForModal($employeeId)
+    {
+        try {
+            \Log::info('Getting AI timesheet for modal', ['employee_id' => $employeeId]);
+            
+            // Get employee from database using model
+            $employee = Employee::find($employeeId);
+            if (!$employee) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Employee not found'
+                ], 404);
+            }
+            
+            // Get current week start
+            $weekStart = Carbon::now()->startOfWeek(Carbon::MONDAY);
+            
+            // Check for existing AI timesheet first
+            $existingTimesheet = AIGeneratedTimesheet::where('employee_id', $employeeId)
+                ->where('week_start_date', $weekStart->format('Y-m-d'))
+                ->first();
+            
+            if ($existingTimesheet) {
+                \Log::info('Found existing AI timesheet', ['timesheet_id' => $existingTimesheet->id]);
+                return response()->json([
+                    'success' => true,
+                    'employee_id' => $employeeId,
+                    'employee_name' => $employee->first_name . ' ' . $employee->last_name,
+                    'department' => $employee->department ?? 'N/A',
+                    'week_start_date' => $existingTimesheet->week_start_date,
+                    'weekly_data' => json_decode($existingTimesheet->weekly_data, true),
+                    'total_hours' => $existingTimesheet->total_hours,
+                    'overtime_hours' => $existingTimesheet->overtime_hours,
+                    'ai_insights' => json_decode($existingTimesheet->ai_insights, true),
+                    'generated_at' => $existingTimesheet->generated_at
+                ]);
+            }
+            
+            // Generate fresh data from attendance database
+            $weeklyData = [];
+            $days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+            $totalHours = 0;
+            $overtimeHours = 0;
+            
+            // Use foreach to get attendance data for each day
+            foreach ($days as $index => $day) {
+                $dayDate = $weekStart->copy()->addDays($index);
+                
+                // Get attendance from database using model
+                $attendance = DB::table('attendances')
+                    ->where('employee_id', $employeeId)
+                    ->where('date', $dayDate->format('Y-m-d'))
+                    ->first();
+                
+                if ($attendance) {
+                    $clockIn = Carbon::parse($attendance->clock_in_time);
+                    $clockOut = Carbon::parse($attendance->clock_out_time);
+                    
+                    $weeklyData[$day] = [
+                        'date' => $dayDate->format('m/d/y'),
+                        'time_in' => $clockIn->format('g:i A'),
+                        'time_out' => $clockOut->format('g:i A'),
+                        'break' => '12:00 PM - 1:00 PM',
+                        'total_hours' => $attendance->total_hours . 'h',
+                        'overtime' => $attendance->overtime_hours > 0 ? $attendance->overtime_hours . 'h' : '--'
+                    ];
+                    
+                    $totalHours += floatval($attendance->total_hours);
+                    $overtimeHours += floatval($attendance->overtime_hours);
+                } else {
+                    $weeklyData[$day] = [
+                        'date' => $dayDate->format('m/d/y'),
+                        'time_in' => '--',
+                        'time_out' => '--',
+                        'break' => '--',
+                        'total_hours' => '--',
+                        'overtime' => '--'
+                    ];
+                }
+            }
+            
+            return response()->json([
+                'success' => true,
+                'employee_id' => $employeeId,
+                'employee_name' => $employee->first_name . ' ' . $employee->last_name,
+                'department' => $employee->department ?? 'N/A',
+                'week_start_date' => $weekStart->format('Y-m-d'),
+                'weekly_data' => $weeklyData,
+                'total_hours' => $totalHours,
+                'overtime_hours' => $overtimeHours,
+                'ai_insights' => [
+                    'message' => 'Generated from attendance database',
+                    'total_days_with_data' => count(array_filter($weeklyData, function($day) {
+                        return $day['time_in'] !== '--';
+                    })),
+                    'generation_method' => 'Direct attendance database query'
+                ],
+                'generated_at' => now()->format('Y-m-d H:i:s')
+            ]);
+            
+        } catch (Exception $e) {
+            \Log::error('Failed to get AI timesheet for modal', [
+                'employee_id' => $employeeId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to load timesheet data: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Generate AI timesheet for employee
      */
     public function generateAITimesheet($employeeId)
@@ -1057,76 +1174,105 @@ class TimesheetController extends Controller
                 ], 404);
             }
 
-            // Get current week start date
-            $weekStart = Carbon::now()->startOfWeek();
+            // Get current week start date (Monday)
+            $weekStart = Carbon::now()->startOfWeek(Carbon::MONDAY);
             
-            // Check if AI timesheet already exists for this week
-            $existingTimesheet = AIGeneratedTimesheet::where('employee_id', $employeeId)
-                ->where('week_start_date', $weekStart->format('Y-m-d'))
-                ->first();
-                
-            if ($existingTimesheet) {
-                return response()->json([
-                    'success' => true,
-                    'message' => 'AI timesheet already exists for this week',
-                    'timesheet_id' => $existingTimesheet->id,
-                    'data' => [
-                        'employee_id' => $existingTimesheet->employee_id,
-                        'employee_name' => $existingTimesheet->employee_name,
-                        'week_period' => $weekStart->format('M d') . ' - ' . $weekStart->copy()->endOfWeek()->format('M d, Y'),
-                        'weekly_data' => $existingTimesheet->weekly_data,
-                        'total_hours' => $existingTimesheet->total_hours,
-                        'overtime_hours' => $existingTimesheet->overtime_hours,
-                        'status' => $existingTimesheet->status,
-                        'ai_insights' => $existingTimesheet->ai_insights,
-                        'generated_at' => $existingTimesheet->generated_at
-                    ]
-                ]);
-            }
-
-            // Get employee's recent attendance data for AI analysis (including current week)
-            // Use the same week calculation as in generateWeeklySchedule
-            $weekStartForAttendance = Carbon::parse('2025-10-06')->startOfWeek(Carbon::MONDAY);
-            $recentAttendance = DB::table('attendances')
+            // Log generation start
+            \Log::info('Starting AI timesheet generation', [
+                'employee_id' => $employeeId,
+                'employee_name' => $employee->first_name . ' ' . $employee->last_name,
+                'week_start' => $weekStart->format('Y-m-d')
+            ]);
+            
+            // First, try to get ANY attendance data for this employee (expanded range)
+            $allAttendance = DB::table('attendances')
                 ->where('employee_id', $employeeId)
-                ->where('date', '>=', $weekStartForAttendance->copy()->subWeeks(2)->format('Y-m-d'))
-                ->where('date', '<=', $weekStartForAttendance->copy()->endOfWeek()->format('Y-m-d'))
                 ->orderBy('date', 'desc')
                 ->get();
-
-            // Generate AI-based weekly schedule
-            $weeklyData = $this->generateWeeklySchedule($employee, $recentAttendance);
             
-            // Calculate totals from actual attendance database values
+            // Log what we found
+            \Log::info('Attendance Data Search', [
+                'employee_id' => $employeeId,
+                'employee_name' => $employee->first_name . ' ' . $employee->last_name,
+                'current_week_start' => $weekStart->format('Y-m-d'),
+                'current_week_end' => $weekStart->copy()->endOfWeek()->format('Y-m-d'),
+                'total_attendance_records' => $allAttendance->count(),
+                'attendance_dates' => $allAttendance->pluck('date')->toArray(),
+                'latest_attendance' => $allAttendance->first()
+            ]);
+            
+            // Generate simple weekly data directly from attendance database
+            $weeklyData = [];
+            $days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
             $totalHours = 0;
             $overtimeHours = 0;
             
-            // Sum up the actual database values instead of parsing formatted strings
-            foreach ($recentAttendance as $attendance) {
-                $attendanceDate = Carbon::parse($attendance->date)->format('Y-m-d');
-                $weekStartFormatted = $weekStartForAttendance->format('Y-m-d');
-                $weekEndFormatted = $weekStartForAttendance->copy()->endOfWeek()->format('Y-m-d');
+            // Use foreach to process each day
+            foreach ($days as $index => $day) {
+                $dayDate = $weekStart->copy()->addDays($index);
                 
-                // Only include attendance from current week
-                if ($attendanceDate >= $weekStartFormatted && $attendanceDate <= $weekEndFormatted) {
-                    $totalHours += (float) $attendance->total_hours;
-                    $overtimeHours += (float) $attendance->overtime_hours;
+                // Get attendance for this specific day
+                $attendance = DB::table('attendances')
+                    ->where('employee_id', $employeeId)
+                    ->where('date', $dayDate->format('Y-m-d'))
+                    ->first();
+                
+                if ($attendance) {
+                    $clockIn = Carbon::parse($attendance->clock_in_time);
+                    $clockOut = Carbon::parse($attendance->clock_out_time);
+                    
+                    $weeklyData[$day] = [
+                        'date' => $dayDate->format('m/d/y'),
+                        'time_in' => $clockIn->format('g:i A'),
+                        'time_out' => $clockOut->format('g:i A'),
+                        'break' => '12:00 PM - 1:00 PM',
+                        'total_hours' => $attendance->total_hours . 'h',
+                        'overtime' => $attendance->overtime_hours > 0 ? $attendance->overtime_hours . 'h' : '--'
+                    ];
+                    
+                    $totalHours += floatval($attendance->total_hours);
+                    $overtimeHours += floatval($attendance->overtime_hours);
+                } else {
+                    $weeklyData[$day] = [
+                        'date' => $dayDate->format('m/d/y'),
+                        'time_in' => '--',
+                        'time_out' => '--',
+                        'break' => '--',
+                        'total_hours' => '--',
+                        'overtime' => '--'
+                    ];
                 }
             }
 
-            // Generate AI insights
-            $aiInsights = AIGeneratedTimesheet::generateInsights(
-                $totalHours, 
-                $overtimeHours, 
-                $employee, 
-                $weeklyData
-            );
+            // Simple AI insights
+            $aiInsights = [
+                'message' => 'Generated from attendance database using foreach loops',
+                'total_days_with_data' => count(array_filter($weeklyData, function($day) {
+                    return $day['time_in'] !== '--';
+                })),
+                'generation_method' => 'Direct database query'
+            ];
 
-            // DON'T create the AI timesheet record yet - only return the generated data
-            // The record will be created when user clicks "Save" button in the modal
+            // Save to database using AIGeneratedTimesheet model
+            $aiTimesheet = AIGeneratedTimesheet::create([
+                'employee_id' => $employeeId,
+                'week_start_date' => $weekStart->format('Y-m-d'),
+                'weekly_data' => json_encode($weeklyData),
+                'total_hours' => $totalHours,
+                'overtime_hours' => $overtimeHours,
+                'status' => 'pending',
+                'ai_insights' => json_encode($aiInsights),
+                'generated_at' => now()
+            ]);
+            
+            \Log::info('AI timesheet saved to database', [
+                'timesheet_id' => $aiTimesheet->id,
+                'employee_id' => $employeeId
+            ]);
+            
             return response()->json([
                 'success' => true,
-                'message' => 'AI timesheet generated successfully for ' . $employee->first_name . ' ' . $employee->last_name,
+                'message' => 'AI timesheet generated and saved successfully for ' . $employee->first_name . ' ' . $employee->last_name,
                 'employee_id' => $employeeId,
                 'employee_name' => $employee->first_name . ' ' . $employee->last_name,
                 'department' => $employee->department ?? 'General',
@@ -1136,7 +1282,8 @@ class TimesheetController extends Controller
                 'overtime_hours' => $overtimeHours,
                 'ai_insights' => $aiInsights,
                 'generated_at' => now()->format('Y-m-d H:i:s'),
-                'week_start_date' => $weekStart->format('Y-m-d')
+                'week_start_date' => $weekStart->format('Y-m-d'),
+                'timesheet_id' => $aiTimesheet->id
             ]);
 
         } catch (\Exception $e) {
@@ -1210,37 +1357,11 @@ class TimesheetController extends Controller
         $weeklyData = [];
         $days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
         
-        // Analyze attendance patterns
-        $avgClockIn = '09:00';
-        $avgClockOut = '17:00';
-        $standardHours = 8;
-        
-        if ($recentAttendance->count() > 0) {
-            // Calculate average times from recent attendance
-            $clockInTimes = [];
-            $clockOutTimes = [];
-            
-            foreach ($recentAttendance as $attendance) {
-                if ($attendance->clock_in_time) {
-                    $clockInTimes[] = Carbon::parse($attendance->clock_in_time)->format('H:i');
-                }
-                if ($attendance->clock_out_time) {
-                    $clockOutTimes[] = Carbon::parse($attendance->clock_out_time)->format('H:i');
-                }
-            }
-            
-            if (!empty($clockInTimes)) {
-                $avgClockIn = $this->calculateAverageTime($clockInTimes);
-            }
-            if (!empty($clockOutTimes)) {
-                $avgClockOut = $this->calculateAverageTime($clockOutTimes);
-            }
-        }
+        // NO AI GENERATION - Only use actual database records
 
         // Get current week start date for calculating actual dates
-        // For testing, let's use a specific date to ensure we get the right week
-        // Since we know the attendance data is for 2025-10-10 (Friday)
-        $weekStart = Carbon::parse('2025-10-06')->startOfWeek(Carbon::MONDAY); // This should make Friday = 2025-10-10
+        // Use dynamic current date to match actual attendance data
+        $weekStart = Carbon::now()->startOfWeek(Carbon::MONDAY);
         
         // Generate schedule for each day
         foreach ($days as $index => $day) {
@@ -1261,24 +1382,30 @@ class TimesheetController extends Controller
                 return $attendanceDate === $dateToCheck;
             })->first();
             
-            // Debug logging for Friday specifically
-            if ($day === 'Friday') {
-                \Log::info('Friday Debug - AI Timesheet Generation', [
-                    'employee_id' => $employee->id,
-                    'day_date' => $dayDate->format('Y-m-d'),
-                    'attendance_found' => $actualAttendance ? 'YES' : 'NO',
-                    'attendance_data' => $actualAttendance,
-                    'total_attendance_records' => $recentAttendance->count(),
-                    'attendance_dates' => $recentAttendance->pluck('date')->toArray(),
-                    'all_attendance_data' => $recentAttendance->toArray()
-                ]);
-            }
+            // Debug logging for all days to track attendance data retrieval
+            \Log::info('AI Timesheet Generation Debug', [
+                'employee_id' => $employee->id,
+                'employee_name' => $employee->first_name . ' ' . $employee->last_name,
+                'day' => $day,
+                'day_date' => $dayDate->format('Y-m-d'),
+                'attendance_found' => $actualAttendance ? 'YES' : 'NO',
+                'attendance_data' => $actualAttendance ? [
+                    'date' => $actualAttendance->date,
+                    'clock_in' => $actualAttendance->clock_in_time,
+                    'clock_out' => $actualAttendance->clock_out_time,
+                    'total_hours' => $actualAttendance->total_hours,
+                    'overtime_hours' => $actualAttendance->overtime_hours
+                ] : null,
+                'total_attendance_records' => $recentAttendance->count(),
+                'week_start' => $weekStart->format('Y-m-d'),
+                'week_end' => $weekStart->copy()->endOfWeek()->format('Y-m-d')
+            ]);
             
             if ($index < 5) { // Monday to Friday
-                if ($actualAttendance && $actualAttendance->clock_in_time && $actualAttendance->clock_out_time) {
-                    // Use actual attendance data from database columns
-                    $clockInTime = Carbon::parse($actualAttendance->clock_in_time);
-                    $clockOutTime = Carbon::parse($actualAttendance->clock_out_time);
+                if ($actualAttendance) {
+                    // Show attendance data if ANY attendance record exists for this day
+                    $clockInTime = $actualAttendance->clock_in_time ? Carbon::parse($actualAttendance->clock_in_time) : null;
+                    $clockOutTime = $actualAttendance->clock_out_time ? Carbon::parse($actualAttendance->clock_out_time) : null;
                     
                     // Use the total_hours and overtime_hours columns directly from database
                     $totalHoursDecimal = (float) $actualAttendance->total_hours;
@@ -1291,48 +1418,41 @@ class TimesheetController extends Controller
                     $overtimeHours = floor($overtimeHoursDecimal);
                     $overtimeMinutes = round(($overtimeHoursDecimal - $overtimeHours) * 60);
                     
+                    // Always show standard break time - don't depend on break records
+                    $breakTime = '12:00 PM - 1:00 PM'; // Standard lunch break
                     
-                    // Debug logging for Friday specifically
-                    if ($day === 'Friday') {
-                        \Log::info('Friday Database Values Debug', [
-                            'employee_id' => $actualAttendance->employee_id,
-                            'date' => $actualAttendance->date,
-                            'clock_in_raw' => $actualAttendance->clock_in_time,
-                            'clock_out_raw' => $actualAttendance->clock_out_time,
-                            'total_hours_db' => $actualAttendance->total_hours,
-                            'overtime_hours_db' => $actualAttendance->overtime_hours,
-                            'total_hours_decimal' => $totalHoursDecimal,
-                            'overtime_hours_decimal' => $overtimeHoursDecimal,
-                            'formatted_total' => $this->formatTimeDisplay($totalHours, $totalMinutes),
-                            'formatted_overtime' => $overtimeHoursDecimal > 0 ? $this->formatTimeDisplay($overtimeHours, $overtimeMinutes) : '--'
-                        ]);
+                    // If actual break times exist, use them instead
+                    if ($actualAttendance->break_start_time && $actualAttendance->break_end_time) {
+                        $breakStart = Carbon::parse($actualAttendance->break_start_time)->format('h:i A');
+                        $breakEnd = Carbon::parse($actualAttendance->break_end_time)->format('h:i A');
+                        $breakTime = $breakStart . ' - ' . $breakEnd;
                     }
                     
                     $weeklyData[$day] = [
-                        'date' => $dayDate->format('m/d/y'), // Use 10/07/25 format
-                        'time_in' => $clockInTime->format('h:i A'),
-                        'time_out' => $clockOutTime->format('h:i A'),
-                        'break' => '12:00 PM - 1:00 PM', // Show break only when there's attendance
-                        'total_hours' => $this->formatTimeDisplay($totalHours, $totalMinutes),
+                        'date' => $dayDate->format('m/d/y'),
+                        'time_in' => $clockInTime ? $clockInTime->format('h:i A') : '--',
+                        'time_out' => $clockOutTime ? $clockOutTime->format('h:i A') : '--',
+                        'break' => $breakTime,
+                        'total_hours' => $totalHoursDecimal > 0 ? $this->formatTimeDisplay($totalHours, $totalMinutes) : '--',
                         'overtime' => $overtimeHoursDecimal > 0 ? $this->formatTimeDisplay($overtimeHours, $overtimeMinutes) : '--',
-                        'clock_in' => $clockInTime->format('H:i'),
-                        'clock_out' => $clockOutTime->format('H:i'),
-                        'break_time' => '1 hour lunch',
-                        'notes' => 'Based on actual attendance from database (total_hours: ' . $totalHoursDecimal . ', overtime_hours: ' . $overtimeHoursDecimal . ')'
+                        'clock_in' => $clockInTime ? $clockInTime->format('H:i') : null,
+                        'clock_out' => $clockOutTime ? $clockOutTime->format('H:i') : null,
+                        'break_time' => $breakTime,
+                        'notes' => 'Attendance record found - showing available data'
                     ];
                 } else {
-                    // For days without attendance data, show date but no other data
+                    // No attendance data - show dashes
                     $weeklyData[$day] = [
-                        'date' => $dayDate->format('m/d/y'), // Still show date in 10/07/25 format
+                        'date' => $dayDate->format('m/d/y'),
                         'time_in' => '--',
                         'time_out' => '--',
-                        'break' => '--', // No break when no attendance
+                        'break' => '--',
                         'total_hours' => '--',
                         'overtime' => '--',
                         'clock_in' => null,
                         'clock_out' => null,
                         'break_time' => null,
-                        'notes' => 'No attendance data in database'
+                        'notes' => 'No attendance data found in database'
                     ];
                 }
             } else { // Weekend
@@ -1354,29 +1474,6 @@ class TimesheetController extends Controller
         return $weeklyData;
     }
 
-    /**
-     * Calculate average time from array of time strings
-     */
-    private function calculateAverageTime($times)
-    {
-        if (empty($times)) {
-            return '09:00';
-        }
-
-        $totalMinutes = 0;
-        $count = count($times);
-
-        foreach ($times as $time) {
-            $timeParts = explode(':', $time);
-            $totalMinutes += ($timeParts[0] * 60) + $timeParts[1];
-        }
-
-        $avgMinutes = $totalMinutes / $count;
-        $hours = floor($avgMinutes / 60);
-        $minutes = $avgMinutes % 60;
-
-        return sprintf('%02d:%02d', $hours, $minutes);
-    }
 
     /**
      * Format time display consistently as "Xh Ym" or "Xh" or "Ym"
@@ -1393,6 +1490,7 @@ class TimesheetController extends Controller
             return '0h';
         }
     }
+
 
     /**
      * Get latest AI timesheet for employee

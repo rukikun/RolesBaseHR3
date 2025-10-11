@@ -4782,28 +4782,24 @@ function generateAITimesheet(employeeId) {
     statusBadge.className = 'badge bg-generating ai-status-badge';
     statusBadge.innerHTML = '<i class="fas fa-cog fa-spin me-1"></i>Generating...';
     
-    // Make API call to generate AI timesheet with real attendance data
-    console.log('Making API call for employee:', employeeId);
-    fetch(`/api/ai-timesheets/generate/${employeeId}`, {
-        method: 'POST',
+    // Use simple working route for testing - uses attendance database
+    console.log('Generating AI timesheet using simple route for employee:', employeeId);
+    
+    fetch(`/simple-ai-timesheet/${employeeId}`, {
+        method: 'GET',
         headers: {
-            'Content-Type': 'application/json',
-            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
-            'Accept': 'application/json'
-        },
-        body: JSON.stringify({
-            week_start_date: null // Use current week
-        })
+            'Accept': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+        }
     })
     .then(response => {
-        console.log('API Response status:', response.status);
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
         return response.json();
     })
     .then(data => {
-        console.log('API Response data:', data);
+        console.log('Database Response data:', data);
         if (data.success) {
             // Store generated data in the correct format for the modal
             window.aiTimesheets = window.aiTimesheets || {};
@@ -4846,7 +4842,8 @@ function generateAITimesheet(employeeId) {
     .catch(error => {
         console.error('Error generating AI timesheet for employee', employeeId, ':', error);
         
-        // Reset UI on error
+        // Reset UI to allow retry
+        generateBtn.innerHTML = '<i class="fas fa-magic me-1"></i>Generate AI Timesheet';
         generateBtn.classList.remove('btn-loading');
         generateBtn.disabled = false;
         card.classList.remove('generating-ai');
@@ -4855,19 +4852,30 @@ function generateAITimesheet(employeeId) {
         statusBadge.innerHTML = '<i class="fas fa-exclamation-triangle me-1"></i>Error';
         statusBadge.title = 'Error: ' + error.message; // Add tooltip with error details
         
-        // Error state - user can try again by clicking the generate button
-        
         // More detailed error message
         let errorMsg = 'Failed to generate AI timesheet';
         if (error.message.includes('Employee not found')) {
             errorMsg = 'Employee data not found in database';
-        } else if (error.message.includes('network')) {
-            errorMsg = 'Network connection error';
+        } else if (error.message.includes('network') || error.message.includes('fetch')) {
+            errorMsg = 'Network connection error - check your internet connection';
         } else if (error.message.includes('500')) {
-            errorMsg = 'Server error - check logs';
+            errorMsg = 'Server error - please try again or contact support';
+        } else if (error.message.includes('404')) {
+            errorMsg = 'API endpoint not found - check route configuration';
+        } else if (error.message.includes('403') || error.message.includes('401')) {
+            errorMsg = 'Authentication error - please refresh the page';
         }
         
-        showAlert('error', errorMsg + ' for employee ' + employeeId);
+        // Show user-friendly error message
+        alert('⚠️ ' + errorMsg + '\n\nEmployee ID: ' + employeeId + '\nError: ' + error.message);
+        
+        // Log detailed error for debugging
+        console.log('Detailed error info:', {
+            employeeId: employeeId,
+            error: error,
+            stack: error.stack,
+            timestamp: new Date().toISOString()
+        });
     });
 }
 
@@ -5038,8 +5046,9 @@ function viewAITimesheet(employeeId) {
         }
     }
     
-    // If no cached data, try to fetch from API (for saved timesheets)
-    fetch(`/api/ai-timesheets/view/${employeeId}`, {
+    // If no cached data, fetch from attendance database directly
+    console.log('Fetching AI timesheet data from attendance database for employee:', employeeId);
+    fetch(`/ai-timesheet-modal/${employeeId}`, {
         method: 'GET',
         headers: {
             'Accept': 'application/json',

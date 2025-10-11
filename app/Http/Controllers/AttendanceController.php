@@ -209,8 +209,8 @@ class AttendanceController extends Controller
                     'id' => $attendance->id,
                     'employee_id' => $attendance->employee_id,
                     'clock_out_time' => $attendance->formatted_clock_out,
-                    'total_hours' => abs($attendance->total_hours), // Remove negative sign
-                    'overtime_hours' => abs($attendance->overtime_hours), // Remove negative sign
+                    'total_hours' => $attendance->total_hours, // Now always positive from model
+                    'overtime_hours' => $attendance->overtime_hours, // Now always positive from model
                     'status' => $attendance->status,
                 ]
             ]);
@@ -420,8 +420,8 @@ class AttendanceController extends Controller
                         'date' => $attendance->date->format('Y-m-d'),
                         'clock_in_time' => $attendance->formatted_clock_in,
                         'clock_out_time' => $attendance->formatted_clock_out,
-                        'total_hours' => $totalHours ? number_format(abs($totalHours), 2) : null, // Remove negative sign
-                        'overtime_hours' => $overtimeHours ? number_format(abs($overtimeHours), 2) : 0, // Remove negative sign
+                        'total_hours' => $totalHours ? number_format($totalHours, 2) : null, // Now always positive from model
+                        'overtime_hours' => $overtimeHours ? number_format($overtimeHours, 2) : 0, // Now always positive from model
                         'status' => $attendance->status,
                         'status_text' => ucfirst(str_replace('_', ' ', $attendance->status)),
                         'location' => $attendance->location,

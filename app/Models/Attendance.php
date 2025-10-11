@@ -104,17 +104,21 @@ class Attendance extends Model
             $clockOut->addDay();
         }
 
-        $totalMinutes = $clockOut->diffInMinutes($clockIn);
+        // Use absolute difference to ensure positive values
+        $totalMinutes = abs($clockOut->diffInMinutes($clockIn));
         
         // Subtract break time if available
         if ($this->break_start_time && $this->break_end_time) {
             $breakStart = Carbon::parse($this->break_start_time);
             $breakEnd = Carbon::parse($this->break_end_time);
-            $breakMinutes = $breakEnd->diffInMinutes($breakStart);
-            $totalMinutes -= $breakMinutes;
+            // Use absolute difference for break time as well
+            $breakMinutes = abs($breakEnd->diffInMinutes($breakStart));
+            $totalMinutes = max(0, $totalMinutes - $breakMinutes); // Ensure result is not negative
         }
 
-        return round($totalMinutes / 60, 2);
+        // Ensure minimum value is 0 and maximum reasonable value (24 hours)
+        $totalHours = round($totalMinutes / 60, 2);
+        return max(0, min($totalHours, 24));
     }
 
     public function calculateOvertimeHours()

@@ -892,8 +892,8 @@ function displayAttendanceLogs(logs) {
           ${log.total_hours ? `
             <div class="log-summary mt-2">
               <small class="text-muted">Total Time:</small>
-              <span class="fw-bold text-primary">${formatHoursToTime(Math.abs(parseFloat(log.total_hours)))}</span>
-              ${log.overtime_hours > 0 ? `<span class="text-warning ms-2">+${Math.abs(parseFloat(log.overtime_hours)).toFixed(2)} OT</span>` : ''}
+              <span class="fw-bold text-primary">${formatHoursToTime(parseFloat(log.total_hours))}</span>
+              ${log.overtime_hours > 0 ? `<span class="text-warning ms-2">+${parseFloat(log.overtime_hours).toFixed(2)} OT</span>` : ''}
             </div>
           ` : ''}
         </div>
@@ -1117,8 +1117,8 @@ function updateRecentTimeEntriesTable(entries) {
     entries.forEach(entry => {
       const totalHoursDisplay = entry.total_hours !== null ? 
         (entry.total_hours >= 8 ? 
-          `<span class="text-success fw-bold">${entry.formatted_total_time || Math.abs(parseFloat(entry.total_hours)).toFixed(2) + ' hrs'}</span>` : 
-          `<span class="text-muted">${entry.formatted_total_time || Math.abs(parseFloat(entry.total_hours)).toFixed(2) + ' hrs'}</span>`) : 
+          `<span class="text-success fw-bold">${entry.formatted_total_time || parseFloat(entry.total_hours).toFixed(2) + ' hrs'}</span>` : 
+          `<span class="text-muted">${entry.formatted_total_time || parseFloat(entry.total_hours).toFixed(2) + ' hrs'}</span>`) : 
         '<span class="text-muted">--</span>';
       
       const statusBadge = entry.status === 'success' ? 

@@ -3062,6 +3062,2143 @@ Route::get('/test-recent-entries', function() {
     }
 });
 
+// Fix negative attendance hours route
+Route::get('/fix-negative-attendance-hours', function() {
+    try {
+        // Find all attendance records with negative total_hours
+        $negativeRecords = \DB::table('attendances')
+            ->where('total_hours', '<', 0)
+            ->orWhere('overtime_hours', '<', 0)
+            ->get();
+
+        $results = [
+            'found_negative_records' => $negativeRecords->count(),
+            'fixed_records' => 0,
+            'errors' => 0,
+            'details' => []
+        ];
+
+        if ($negativeRecords->count() === 0) {
+            return response()->json([
+                'success' => true,
+                'message' => 'No negative hours found in database!',
+                'data' => $results
+            ]);
+        }
+
+        foreach ($negativeRecords as $record) {
+            try {
+                // Recalculate hours using the fixed logic
+                if ($record->clock_in_time && $record->clock_out_time) {
+                    $clockIn = \Carbon\Carbon::parse($record->clock_in_time);
+                    $clockOut = \Carbon\Carbon::parse($record->clock_out_time);
+                    
+                    // Handle overnight shifts
+                    if ($clockOut->lt($clockIn)) {
+                        $clockOut->addDay();
+                    }
+
+                    // Use absolute difference to ensure positive values
+                    $totalMinutes = abs($clockOut->diffInMinutes($clockIn));
+                    
+                    // Subtract break time if available
+                    if ($record->break_start_time && $record->break_end_time) {
+                        $breakStart = \Carbon\Carbon::parse($record->break_start_time);
+                        $breakEnd = \Carbon\Carbon::parse($record->break_end_time);
+                        $breakMinutes = abs($breakEnd->diffInMinutes($breakStart));
+                        $totalMinutes = max(0, $totalMinutes - $breakMinutes);
+                    }
+
+                    // Calculate new hours
+                    $newTotalHours = round($totalMinutes / 60, 2);
+                    $newTotalHours = max(0, min($newTotalHours, 24)); // Ensure reasonable bounds
+                    
+                    $newOvertimeHours = $newTotalHours > 8 ? $newTotalHours - 8 : 0;
+
+                    // Update the record
+                    \DB::table('attendances')
+                        ->where('id', $record->id)
+                        ->update([
+                            'total_hours' => $newTotalHours,
+                            'overtime_hours' => $newOvertimeHours,
+                            'updated_at' => now()
+                        ]);
+
+                    $results['fixed_records']++;
+                    $results['details'][] = [
+                        'id' => $record->id,
+                        'employee_id' => $record->employee_id,
+                        'date' => $record->date,
+                        'old_total_hours' => $record->total_hours,
+                        'new_total_hours' => $newTotalHours,
+                        'old_overtime_hours' => $record->overtime_hours,
+                        'new_overtime_hours' => $newOvertimeHours,
+                        'status' => 'fixed'
+                    ];
+                } else {
+                    $results['details'][] = [
+                        'id' => $record->id,
+                        'employee_id' => $record->employee_id,
+                        'date' => $record->date,
+                        'status' => 'skipped - missing clock times'
+                    ];
+                }
+
+            } catch (Exception $e) {
+                $results['errors']++;
+                $results['details'][] = [
+                    'id' => $record->id,
+                    'error' => $e->getMessage(),
+                    'status' => 'error'
+                ];
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => "Fixed {$results['fixed_records']} negative attendance records",
+            'data' => $results
+        ]);
+
+    } catch (Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Error fixing negative attendance hours: ' . $e->getMessage()
+        ], 500);
+    }
+});
+
+// Check attendance data for AI timesheet debugging
+Route::get('/check-attendance-data', function() {
+    try {
+        // Find employees Jane and Jonny
+        $employees = \DB::table('employees')
+            ->whereIn('first_name', ['Jane', 'Jonny'])
+            ->select('id', 'first_name', 'last_name')
+            ->get();
+
+        $results = [
+            'employees_found' => $employees->count(),
+            'employees' => [],
+            'attendance_data' => [],
+            'week_calculation' => [],
+            'current_week_data' => []
+        ];
+
+        foreach ($employees as $emp) {
+            $results['employees'][] = [
+                'id' => $emp->id,
+                'name' => $emp->first_name . ' ' . $emp->last_name
+            ];
+            
+            // Get all attendance records
+            $attendance = \DB::table('attendances')
+                ->where('employee_id', $emp->id)
+                ->orderBy('date', 'desc')
+                ->get();
+            
+            $results['attendance_data'][$emp->first_name] = [
+                'total_records' => $attendance->count(),
+                'records' => $attendance->map(function($att) {
+                    return [
+                        'date' => $att->date,
+                        'clock_in' => $att->clock_in_time,
+                        'clock_out' => $att->clock_out_time,
+                        'total_hours' => $att->total_hours,
+                        'overtime_hours' => $att->overtime_hours
+                    ];
+                })->toArray()
+            ];
+        }
+
+        // Check week calculation
+        $weekStart = \Carbon\Carbon::parse('2025-10-06')->startOfWeek(\Carbon\Carbon::MONDAY);
+        $results['week_calculation'] = [
+            'week_start' => $weekStart->format('Y-m-d'),
+            'week_end' => $weekStart->copy()->endOfWeek()->format('Y-m-d')
+        ];
+
+        // Check current week attendance
+        foreach ($employees as $emp) {
+            $weekAttendance = \DB::table('attendances')
+                ->where('employee_id', $emp->id)
+                ->where('date', '>=', $weekStart->format('Y-m-d'))
+                ->where('date', '<=', $weekStart->copy()->endOfWeek()->format('Y-m-d'))
+                ->orderBy('date', 'asc')
+                ->get();
+            
+            $results['current_week_data'][$emp->first_name] = [
+                'records_in_week' => $weekAttendance->count(),
+                'records' => $weekAttendance->map(function($att) {
+                    return [
+                        'date' => $att->date,
+                        'total_hours' => $att->total_hours,
+                        'overtime_hours' => $att->overtime_hours
+                    ];
+                })->toArray()
+            ];
+        }
+
+        return response()->json([
+            'success' => true,
+            'data' => $results
+        ]);
+
+    } catch (Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Error checking attendance data: ' . $e->getMessage()
+        ], 500);
+    }
+});
+
+// Test AI timesheet generation with actual attendance data
+Route::get('/test-ai-timesheet-data/{employeeId}', function($employeeId) {
+    try {
+        $controller = new \App\Http\Controllers\TimesheetController();
+        $response = $controller->generateAITimesheet($employeeId);
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'AI Timesheet generation test completed',
+            'controller_response' => $response->getData(),
+            'test_info' => [
+                'employee_id' => $employeeId,
+                'test_purpose' => 'Verify AI timesheet pulls actual attendance data from database',
+                'expected_behavior' => 'Should show real attendance records, not predictions'
+            ]
+        ]);
+        
+    } catch (Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Test failed: ' . $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ], 500);
+    }
+});
+
+// Test break column fix for AI timesheet
+Route::get('/test-break-column-fix', function() {
+    try {
+        // Get all employees with any attendance data
+        $employeesWithAttendance = \DB::table('attendances')
+            ->join('employees', 'attendances.employee_id', '=', 'employees.id')
+            ->select('employees.id', 'employees.first_name', 'employees.last_name', 
+                    'attendances.date', 'attendances.clock_in_time', 'attendances.clock_out_time',
+                    'attendances.break_start_time', 'attendances.break_end_time', 'attendances.total_hours')
+            ->orderBy('employees.first_name')
+            ->get();
+
+        $results = [
+            'total_attendance_records' => $employeesWithAttendance->count(),
+            'employees_tested' => [],
+            'break_column_analysis' => []
+        ];
+
+        // Group by employee
+        $employeeGroups = $employeesWithAttendance->groupBy('id');
+        
+        foreach ($employeeGroups as $employeeId => $records) {
+            $employee = $records->first();
+            $results['employees_tested'][] = [
+                'id' => $employeeId,
+                'name' => $employee->first_name . ' ' . $employee->last_name,
+                'attendance_records' => $records->count()
+            ];
+
+            // Test AI timesheet generation for this employee
+            try {
+                $controller = new \App\Http\Controllers\TimesheetController();
+                $response = $controller->generateAITimesheet($employeeId);
+                $data = $response->getData();
+                
+                if ($data->success) {
+                    $weeklyData = $data->weekly_data;
+                    $hasDataShowing = false;
+                    
+                    foreach ($weeklyData as $day => $dayData) {
+                        if ($dayData->time_in !== '--' || $dayData->time_out !== '--') {
+                            $hasDataShowing = true;
+                            break;
+                        }
+                    }
+                    
+                    $results['break_column_analysis'][] = [
+                        'employee_id' => $employeeId,
+                        'employee_name' => $employee->first_name . ' ' . $employee->last_name,
+                        'has_attendance_data' => true,
+                        'timesheet_shows_data' => $hasDataShowing,
+                        'total_hours' => $data->total_hours,
+                        'sample_day_data' => isset($weeklyData->Monday) ? $weeklyData->Monday : null
+                    ];
+                }
+            } catch (Exception $e) {
+                $results['break_column_analysis'][] = [
+                    'employee_id' => $employeeId,
+                    'employee_name' => $employee->first_name . ' ' . $employee->last_name,
+                    'error' => $e->getMessage()
+                ];
+            }
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Break column fix test completed',
+            'data' => $results
+        ]);
+
+    } catch (Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Test failed: ' . $e->getMessage()
+        ], 500);
+    }
+});
+
+// Debug attendance data for specific employees
+Route::get('/debug-attendance/{employeeName?}', function($employeeName = null) {
+    try {
+        $results = [];
+        
+        if ($employeeName) {
+            // Check specific employee
+            $employee = \DB::table('employees')
+                ->where('first_name', 'like', '%' . $employeeName . '%')
+                ->orWhere('last_name', 'like', '%' . $employeeName . '%')
+                ->first();
+        } else {
+            // Check all employees with attendance
+            $employees = \DB::table('employees')
+                ->join('attendances', 'employees.id', '=', 'attendances.employee_id')
+                ->select('employees.*')
+                ->distinct()
+                ->get();
+            
+            foreach ($employees as $emp) {
+                $attendance = \DB::table('attendances')
+                    ->where('employee_id', $emp->id)
+                    ->orderBy('date', 'desc')
+                    ->get();
+                
+                $results[] = [
+                    'employee_id' => $emp->id,
+                    'name' => $emp->first_name . ' ' . $emp->last_name,
+                    'department' => $emp->department,
+                    'attendance_count' => $attendance->count(),
+                    'latest_dates' => $attendance->take(5)->pluck('date')->toArray(),
+                    'sample_record' => $attendance->first()
+                ];
+            }
+        }
+        
+        // Check date calculations
+        $currentDate = now()->format('Y-m-d');
+        $hardcodedDate = '2025-10-06';
+        $currentWeekStart = \Carbon\Carbon::now()->startOfWeek(\Carbon\Carbon::MONDAY)->format('Y-m-d');
+        $currentWeekEnd = \Carbon\Carbon::now()->endOfWeek()->format('Y-m-d');
+        $hardcodedWeekStart = \Carbon\Carbon::parse($hardcodedDate)->startOfWeek(\Carbon\Carbon::MONDAY)->format('Y-m-d');
+        $hardcodedWeekEnd = \Carbon\Carbon::parse($hardcodedDate)->endOfWeek()->format('Y-m-d');
+        
+        return response()->json([
+            'success' => true,
+            'current_date' => $currentDate,
+            'date_analysis' => [
+                'current_week' => ['start' => $currentWeekStart, 'end' => $currentWeekEnd],
+                'hardcoded_week' => ['start' => $hardcodedWeekStart, 'end' => $hardcodedWeekEnd],
+                'date_mismatch' => $currentDate !== $hardcodedDate
+            ],
+            'employees_with_attendance' => $results,
+            'total_attendance_records' => \DB::table('attendances')->count()
+        ]);
+        
+    } catch (Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Debug failed: ' . $e->getMessage()
+        ], 500);
+    }
+});
+
+// Test specific employee AI timesheet generation
+Route::get('/test-employee-timesheet/{employeeName}', function($employeeName) {
+    try {
+        // Find the employee
+        $employee = \DB::table('employees')
+            ->where('first_name', 'like', '%' . $employeeName . '%')
+            ->orWhere('last_name', 'like', '%' . $employeeName . '%')
+            ->first();
+            
+        if (!$employee) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Employee not found: ' . $employeeName
+            ], 404);
+        }
+        
+        // Get all attendance data for this employee
+        $allAttendance = \DB::table('attendances')
+            ->where('employee_id', $employee->id)
+            ->orderBy('date', 'desc')
+            ->get();
+        
+        // Test AI timesheet generation
+        $controller = new \App\Http\Controllers\TimesheetController();
+        $response = $controller->generateAITimesheet($employee->id);
+        $timesheetData = $response->getData();
+        
+        return response()->json([
+            'success' => true,
+            'employee' => [
+                'id' => $employee->id,
+                'name' => $employee->first_name . ' ' . $employee->last_name,
+                'department' => $employee->department
+            ],
+            'attendance_analysis' => [
+                'total_records' => $allAttendance->count(),
+                'date_range' => [
+                    'earliest' => $allAttendance->last()->date ?? null,
+                    'latest' => $allAttendance->first()->date ?? null
+                ],
+                'sample_records' => $allAttendance->take(3)->toArray()
+            ],
+            'current_week' => [
+                'start' => \Carbon\Carbon::now()->startOfWeek(\Carbon\Carbon::MONDAY)->format('Y-m-d'),
+                'end' => \Carbon\Carbon::now()->endOfWeek()->format('Y-m-d')
+            ],
+            'ai_timesheet_result' => $timesheetData,
+            'weekly_data_preview' => isset($timesheetData->weekly_data) ? $timesheetData->weekly_data : null
+        ]);
+        
+    } catch (Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Test failed: ' . $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ], 500);
+    }
+});
+
+// Create sample attendance data for testing
+Route::get('/create-sample-attendance/{employeeName}', function($employeeName) {
+    try {
+        // Find the employee
+        $employee = \DB::table('employees')
+            ->where('first_name', 'like', '%' . $employeeName . '%')
+            ->orWhere('last_name', 'like', '%' . $employeeName . '%')
+            ->first();
+            
+        if (!$employee) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Employee not found: ' . $employeeName
+            ], 404);
+        }
+        
+        // Get current week dates
+        $weekStart = \Carbon\Carbon::now()->startOfWeek(\Carbon\Carbon::MONDAY);
+        $createdRecords = [];
+        
+        // Create attendance records for Monday to Friday of current week
+        for ($i = 0; $i < 5; $i++) {
+            $date = $weekStart->copy()->addDays($i);
+            
+            // Check if record already exists
+            $existing = \DB::table('attendances')
+                ->where('employee_id', $employee->id)
+                ->where('date', $date->format('Y-m-d'))
+                ->first();
+                
+            if (!$existing) {
+                // Create realistic attendance record
+                $clockIn = $date->copy()->setTime(8 + rand(0, 2), rand(0, 59)); // 8-10 AM
+                $clockOut = $clockIn->copy()->addHours(8)->addMinutes(rand(0, 120)); // 8+ hours later
+                $breakStart = $clockIn->copy()->addHours(4); // 4 hours after start
+                $breakEnd = $breakStart->copy()->addHour(); // 1 hour break
+                
+                // Calculate total hours (excluding break)
+                $totalMinutes = $clockOut->diffInMinutes($clockIn) - 60; // minus 1 hour break
+                $totalHours = round($totalMinutes / 60, 2);
+                $overtimeHours = max(0, $totalHours - 8);
+                
+                $attendanceId = \DB::table('attendances')->insertGetId([
+                    'employee_id' => $employee->id,
+                    'date' => $date->format('Y-m-d'),
+                    'clock_in_time' => $clockIn->format('H:i:s'),
+                    'clock_out_time' => $clockOut->format('H:i:s'),
+                    'break_start_time' => $breakStart->format('H:i:s'),
+                    'break_end_time' => $breakEnd->format('H:i:s'),
+                    'total_hours' => $totalHours,
+                    'overtime_hours' => $overtimeHours,
+                    'status' => 'present',
+                    'created_at' => now(),
+                    'updated_at' => now()
+                ]);
+                
+                $createdRecords[] = [
+                    'id' => $attendanceId,
+                    'date' => $date->format('Y-m-d'),
+                    'clock_in' => $clockIn->format('H:i:s'),
+                    'clock_out' => $clockOut->format('H:i:s'),
+                    'total_hours' => $totalHours,
+                    'overtime_hours' => $overtimeHours
+                ];
+            }
+        }
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'Sample attendance data created for ' . $employee->first_name . ' ' . $employee->last_name,
+            'employee' => [
+                'id' => $employee->id,
+                'name' => $employee->first_name . ' ' . $employee->last_name
+            ],
+            'current_week' => [
+                'start' => $weekStart->format('Y-m-d'),
+                'end' => $weekStart->copy()->endOfWeek()->format('Y-m-d')
+            ],
+            'created_records' => $createdRecords,
+            'total_created' => count($createdRecords)
+        ]);
+        
+    } catch (Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Failed to create sample data: ' . $e->getMessage()
+        ], 500);
+    }
+});
+
+// Comprehensive AI Timesheet Diagnostic Tool
+Route::get('/diagnose-timesheet-issue', function() {
+    try {
+        $results = [];
+        
+        // 1. Check if Jonny Duyanon exists
+        $results['step1'] = 'Checking employee data';
+        $jonny = \DB::table('employees')
+            ->where('first_name', 'Jonny')
+            ->where('last_name', 'Duyanon')
+            ->first();
+        
+        if (!$jonny) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Jonny Duyanon not found in employees table',
+                'results' => $results
+            ]);
+        }
+        
+        $results['employee'] = [
+            'id' => $jonny->id,
+            'name' => $jonny->first_name . ' ' . $jonny->last_name,
+            'department' => $jonny->department
+        ];
+        
+        // 2. Check ALL attendance data for Jonny
+        $results['step2'] = 'Checking all attendance data';
+        $allAttendance = \DB::table('attendances')
+            ->where('employee_id', $jonny->id)
+            ->orderBy('date', 'desc')
+            ->get();
+        
+        $results['attendance_summary'] = [
+            'total_records' => $allAttendance->count(),
+            'latest_records' => $allAttendance->take(5)->map(function($att) {
+                return [
+                    'date' => $att->date,
+                    'clock_in' => $att->clock_in_time,
+                    'clock_out' => $att->clock_out_time,
+                    'total_hours' => $att->total_hours
+                ];
+            })->toArray()
+        ];
+        
+        // 3. Check current week calculation
+        $results['step3'] = 'Checking current week calculation';
+        $currentDate = \Carbon\Carbon::now();
+        $weekStart = \Carbon\Carbon::now()->startOfWeek(\Carbon\Carbon::MONDAY);
+        $weekEnd = $weekStart->copy()->endOfWeek();
+        
+        $results['date_calculation'] = [
+            'current_date' => $currentDate->format('Y-m-d H:i:s'),
+            'week_start' => $weekStart->format('Y-m-d'),
+            'week_end' => $weekEnd->format('Y-m-d')
+        ];
+        
+        // 4. Check attendance in current week
+        $results['step4'] = 'Checking current week attendance';
+        $currentWeekAttendance = \DB::table('attendances')
+            ->where('employee_id', $jonny->id)
+            ->where('date', '>=', $weekStart->format('Y-m-d'))
+            ->where('date', '<=', $weekEnd->format('Y-m-d'))
+            ->orderBy('date', 'asc')
+            ->get();
+        
+        $results['current_week_attendance'] = [
+            'records_count' => $currentWeekAttendance->count(),
+            'records' => $currentWeekAttendance->map(function($att) {
+                return [
+                    'date' => $att->date,
+                    'clock_in' => $att->clock_in_time,
+                    'clock_out' => $att->clock_out_time,
+                    'total_hours' => $att->total_hours
+                ];
+            })->toArray()
+        ];
+        
+        // 5. Test AI timesheet generation
+        $results['step5'] = 'Testing AI timesheet generation';
+        try {
+            $controller = new \App\Http\Controllers\TimesheetController();
+            $response = $controller->generateAITimesheet($jonny->id);
+            $timesheetData = $response->getData();
+            
+            $results['ai_timesheet_test'] = [
+                'success' => $timesheetData->success ?? false,
+                'message' => $timesheetData->message ?? 'No message',
+                'has_weekly_data' => isset($timesheetData->weekly_data),
+                'weekly_data_sample' => isset($timesheetData->weekly_data) ? 
+                    (array)$timesheetData->weekly_data : null,
+                'total_hours' => $timesheetData->total_hours ?? 0,
+                'overtime_hours' => $timesheetData->overtime_hours ?? 0
+            ];
+        } catch (Exception $e) {
+            $results['ai_timesheet_test'] = [
+                'success' => false,
+                'error' => $e->getMessage()
+            ];
+        }
+        
+        // 6. Create sample data if needed
+        $results['step6'] = 'Sample data creation';
+        if ($allAttendance->count() === 0) {
+            $createdRecords = [];
+            
+            for ($i = 0; $i < 5; $i++) {
+                $date = $weekStart->copy()->addDays($i);
+                
+                $clockIn = $date->copy()->setTime(8 + rand(0, 1), rand(0, 59));
+                $clockOut = $clockIn->copy()->addHours(8)->addMinutes(rand(30, 90));
+                $breakStart = $clockIn->copy()->addHours(4);
+                $breakEnd = $breakStart->copy()->addHour();
+                
+                $totalMinutes = $clockOut->diffInMinutes($clockIn) - 60;
+                $totalHours = round($totalMinutes / 60, 2);
+                $overtimeHours = max(0, $totalHours - 8);
+                
+                $attendanceId = \DB::table('attendances')->insertGetId([
+                    'employee_id' => $jonny->id,
+                    'date' => $date->format('Y-m-d'),
+                    'clock_in_time' => $clockIn->format('H:i:s'),
+                    'clock_out_time' => $clockOut->format('H:i:s'),
+                    'break_start_time' => $breakStart->format('H:i:s'),
+                    'break_end_time' => $breakEnd->format('H:i:s'),
+                    'total_hours' => $totalHours,
+                    'overtime_hours' => $overtimeHours,
+                    'status' => 'present',
+                    'created_at' => now(),
+                    'updated_at' => now()
+                ]);
+                
+                $createdRecords[] = [
+                    'id' => $attendanceId,
+                    'date' => $date->format('Y-m-d'),
+                    'clock_in' => $clockIn->format('H:i'),
+                    'clock_out' => $clockOut->format('H:i'),
+                    'total_hours' => $totalHours
+                ];
+            }
+            
+            $results['sample_data_created'] = [
+                'created' => true,
+                'records' => $createdRecords
+            ];
+        } else {
+            $results['sample_data_created'] = [
+                'created' => false,
+                'reason' => 'Attendance data already exists'
+            ];
+        }
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'Diagnostic complete',
+            'results' => $results,
+            'recommendation' => $allAttendance->count() === 0 ? 
+                'No attendance data found. Sample data has been created. Try generating AI timesheet again.' :
+                'Attendance data exists. Check the AI timesheet generation results above.'
+        ]);
+        
+    } catch (Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Diagnostic failed: ' . $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ], 500);
+    }
+});
+
+// Analyze which employees have attendance data vs which don't
+Route::get('/analyze-employee-attendance-data', function() {
+    try {
+        // Get all employees
+        $allEmployees = \DB::table('employees')
+            ->select('id', 'first_name', 'last_name', 'department', 'position')
+            ->orderBy('first_name')
+            ->get();
+        
+        $currentWeekStart = \Carbon\Carbon::now()->startOfWeek(\Carbon\Carbon::MONDAY);
+        $currentWeekEnd = $currentWeekStart->copy()->endOfWeek();
+        
+        $employeesWithData = [];
+        $employeesWithoutData = [];
+        $attendanceStats = [];
+        
+        foreach ($allEmployees as $employee) {
+            // Check all attendance records for this employee
+            $allAttendance = \DB::table('attendances')
+                ->where('employee_id', $employee->id)
+                ->orderBy('date', 'desc')
+                ->get();
+            
+            // Check current week attendance
+            $currentWeekAttendance = \DB::table('attendances')
+                ->where('employee_id', $employee->id)
+                ->where('date', '>=', $currentWeekStart->format('Y-m-d'))
+                ->where('date', '<=', $currentWeekEnd->format('Y-m-d'))
+                ->get();
+            
+            $employeeData = [
+                'id' => $employee->id,
+                'name' => $employee->first_name . ' ' . $employee->last_name,
+                'department' => $employee->department,
+                'position' => $employee->position,
+                'total_attendance_records' => $allAttendance->count(),
+                'current_week_records' => $currentWeekAttendance->count(),
+                'latest_attendance_date' => $allAttendance->first()->date ?? null,
+                'date_range' => [
+                    'earliest' => $allAttendance->last()->date ?? null,
+                    'latest' => $allAttendance->first()->date ?? null
+                ],
+                'sample_records' => $allAttendance->take(3)->map(function($att) {
+                    return [
+                        'date' => $att->date,
+                        'clock_in' => $att->clock_in_time,
+                        'clock_out' => $att->clock_out_time,
+                        'total_hours' => $att->total_hours
+                    ];
+                })->toArray()
+            ];
+            
+            if ($allAttendance->count() > 0) {
+                $employeesWithData[] = $employeeData;
+            } else {
+                $employeesWithoutData[] = $employeeData;
+            }
+            
+            $attendanceStats[] = $employeeData;
+        }
+        
+        // Test AI timesheet generation for employees with and without data
+        $testResults = [];
+        
+        // Test Mike Johnson (who has data)
+        $mike = \DB::table('employees')
+            ->where('first_name', 'Mike')
+            ->where('last_name', 'Johnson')
+            ->first();
+        
+        if ($mike) {
+            try {
+                $controller = new \App\Http\Controllers\TimesheetController();
+                $response = $controller->generateAITimesheet($mike->id);
+                $data = $response->getData();
+                
+                $testResults['mike_johnson'] = [
+                    'employee_name' => 'Mike Johnson',
+                    'has_attendance_data' => true,
+                    'ai_generation_success' => $data->success ?? false,
+                    'weekly_data_preview' => isset($data->weekly_data) ? 
+                        array_slice((array)$data->weekly_data, 0, 2) : null,
+                    'total_hours' => $data->total_hours ?? 0
+                ];
+            } catch (Exception $e) {
+                $testResults['mike_johnson'] = [
+                    'employee_name' => 'Mike Johnson',
+                    'error' => $e->getMessage()
+                ];
+            }
+        }
+        
+        // Test Jonny Duyanon (who doesn't have data)
+        $jonny = \DB::table('employees')
+            ->where('first_name', 'Jonny')
+            ->where('last_name', 'Duyanon')
+            ->first();
+        
+        if ($jonny) {
+            try {
+                $controller = new \App\Http\Controllers\TimesheetController();
+                $response = $controller->generateAITimesheet($jonny->id);
+                $data = $response->getData();
+                
+                $testResults['jonny_duyanon'] = [
+                    'employee_name' => 'Jonny Duyanon',
+                    'has_attendance_data' => false,
+                    'ai_generation_success' => $data->success ?? false,
+                    'weekly_data_preview' => isset($data->weekly_data) ? 
+                        array_slice((array)$data->weekly_data, 0, 2) : null,
+                    'total_hours' => $data->total_hours ?? 0
+                ];
+            } catch (Exception $e) {
+                $testResults['jonny_duyanon'] = [
+                    'employee_name' => 'Jonny Duyanon',
+                    'error' => $e->getMessage()
+                ];
+            }
+        }
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'Employee attendance data analysis complete',
+            'summary' => [
+                'total_employees' => $allEmployees->count(),
+                'employees_with_attendance_data' => count($employeesWithData),
+                'employees_without_attendance_data' => count($employeesWithoutData),
+                'current_week' => [
+                    'start' => $currentWeekStart->format('Y-m-d'),
+                    'end' => $currentWeekEnd->format('Y-m-d')
+                ]
+            ],
+            'employees_with_data' => $employeesWithData,
+            'employees_without_data' => $employeesWithoutData,
+            'ai_timesheet_tests' => $testResults,
+            'conclusion' => [
+                'issue_identified' => 'Some employees have attendance records while others do not',
+                'mike_johnson_works_because' => 'He has actual attendance data in the database',
+                'others_show_dashes_because' => 'They have no attendance records to display',
+                'solution' => 'Create attendance data for employees without records, or modify system to handle missing data differently'
+            ]
+        ]);
+        
+    } catch (Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Analysis failed: ' . $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ], 500);
+    }
+});
+
+// Bulk create attendance data for employees without records
+Route::get('/create-bulk-attendance-data', function() {
+    try {
+        // Get all employees without attendance data
+        $allEmployees = \DB::table('employees')->get();
+        $currentWeekStart = \Carbon\Carbon::now()->startOfWeek(\Carbon\Carbon::MONDAY);
+        
+        $employeesProcessed = [];
+        $totalRecordsCreated = 0;
+        
+        foreach ($allEmployees as $employee) {
+            // Check if employee has any attendance data
+            $existingAttendance = \DB::table('attendances')
+                ->where('employee_id', $employee->id)
+                ->count();
+            
+            if ($existingAttendance === 0) {
+                // Create attendance records for current week (Monday to Friday)
+                $createdRecords = [];
+                
+                for ($i = 0; $i < 5; $i++) {
+                    $date = $currentWeekStart->copy()->addDays($i);
+                    
+                    // Create realistic attendance based on department
+                    $baseClockIn = match($employee->department) {
+                        'IT' => 8.5,
+                        'Marketing' => 9.0,
+                        'Human Resources' => 8.75,
+                        'Finance' => 8.5,
+                        'Operations' => 8.0,
+                        default => 8.5
+                    };
+                    
+                    $clockIn = $date->copy()->setTime(
+                        floor($baseClockIn), 
+                        ($baseClockIn - floor($baseClockIn)) * 60 + rand(-15, 15)
+                    );
+                    
+                    // Work 8-9 hours
+                    $workHours = 8 + (rand(0, 120) / 60); // 8.0 to 10.0 hours
+                    $clockOut = $clockIn->copy()->addHours($workHours)->addHour(); // +1 for lunch
+                    
+                    // Standard lunch break
+                    $breakStart = $clockIn->copy()->addHours(4);
+                    $breakEnd = $breakStart->copy()->addHour();
+                    
+                    $totalHours = round($workHours, 2);
+                    $overtimeHours = max(0, $totalHours - 8);
+                    
+                    $attendanceId = \DB::table('attendances')->insertGetId([
+                        'employee_id' => $employee->id,
+                        'date' => $date->format('Y-m-d'),
+                        'clock_in_time' => $clockIn->format('H:i:s'),
+                        'clock_out_time' => $clockOut->format('H:i:s'),
+                        'break_start_time' => $breakStart->format('H:i:s'),
+                        'break_end_time' => $breakEnd->format('H:i:s'),
+                        'total_hours' => $totalHours,
+                        'overtime_hours' => $overtimeHours,
+                        'status' => 'present',
+                        'created_at' => now(),
+                        'updated_at' => now()
+                    ]);
+                    
+                    $createdRecords[] = [
+                        'date' => $date->format('Y-m-d'),
+                        'clock_in' => $clockIn->format('H:i'),
+                        'clock_out' => $clockOut->format('H:i'),
+                        'total_hours' => $totalHours
+                    ];
+                    
+                    $totalRecordsCreated++;
+                }
+                
+                $employeesProcessed[] = [
+                    'id' => $employee->id,
+                    'name' => $employee->first_name . ' ' . $employee->last_name,
+                    'department' => $employee->department,
+                    'records_created' => count($createdRecords),
+                    'sample_records' => $createdRecords
+                ];
+            }
+        }
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'Bulk attendance data creation complete',
+            'summary' => [
+                'total_employees_processed' => count($employeesProcessed),
+                'total_attendance_records_created' => $totalRecordsCreated,
+                'current_week' => [
+                    'start' => $currentWeekStart->format('Y-m-d'),
+                    'end' => $currentWeekStart->copy()->endOfWeek()->format('Y-m-d')
+                ]
+            ],
+            'employees_processed' => $employeesProcessed,
+            'next_steps' => [
+                'step1' => 'All employees now have attendance data for current week',
+                'step2' => 'Try generating AI timesheets in the UI',
+                'step3' => 'All employees should now show actual data instead of dashes'
+            ]
+        ]);
+        
+    } catch (Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Bulk creation failed: ' . $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ], 500);
+    }
+});
+
+// Specific check for John Doe's data vs what's showing in modal
+Route::get('/check-john-doe-data', function() {
+    try {
+        // Find John Doe
+        $johnDoe = \DB::table('employees')
+            ->where('first_name', 'John')
+            ->where('last_name', 'Doe')
+            ->first();
+            
+        if (!$johnDoe) {
+            return response()->json([
+                'success' => false,
+                'message' => 'John Doe not found in employees table'
+            ]);
+        }
+        
+        // Get ALL his attendance data
+        $allAttendance = \DB::table('attendances')
+            ->where('employee_id', $johnDoe->id)
+            ->orderBy('date', 'desc')
+            ->get();
+        
+        // Get current week attendance
+        $currentWeekStart = \Carbon\Carbon::now()->startOfWeek(\Carbon\Carbon::MONDAY);
+        $currentWeekEnd = $currentWeekStart->copy()->endOfWeek();
+        
+        $currentWeekAttendance = \DB::table('attendances')
+            ->where('employee_id', $johnDoe->id)
+            ->where('date', '>=', $currentWeekStart->format('Y-m-d'))
+            ->where('date', '<=', $currentWeekEnd->format('Y-m-d'))
+            ->orderBy('date', 'asc')
+            ->get();
+        
+        // Test the AI timesheet generation for John Doe
+        $controller = new \App\Http\Controllers\TimesheetController();
+        $response = $controller->generateAITimesheet($johnDoe->id);
+        $aiData = $response->getData();
+        
+        // Extract the specific times shown in the modal
+        $modalTimes = [];
+        if (isset($aiData->weekly_data)) {
+            foreach ($aiData->weekly_data as $day => $dayData) {
+                if ($dayData->time_in !== '--') {
+                    $modalTimes[$day] = [
+                        'date' => $dayData->date,
+                        'time_in' => $dayData->time_in,
+                        'time_out' => $dayData->time_out,
+                        'total_hours' => $dayData->total_hours,
+                        'overtime' => $dayData->overtime
+                    ];
+                }
+            }
+        }
+        
+        return response()->json([
+            'success' => true,
+            'john_doe_analysis' => [
+                'employee_info' => [
+                    'id' => $johnDoe->id,
+                    'name' => $johnDoe->first_name . ' ' . $johnDoe->last_name,
+                    'department' => $johnDoe->department
+                ],
+                'database_attendance' => [
+                    'total_records' => $allAttendance->count(),
+                    'current_week_records' => $currentWeekAttendance->count(),
+                    'all_records' => $allAttendance->map(function($att) {
+                        return [
+                            'date' => $att->date,
+                            'clock_in' => $att->clock_in_time,
+                            'clock_out' => $att->clock_out_time,
+                            'total_hours' => $att->total_hours,
+                            'overtime_hours' => $att->overtime_hours
+                        ];
+                    })->toArray(),
+                    'current_week_records_detail' => $currentWeekAttendance->map(function($att) {
+                        return [
+                            'date' => $att->date,
+                            'clock_in' => $att->clock_in_time,
+                            'clock_out' => $att->clock_out_time,
+                            'total_hours' => $att->total_hours,
+                            'overtime_hours' => $att->overtime_hours
+                        ];
+                    })->toArray()
+                ],
+                'ai_timesheet_generation' => [
+                    'success' => $aiData->success ?? false,
+                    'message' => $aiData->message ?? 'No message',
+                    'total_hours' => $aiData->total_hours ?? 0,
+                    'overtime_hours' => $aiData->overtime_hours ?? 0
+                ],
+                'modal_times_shown' => $modalTimes,
+                'week_calculation' => [
+                    'current_week_start' => $currentWeekStart->format('Y-m-d'),
+                    'current_week_end' => $currentWeekEnd->format('Y-m-d')
+                ],
+                'conclusion' => [
+                    'has_database_records' => $allAttendance->count() > 0,
+                    'has_current_week_records' => $currentWeekAttendance->count() > 0,
+                    'data_source' => $allAttendance->count() > 0 ? 'Database attendance records' : 'Generated/Hardcoded data',
+                    'explanation' => $allAttendance->count() > 0 ? 
+                        'John Doe shows data because he has actual attendance records in the database' :
+                        'John Doe shows data but has no database records - this indicates hardcoded/generated data'
+                ]
+            ]
+        ]);
+        
+    } catch (Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Analysis failed: ' . $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ], 500);
+    }
+});
+
+// Verify Jane Smith shows only database records (no AI generation)
+Route::get('/verify-jane-smith-data', function() {
+    try {
+        // Find Jane Smith (employee_id: 2 based on database image)
+        $janeSmith = \DB::table('employees')
+            ->where('id', 2)
+            ->first();
+            
+        if (!$janeSmith) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Jane Smith (ID: 2) not found in employees table'
+            ]);
+        }
+        
+        // Get her actual attendance data
+        $allAttendance = \DB::table('attendances')
+            ->where('employee_id', 2)
+            ->orderBy('date', 'desc')
+            ->get();
+        
+        // Get current week attendance
+        $currentWeekStart = \Carbon\Carbon::now()->startOfWeek(\Carbon\Carbon::MONDAY);
+        $currentWeekEnd = $currentWeekStart->copy()->endOfWeek();
+        
+        $currentWeekAttendance = \DB::table('attendances')
+            ->where('employee_id', 2)
+            ->where('date', '>=', $currentWeekStart->format('Y-m-d'))
+            ->where('date', '<=', $currentWeekEnd->format('Y-m-d'))
+            ->orderBy('date', 'asc')
+            ->get();
+        
+        // Test AI timesheet generation
+        $controller = new \App\Http\Controllers\TimesheetController();
+        $response = $controller->generateAITimesheet(2);
+        $aiData = $response->getData();
+        
+        // Count days with data in modal
+        $modalDaysWithData = 0;
+        $modalData = [];
+        if (isset($aiData->weekly_data)) {
+            foreach ($aiData->weekly_data as $day => $dayData) {
+                if ($dayData->time_in !== '--') {
+                    $modalDaysWithData++;
+                    $modalData[$day] = [
+                        'date' => $dayData->date,
+                        'time_in' => $dayData->time_in,
+                        'time_out' => $dayData->time_out,
+                        'total_hours' => $dayData->total_hours
+                    ];
+                }
+            }
+        }
+        
+        return response()->json([
+            'success' => true,
+            'jane_smith_verification' => [
+                'employee_info' => [
+                    'id' => $janeSmith->id,
+                    'name' => $janeSmith->first_name . ' ' . $janeSmith->last_name,
+                    'department' => $janeSmith->department
+                ],
+                'database_records' => [
+                    'total_attendance_records' => $allAttendance->count(),
+                    'current_week_records' => $currentWeekAttendance->count(),
+                    'actual_records' => $allAttendance->map(function($att) {
+                        return [
+                            'date' => $att->date,
+                            'clock_in' => $att->clock_in_time,
+                            'clock_out' => $att->clock_out_time,
+                            'total_hours' => $att->total_hours
+                        ];
+                    })->toArray()
+                ],
+                'modal_display' => [
+                    'days_with_data_in_modal' => $modalDaysWithData,
+                    'modal_data' => $modalData
+                ],
+                'verification_result' => [
+                    'database_records_count' => $allAttendance->count(),
+                    'modal_records_count' => $modalDaysWithData,
+                    'match' => $allAttendance->count() === $modalDaysWithData,
+                    'status' => $allAttendance->count() === $modalDaysWithData ? 
+                        '✅ CORRECT: Modal shows only database records' : 
+                        '❌ ISSUE: Modal shows more data than database (' . $modalDaysWithData . ' vs ' . $allAttendance->count() . ')',
+                    'ai_generation_removed' => $allAttendance->count() === $modalDaysWithData ? 
+                        'Yes - No extra data generated' : 
+                        'No - Still generating extra data'
+                ]
+            ]
+        ]);
+        
+    } catch (Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Verification failed: ' . $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ], 500);
+    }
+});
+
+// EMERGENCY: Investigate why modal shows data when attendance table is empty
+Route::get('/emergency-debug-attendance', function() {
+    try {
+        // 1. Check if attendance table exists and is empty
+        $attendanceCount = \DB::table('attendances')->count();
+        $allAttendances = \DB::table('attendances')->get();
+        
+        // 2. Check if there are other attendance-related tables
+        $tables = \DB::select('SHOW TABLES');
+        $attendanceTables = [];
+        foreach ($tables as $table) {
+            $tableName = array_values((array)$table)[0];
+            if (strpos(strtolower($tableName), 'attendance') !== false) {
+                $attendanceTables[] = [
+                    'table_name' => $tableName,
+                    'row_count' => \DB::table($tableName)->count()
+                ];
+            }
+        }
+        
+        // 3. Find John Doe
+        $johnDoe = \DB::table('employees')
+            ->where('first_name', 'John')
+            ->where('last_name', 'Doe')
+            ->first();
+        
+        // 4. Test the controller method directly with logging
+        $controllerOutput = null;
+        $controllerError = null;
+        
+        if ($johnDoe) {
+            try {
+                // Enable query logging
+                \DB::enableQueryLog();
+                
+                $controller = new \App\Http\Controllers\TimesheetController();
+                $response = $controller->generateAITimesheet($johnDoe->id);
+                $controllerOutput = $response->getData();
+                
+                // Get executed queries
+                $queries = \DB::getQueryLog();
+                
+                $controllerOutput->executed_queries = $queries;
+                
+            } catch (Exception $e) {
+                $controllerError = $e->getMessage();
+            }
+        }
+        
+        // 5. Check if there's cached data or sessions
+        $cacheKeys = [];
+        try {
+            // Check if there's any cached timesheet data
+            if (function_exists('cache')) {
+                // This is a basic check - Laravel cache keys are hard to enumerate
+                $cacheKeys[] = 'Checking cache is complex - may need manual inspection';
+            }
+        } catch (Exception $e) {
+            $cacheKeys[] = 'Cache check failed: ' . $e->getMessage();
+        }
+        
+        // 6. Check the actual generateWeeklySchedule method
+        $weeklyScheduleTest = null;
+        if ($johnDoe) {
+            try {
+                $controller = new \App\Http\Controllers\TimesheetController();
+                $reflection = new ReflectionClass($controller);
+                $method = $reflection->getMethod('generateWeeklySchedule');
+                $method->setAccessible(true);
+                
+                $employee = \App\Models\Employee::find($johnDoe->id);
+                $emptyAttendance = collect([]); // Empty collection
+                
+                $weeklyScheduleTest = $method->invoke($controller, $employee, $emptyAttendance);
+                
+            } catch (Exception $e) {
+                $weeklyScheduleTest = 'Error: ' . $e->getMessage();
+            }
+        }
+        
+        return response()->json([
+            'success' => true,
+            'emergency_debug' => [
+                'attendance_table_status' => [
+                    'total_rows' => $attendanceCount,
+                    'is_empty' => $attendanceCount === 0,
+                    'sample_data' => $allAttendances->take(3)->toArray()
+                ],
+                'all_attendance_tables' => $attendanceTables,
+                'john_doe_info' => $johnDoe ? [
+                    'id' => $johnDoe->id,
+                    'name' => $johnDoe->first_name . ' ' . $johnDoe->last_name
+                ] : 'Not found',
+                'controller_test' => [
+                    'output' => $controllerOutput,
+                    'error' => $controllerError
+                ],
+                'weekly_schedule_with_empty_data' => $weeklyScheduleTest,
+                'cache_check' => $cacheKeys,
+                'conclusion' => [
+                    'database_empty' => $attendanceCount === 0,
+                    'modal_shows_data' => 'Based on your screenshot - YES',
+                    'problem' => $attendanceCount === 0 ? 
+                        'CONFIRMED: Database is empty but modal shows data - there is hardcoded/cached data somewhere' :
+                        'Database has data - need to check if controller is using it correctly'
+                ]
+            ]
+        ]);
+        
+    } catch (Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Emergency debug failed: ' . $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ], 500);
+    }
+});
+
+// Check if data is coming from ai_generated_timesheets table instead of attendances
+Route::get('/check-ai-timesheets-table', function() {
+    try {
+        // Check ai_generated_timesheets table
+        $aiTimesheets = \DB::table('ai_generated_timesheets')->get();
+        
+        // Check for John Doe specifically
+        $johnDoe = \DB::table('employees')
+            ->where('first_name', 'John')
+            ->where('last_name', 'Doe')
+            ->first();
+        
+        $johnDoeAITimesheets = [];
+        if ($johnDoe) {
+            $johnDoeAITimesheets = \DB::table('ai_generated_timesheets')
+                ->where('employee_id', $johnDoe->id)
+                ->get();
+        }
+        
+        // Check what the controller actually returns
+        $controllerTest = null;
+        if ($johnDoe) {
+            try {
+                $controller = new \App\Http\Controllers\TimesheetController();
+                $response = $controller->generateAITimesheet($johnDoe->id);
+                $controllerTest = $response->getData();
+            } catch (Exception $e) {
+                $controllerTest = 'Error: ' . $e->getMessage();
+            }
+        }
+        
+        return response()->json([
+            'success' => true,
+            'investigation' => [
+                'attendances_table' => [
+                    'total_rows' => \DB::table('attendances')->count(),
+                    'is_empty' => \DB::table('attendances')->count() === 0
+                ],
+                'ai_generated_timesheets_table' => [
+                    'total_rows' => $aiTimesheets->count(),
+                    'all_records' => $aiTimesheets->toArray(),
+                    'john_doe_records' => $johnDoeAITimesheets->toArray()
+                ],
+                'john_doe_info' => $johnDoe ? [
+                    'id' => $johnDoe->id,
+                    'name' => $johnDoe->first_name . ' ' . $johnDoe->last_name
+                ] : 'Not found',
+                'controller_output' => $controllerTest,
+                'conclusion' => [
+                    'attendances_empty' => \DB::table('attendances')->count() === 0,
+                    'ai_timesheets_exist' => $aiTimesheets->count() > 0,
+                    'likely_source' => $aiTimesheets->count() > 0 ? 
+                        'Data is coming from ai_generated_timesheets table, not attendances' :
+                        'Unknown source - need further investigation'
+                ]
+            ]
+        ]);
+        
+    } catch (Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Investigation failed: ' . $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ], 500);
+    }
+});
+
+// SOLUTION: Clear cached AI timesheets to force fresh generation from attendances table
+Route::get('/clear-ai-timesheets-cache', function() {
+    try {
+        // Get count before clearing
+        $beforeCount = \DB::table('ai_generated_timesheets')->count();
+        $allRecords = \DB::table('ai_generated_timesheets')->get();
+        
+        // Clear all AI generated timesheets
+        \DB::table('ai_generated_timesheets')->truncate();
+        
+        // Verify it's cleared
+        $afterCount = \DB::table('ai_generated_timesheets')->count();
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'AI timesheets cache cleared successfully',
+            'results' => [
+                'records_before_clearing' => $beforeCount,
+                'records_after_clearing' => $afterCount,
+                'cleared_records_preview' => $allRecords->take(5)->toArray(),
+                'cache_cleared' => $afterCount === 0,
+                'next_steps' => [
+                    'step1' => 'Cache has been cleared',
+                    'step2' => 'Now try generating AI timesheet for John Doe in the UI',
+                    'step3' => 'It should show dashes (--) since attendances table is empty',
+                    'step4' => 'No more fake cached data will be returned'
+                ]
+            ]
+        ]);
+        
+    } catch (Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Failed to clear cache: ' . $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ], 500);
+    }
+});
+
+// Simple test route to verify AI timesheet generation works
+Route::get('/test-generate-ai/{employeeId}', function($employeeId) {
+    try {
+        \Log::info('Testing AI timesheet generation for employee: ' . $employeeId);
+        
+        $controller = new \App\Http\Controllers\TimesheetController();
+        $response = $controller->generateAITimesheet($employeeId);
+        
+        \Log::info('AI timesheet generation response', [
+            'status_code' => $response->getStatusCode(),
+            'content' => $response->getContent()
+        ]);
+        
+        return $response;
+        
+    } catch (Exception $e) {
+        \Log::error('AI timesheet generation failed', [
+            'employee_id' => $employeeId,
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+        
+        return response()->json([
+            'success' => false,
+            'message' => 'Generation failed: ' . $e->getMessage(),
+            'employee_id' => $employeeId,
+            'debug_info' => [
+                'error_type' => get_class($e),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ]
+        ], 500);
+    }
+});
+
+// Backup route for AI timesheet generation (in case API route fails)
+Route::post('/generate-ai-timesheet-backup/{employeeId}', function($employeeId) {
+    try {
+        \Log::info('Backup AI timesheet generation for employee: ' . $employeeId);
+        
+        // Validate employee exists
+        $employee = \DB::table('employees')->where('id', $employeeId)->first();
+        if (!$employee) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Employee not found with ID: ' . $employeeId
+            ], 404);
+        }
+        
+        // Get current week start
+        $weekStart = \Carbon\Carbon::now()->startOfWeek(\Carbon\Carbon::MONDAY);
+        
+        // Check for existing AI timesheet
+        $existingTimesheet = \DB::table('ai_generated_timesheets')
+            ->where('employee_id', $employeeId)
+            ->where('week_start_date', $weekStart->format('Y-m-d'))
+            ->first();
+        
+        if ($existingTimesheet) {
+            return response()->json([
+                'success' => true,
+                'message' => 'AI timesheet already exists for this week',
+                'employee_id' => $employeeId,
+                'employee_name' => $employee->first_name . ' ' . $employee->last_name,
+                'department' => $employee->department,
+                'week_start_date' => $existingTimesheet->week_start_date,
+                'weekly_data' => json_decode($existingTimesheet->weekly_data, true),
+                'total_hours' => $existingTimesheet->total_hours,
+                'overtime_hours' => $existingTimesheet->overtime_hours,
+                'ai_insights' => $existingTimesheet->ai_insights,
+                'generated_at' => $existingTimesheet->generated_at
+            ]);
+        }
+        
+        // Generate new timesheet with basic data
+        $weeklyData = [];
+        $days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+        
+        foreach ($days as $index => $day) {
+            $dayDate = $weekStart->copy()->addDays($index);
+            
+            // Check for actual attendance data
+            $attendance = \DB::table('attendances')
+                ->where('employee_id', $employeeId)
+                ->where('date', $dayDate->format('Y-m-d'))
+                ->first();
+            
+            if ($attendance && in_array($index, [0, 1, 2, 3, 4])) { // Weekdays only
+                $weeklyData[$day] = [
+                    'date' => $dayDate->format('m/d/y'),
+                    'time_in' => \Carbon\Carbon::parse($attendance->clock_in_time)->format('g:i A'),
+                    'time_out' => \Carbon\Carbon::parse($attendance->clock_out_time)->format('g:i A'),
+                    'break' => '12:00 PM - 1:00 PM',
+                    'total_hours' => $attendance->total_hours . 'h',
+                    'overtime' => $attendance->overtime_hours > 0 ? $attendance->overtime_hours . 'h' : '--'
+                ];
+            } else {
+                $weeklyData[$day] = [
+                    'date' => $dayDate->format('m/d/y'),
+                    'time_in' => '--',
+                    'time_out' => '--',
+                    'break' => '--',
+                    'total_hours' => '--',
+                    'overtime' => '--'
+                ];
+            }
+        }
+        
+        // Calculate totals
+        $totalHours = \DB::table('attendances')
+            ->where('employee_id', $employeeId)
+            ->where('date', '>=', $weekStart->format('Y-m-d'))
+            ->where('date', '<=', $weekStart->copy()->endOfWeek()->format('Y-m-d'))
+            ->sum('total_hours');
+        
+        $overtimeHours = \DB::table('attendances')
+            ->where('employee_id', $employeeId)
+            ->where('date', '>=', $weekStart->format('Y-m-d'))
+            ->where('date', '<=', $weekStart->copy()->endOfWeek()->format('Y-m-d'))
+            ->sum('overtime_hours');
+        
+        // Save to database
+        $timesheetId = \DB::table('ai_generated_timesheets')->insertGetId([
+            'employee_id' => $employeeId,
+            'week_start_date' => $weekStart->format('Y-m-d'),
+            'weekly_data' => json_encode($weeklyData),
+            'total_hours' => $totalHours,
+            'overtime_hours' => $overtimeHours,
+            'status' => 'pending',
+            'ai_insights' => json_encode(['message' => 'Generated from available attendance data']),
+            'generated_at' => now(),
+            'created_at' => now(),
+            'updated_at' => now()
+        ]);
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'AI timesheet generated successfully',
+            'employee_id' => $employeeId,
+            'employee_name' => $employee->first_name . ' ' . $employee->last_name,
+            'department' => $employee->department,
+            'week_start_date' => $weekStart->format('Y-m-d'),
+            'weekly_data' => $weeklyData,
+            'total_hours' => $totalHours,
+            'overtime_hours' => $overtimeHours,
+            'ai_insights' => ['message' => 'Generated from available attendance data'],
+            'generated_at' => now()->toISOString(),
+            'timesheet_id' => $timesheetId
+        ]);
+        
+    } catch (Exception $e) {
+        \Log::error('Backup AI timesheet generation failed', [
+            'employee_id' => $employeeId,
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+        
+        return response()->json([
+            'success' => false,
+            'message' => 'Failed to generate AI timesheet: ' . $e->getMessage(),
+            'employee_id' => $employeeId
+        ], 500);
+    }
+});
+
+// Direct database route for AI timesheet generation (no API) - FIXED
+Route::post('/generate-ai-timesheet-direct/{employeeId}', function($employeeId) {
+    try {
+        \Log::info('Direct AI timesheet generation started', ['employee_id' => $employeeId]);
+        
+        // Get employee from database
+        $employee = \DB::table('employees')->where('id', $employeeId)->first();
+        if (!$employee) {
+            \Log::warning('Employee not found', ['employee_id' => $employeeId]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Employee not found with ID: ' . $employeeId
+            ], 404);
+        }
+        
+        \Log::info('Employee found', [
+            'employee_id' => $employeeId,
+            'name' => $employee->first_name . ' ' . $employee->last_name
+        ]);
+        
+        // Get current week start (Monday)
+        $weekStart = \Carbon\Carbon::now()->startOfWeek(\Carbon\Carbon::MONDAY);
+        \Log::info('Week calculation', ['week_start' => $weekStart->format('Y-m-d')]);
+        
+        // Check if timesheet already exists for this week
+        $existingTimesheet = \DB::table('ai_generated_timesheets')
+            ->where('employee_id', $employeeId)
+            ->where('week_start_date', $weekStart->format('Y-m-d'))
+            ->first();
+        
+        if ($existingTimesheet) {
+            \Log::info('Returning existing timesheet', ['timesheet_id' => $existingTimesheet->id]);
+            return response()->json([
+                'success' => true,
+                'message' => 'AI timesheet already exists for this week',
+                'employee_id' => $employeeId,
+                'employee_name' => $employee->first_name . ' ' . $employee->last_name,
+                'department' => $employee->department ?? 'N/A',
+                'week_start_date' => $existingTimesheet->week_start_date,
+                'weekly_data' => json_decode($existingTimesheet->weekly_data, true),
+                'total_hours' => $existingTimesheet->total_hours,
+                'overtime_hours' => $existingTimesheet->overtime_hours,
+                'ai_insights' => json_decode($existingTimesheet->ai_insights, true),
+                'generated_at' => $existingTimesheet->generated_at
+            ]);
+        }
+        
+        // Generate new timesheet from database attendance records
+        $weeklyData = [];
+        $days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+        $totalHours = 0;
+        $overtimeHours = 0;
+        
+        \Log::info('Starting foreach loop for days');
+        
+        // Use foreach to process each day
+        foreach ($days as $index => $day) {
+            $dayDate = $weekStart->copy()->addDays($index);
+            \Log::info('Processing day', ['day' => $day, 'date' => $dayDate->format('Y-m-d')]);
+            
+            // Get attendance record for this specific day from database
+            $attendance = \DB::table('attendances')
+                ->where('employee_id', $employeeId)
+                ->where('date', $dayDate->format('Y-m-d'))
+                ->first();
+            
+            if ($attendance) {
+                \Log::info('Found attendance', ['day' => $day, 'attendance_id' => $attendance->id]);
+                
+                // Use actual database attendance data
+                $clockIn = \Carbon\Carbon::parse($attendance->clock_in_time);
+                $clockOut = \Carbon\Carbon::parse($attendance->clock_out_time);
+                
+                $weeklyData[$day] = [
+                    'date' => $dayDate->format('m/d/y'),
+                    'time_in' => $clockIn->format('g:i A'),
+                    'time_out' => $clockOut->format('g:i A'),
+                    'break' => '12:00 PM - 1:00 PM',
+                    'total_hours' => $attendance->total_hours . 'h',
+                    'overtime' => $attendance->overtime_hours > 0 ? $attendance->overtime_hours . 'h' : '--'
+                ];
+                
+                $totalHours += floatval($attendance->total_hours);
+                $overtimeHours += floatval($attendance->overtime_hours);
+            } else {
+                \Log::info('No attendance found', ['day' => $day]);
+                
+                // No attendance data - show dashes
+                $weeklyData[$day] = [
+                    'date' => $dayDate->format('m/d/y'),
+                    'time_in' => '--',
+                    'time_out' => '--',
+                    'break' => '--',
+                    'total_hours' => '--',
+                    'overtime' => '--'
+                ];
+            }
+        }
+        
+        \Log::info('Foreach loop completed', [
+            'total_hours' => $totalHours,
+            'overtime_hours' => $overtimeHours
+        ]);
+        
+        // Save to database
+        $timesheetId = \DB::table('ai_generated_timesheets')->insertGetId([
+            'employee_id' => $employeeId,
+            'week_start_date' => $weekStart->format('Y-m-d'),
+            'weekly_data' => json_encode($weeklyData),
+            'total_hours' => $totalHours,
+            'overtime_hours' => $overtimeHours,
+            'status' => 'pending',
+            'ai_insights' => json_encode([
+                'message' => 'Generated directly from database attendance records',
+                'total_days_with_data' => count(array_filter($weeklyData, function($day) {
+                    return $day['time_in'] !== '--';
+                })),
+                'generation_method' => 'Direct database query with foreach loops'
+            ]),
+            'generated_at' => now(),
+            'created_at' => now(),
+            'updated_at' => now()
+        ]);
+        
+        \Log::info('Timesheet saved to database', ['timesheet_id' => $timesheetId]);
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'AI timesheet generated successfully from database',
+            'employee_id' => $employeeId,
+            'employee_name' => $employee->first_name . ' ' . $employee->last_name,
+            'department' => $employee->department ?? 'N/A',
+            'week_start_date' => $weekStart->format('Y-m-d'),
+            'weekly_data' => $weeklyData,
+            'total_hours' => $totalHours,
+            'overtime_hours' => $overtimeHours,
+            'ai_insights' => [
+                'message' => 'Generated directly from database attendance records',
+                'total_days_with_data' => count(array_filter($weeklyData, function($day) {
+                    return $day['time_in'] !== '--';
+                })),
+                'generation_method' => 'Direct database query with foreach loops'
+            ],
+            'generated_at' => now()->format('Y-m-d H:i:s'),
+            'timesheet_id' => $timesheetId
+        ]);
+        
+    } catch (Exception $e) {
+        \Log::error('Direct AI timesheet generation failed', [
+            'employee_id' => $employeeId,
+            'error' => $e->getMessage(),
+            'file' => $e->getFile(),
+            'line' => $e->getLine(),
+            'trace' => $e->getTraceAsString()
+        ]);
+        
+        return response()->json([
+            'success' => false,
+            'message' => 'Failed to generate timesheet from database: ' . $e->getMessage(),
+            'employee_id' => $employeeId,
+            'debug_info' => [
+                'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ]
+        ], 500);
+    }
+});
+
+// Test the direct database route
+Route::get('/test-direct-generation/{employeeId}', function($employeeId) {
+    try {
+        // Make a POST request to our direct route
+        $response = \Illuminate\Support\Facades\Http::post(url("/generate-ai-timesheet-direct/{$employeeId}"), []);
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'Direct database generation test',
+            'employee_id' => $employeeId,
+            'response_status' => $response->status(),
+            'response_data' => $response->json(),
+            'test_url' => "/generate-ai-timesheet-direct/{$employeeId}"
+        ]);
+        
+    } catch (Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Test failed: ' . $e->getMessage(),
+            'employee_id' => $employeeId
+        ], 500);
+    }
+});
+
+// Debug route to check database structure
+Route::get('/debug-database-structure', function() {
+    try {
+        $results = [];
+        
+        // Check employees table
+        $employees = \DB::table('employees')->select('id', 'first_name', 'last_name', 'department')->get();
+        $results['employees'] = [
+            'count' => $employees->count(),
+            'sample' => $employees->take(3)->toArray()
+        ];
+        
+        // Check attendances table
+        $attendances = \DB::table('attendances')->select('id', 'employee_id', 'date', 'clock_in_time', 'clock_out_time', 'total_hours')->get();
+        $results['attendances'] = [
+            'count' => $attendances->count(),
+            'sample' => $attendances->take(3)->toArray()
+        ];
+        
+        // Check ai_generated_timesheets table
+        $aiTimesheets = \DB::table('ai_generated_timesheets')->select('id', 'employee_id', 'week_start_date', 'status')->get();
+        $results['ai_generated_timesheets'] = [
+            'count' => $aiTimesheets->count(),
+            'sample' => $aiTimesheets->take(3)->toArray()
+        ];
+        
+        // Test specific employee ID 1
+        $employee1 = \DB::table('employees')->where('id', 1)->first();
+        $results['employee_1_test'] = [
+            'found' => $employee1 ? true : false,
+            'data' => $employee1
+        ];
+        
+        return response()->json([
+            'success' => true,
+            'database_structure' => $results,
+            'current_date' => now()->format('Y-m-d H:i:s'),
+            'week_start' => \Carbon\Carbon::now()->startOfWeek(\Carbon\Carbon::MONDAY)->format('Y-m-d')
+        ]);
+        
+    } catch (Exception $e) {
+        return response()->json([
+            'success' => false,
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ], 500);
+    }
+});
+
+// Route for See Details modal - uses attendance database directly
+Route::get('/ai-timesheet-modal/{employeeId}', [App\Http\Controllers\TimesheetController::class, 'getAITimesheetForModal'])
+    ->name('timesheet.modal.data');
+
+// Test the modal data route
+Route::get('/test-modal-data/{employeeId}', function($employeeId) {
+    try {
+        $controller = new \App\Http\Controllers\TimesheetController();
+        $response = $controller->getAITimesheetForModal($employeeId);
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'Modal data test for employee ' . $employeeId,
+            'controller_response' => $response->getData(),
+            'test_info' => [
+                'route_used' => '/ai-timesheet-modal/' . $employeeId,
+                'controller_method' => 'getAITimesheetForModal',
+                'uses_attendance_db' => true,
+                'uses_models' => true
+            ]
+        ]);
+        
+    } catch (Exception $e) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Modal data test failed: ' . $e->getMessage(),
+            'employee_id' => $employeeId
+        ], 500);
+    }
+});
+
+// Simple test route to check controller method
+Route::get('/test-controller-method/{employeeId}', function($employeeId) {
+    try {
+        \Log::info('Testing controller method for employee: ' . $employeeId);
+        
+        // Test if we can create controller instance
+        $controller = new \App\Http\Controllers\TimesheetController();
+        \Log::info('Controller instance created successfully');
+        
+        // Test if we can call the method
+        $response = $controller->generateAITimesheet($employeeId);
+        \Log::info('Controller method called successfully');
+        
+        // Get the response data
+        $data = $response->getData();
+        \Log::info('Response data retrieved', ['success' => $data->success ?? false]);
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'Controller method test completed',
+            'controller_response' => $data,
+            'employee_id' => $employeeId
+        ]);
+        
+    } catch (Exception $e) {
+        \Log::error('Controller method test failed', [
+            'employee_id' => $employeeId,
+            'error' => $e->getMessage(),
+            'file' => $e->getFile(),
+            'line' => $e->getLine(),
+            'trace' => $e->getTraceAsString()
+        ]);
+        
+        return response()->json([
+            'success' => false,
+            'message' => 'Controller method test failed: ' . $e->getMessage(),
+            'error_details' => [
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'error' => $e->getMessage()
+            ]
+        ], 500);
+    }
+});
+
+// Emergency diagnostic route to find the exact error
+Route::get('/emergency-diagnose/{employeeId}', function($employeeId) {
+    try {
+        \Log::info('=== EMERGENCY DIAGNOSTIC START ===', ['employee_id' => $employeeId]);
+        
+        $results = [];
+        
+        // Step 1: Check if employee exists
+        try {
+            $employee = \DB::table('employees')->where('id', $employeeId)->first();
+            $results['step1_employee_check'] = [
+                'success' => $employee ? true : false,
+                'employee_data' => $employee ? [
+                    'id' => $employee->id,
+                    'name' => ($employee->first_name ?? 'NULL') . ' ' . ($employee->last_name ?? 'NULL'),
+                    'department' => $employee->department ?? 'NULL'
+                ] : null
+            ];
+        } catch (Exception $e) {
+            $results['step1_employee_check'] = [
+                'success' => false,
+                'error' => $e->getMessage()
+            ];
+        }
+        
+        // Step 2: Check database connection
+        try {
+            $dbTest = \DB::select('SELECT 1 as test');
+            $results['step2_database_connection'] = [
+                'success' => true,
+                'test_query_result' => $dbTest
+            ];
+        } catch (Exception $e) {
+            $results['step2_database_connection'] = [
+                'success' => false,
+                'error' => $e->getMessage()
+            ];
+        }
+        
+        // Step 3: Check attendance table structure
+        try {
+            $attendanceCount = \DB::table('attendances')->count();
+            $sampleAttendance = \DB::table('attendances')->first();
+            $results['step3_attendance_table'] = [
+                'success' => true,
+                'total_records' => $attendanceCount,
+                'sample_record' => $sampleAttendance
+            ];
+        } catch (Exception $e) {
+            $results['step3_attendance_table'] = [
+                'success' => false,
+                'error' => $e->getMessage()
+            ];
+        }
+        
+        // Step 4: Check ai_generated_timesheets table
+        try {
+            $aiTimesheetCount = \DB::table('ai_generated_timesheets')->count();
+            $results['step4_ai_timesheets_table'] = [
+                'success' => true,
+                'total_records' => $aiTimesheetCount
+            ];
+        } catch (Exception $e) {
+            $results['step4_ai_timesheets_table'] = [
+                'success' => false,
+                'error' => $e->getMessage()
+            ];
+        }
+        
+        // Step 5: Test Carbon date operations
+        try {
+            $weekStart = \Carbon\Carbon::now()->startOfWeek(\Carbon\Carbon::MONDAY);
+            $results['step5_carbon_test'] = [
+                'success' => true,
+                'week_start' => $weekStart->format('Y-m-d'),
+                'current_date' => \Carbon\Carbon::now()->format('Y-m-d H:i:s')
+            ];
+        } catch (Exception $e) {
+            $results['step5_carbon_test'] = [
+                'success' => false,
+                'error' => $e->getMessage()
+            ];
+        }
+        
+        // Step 6: Test basic controller instantiation
+        try {
+            $controller = new \App\Http\Controllers\TimesheetController();
+            $results['step6_controller_instantiation'] = [
+                'success' => true,
+                'controller_class' => get_class($controller)
+            ];
+        } catch (Exception $e) {
+            $results['step6_controller_instantiation'] = [
+                'success' => false,
+                'error' => $e->getMessage()
+            ];
+        }
+        
+        // Step 7: Test model loading
+        try {
+            $employeeModel = \App\Models\Employee::find($employeeId);
+            $results['step7_model_test'] = [
+                'success' => true,
+                'employee_found_via_model' => $employeeModel ? true : false,
+                'model_data' => $employeeModel ? [
+                    'id' => $employeeModel->id,
+                    'name' => $employeeModel->first_name . ' ' . $employeeModel->last_name
+                ] : null
+            ];
+        } catch (Exception $e) {
+            $results['step7_model_test'] = [
+                'success' => false,
+                'error' => $e->getMessage()
+            ];
+        }
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'Emergency diagnostic completed',
+            'employee_id' => $employeeId,
+            'diagnostic_results' => $results,
+            'summary' => [
+                'all_steps_passed' => !collect($results)->contains(function($result) {
+                    return !$result['success'];
+                }),
+                'failed_steps' => collect($results)->filter(function($result) {
+                    return !$result['success'];
+                })->keys()->toArray()
+            ]
+        ]);
+        
+    } catch (Exception $e) {
+        \Log::error('Emergency diagnostic failed completely', [
+            'employee_id' => $employeeId,
+            'error' => $e->getMessage(),
+            'trace' => $e->getTraceAsString()
+        ]);
+        
+        return response()->json([
+            'success' => false,
+            'message' => 'Emergency diagnostic failed: ' . $e->getMessage(),
+            'error_details' => [
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString()
+            ]
+        ], 500);
+    }
+});
+
+// Simple working AI timesheet generation (fallback)
+Route::get('/simple-ai-timesheet/{employeeId}', function($employeeId) {
+    try {
+        \Log::info('Simple AI timesheet generation started', ['employee_id' => $employeeId]);
+        
+        // Basic employee check
+        $employee = \DB::table('employees')->where('id', $employeeId)->first();
+        if (!$employee) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Employee not found with ID: ' . $employeeId
+            ], 404);
+        }
+        
+        // Get current week
+        $weekStart = \Carbon\Carbon::now()->startOfWeek(\Carbon\Carbon::MONDAY);
+        
+        // Simple weekly data generation
+        $weeklyData = [];
+        $days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+        $totalHours = 0;
+        $overtimeHours = 0;
+        
+        foreach ($days as $index => $day) {
+            $dayDate = $weekStart->copy()->addDays($index);
+            
+            // Try to get attendance
+            $attendance = null;
+            try {
+                $attendance = \DB::table('attendances')
+                    ->where('employee_id', $employeeId)
+                    ->where('date', $dayDate->format('Y-m-d'))
+                    ->first();
+            } catch (Exception $e) {
+                \Log::warning('Failed to query attendance for day', [
+                    'day' => $day,
+                    'date' => $dayDate->format('Y-m-d'),
+                    'error' => $e->getMessage()
+                ]);
+            }
+            
+            if ($attendance) {
+                try {
+                    $clockIn = \Carbon\Carbon::parse($attendance->clock_in_time);
+                    $clockOut = \Carbon\Carbon::parse($attendance->clock_out_time);
+                    
+                    $weeklyData[$day] = [
+                        'date' => $dayDate->format('m/d/y'),
+                        'time_in' => $clockIn->format('g:i A'),
+                        'time_out' => $clockOut->format('g:i A'),
+                        'break' => '12:00 PM - 1:00 PM',
+                        'total_hours' => ($attendance->total_hours ?? 0) . 'h',
+                        'overtime' => ($attendance->overtime_hours ?? 0) > 0 ? ($attendance->overtime_hours ?? 0) . 'h' : '--'
+                    ];
+                    
+                    $totalHours += floatval($attendance->total_hours ?? 0);
+                    $overtimeHours += floatval($attendance->overtime_hours ?? 0);
+                } catch (Exception $e) {
+                    \Log::warning('Failed to parse attendance data', [
+                        'attendance_id' => $attendance->id ?? 'unknown',
+                        'error' => $e->getMessage()
+                    ]);
+                    
+                    // Fallback to dashes if parsing fails
+                    $weeklyData[$day] = [
+                        'date' => $dayDate->format('m/d/y'),
+                        'time_in' => '--',
+                        'time_out' => '--',
+                        'break' => '--',
+                        'total_hours' => '--',
+                        'overtime' => '--'
+                    ];
+                }
+            } else {
+                $weeklyData[$day] = [
+                    'date' => $dayDate->format('m/d/y'),
+                    'time_in' => '--',
+                    'time_out' => '--',
+                    'break' => '--',
+                    'total_hours' => '--',
+                    'overtime' => '--'
+                ];
+            }
+        }
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'Simple AI timesheet generated successfully',
+            'employee_id' => $employeeId,
+            'employee_name' => ($employee->first_name ?? 'Unknown') . ' ' . ($employee->last_name ?? 'Employee'),
+            'department' => $employee->department ?? 'N/A',
+            'week_start_date' => $weekStart->format('Y-m-d'),
+            'weekly_data' => $weeklyData,
+            'total_hours' => $totalHours,
+            'overtime_hours' => $overtimeHours,
+            'ai_insights' => [
+                'message' => 'Simple generation from attendance database',
+                'total_days_with_data' => count(array_filter($weeklyData, function($day) {
+                    return $day['time_in'] !== '--';
+                }))
+            ],
+            'generated_at' => now()->format('Y-m-d H:i:s')
+        ]);
+        
+    } catch (Exception $e) {
+        \Log::error('Simple AI timesheet generation failed', [
+            'employee_id' => $employeeId,
+            'error' => $e->getMessage(),
+            'file' => $e->getFile(),
+            'line' => $e->getLine()
+        ]);
+        
+        return response()->json([
+            'success' => false,
+            'message' => 'Simple generation failed: ' . $e->getMessage(),
+            'error_details' => [
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'error' => $e->getMessage()
+            ]
+        ], 500);
+    }
+});
+
 // Test routes for attendance functionality
 Route::get('/test-attendance-functionality', function() {
     try {
@@ -3418,3 +5555,4 @@ Route::get('/test-timesheet-no-auth', [TimesheetController::class, 'index'])->na
 
 // TEMPORARY: Timesheet management without authentication for testing
 Route::get('/timesheet-management-test', [TimesheetController::class, 'index'])->name('timesheet.management.test');
+
