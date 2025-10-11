@@ -5,6 +5,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\EmployeeAuthController;
 use App\Http\Controllers\BookingController;
 use App\Http\Controllers\RegisterController;
+use App\Http\Controllers\ProfilePictureController;
 use App\Http\Controllers\TimeAttendanceController;
 use App\Http\Controllers\ClaimController;
 use App\Http\Controllers\ClaimControllerFixed;
@@ -53,9 +54,9 @@ Route::middleware(['auth'])->group(function () {
 
 // Profile picture API routes
 Route::middleware(['auth'])->group(function () {
-    Route::post('/api/profile-picture/upload', [App\Http\Controllers\ProfilePictureController::class, 'upload']);
-    Route::delete('/api/profile-picture/delete', [App\Http\Controllers\ProfilePictureController::class, 'delete']);
-    Route::get('/api/profile-picture/info', [App\Http\Controllers\ProfilePictureController.class, 'info']);
+    Route::post('/api/profile-picture/upload', [ProfilePictureController::class, 'upload']);
+    Route::delete('/api/profile-picture/delete', [ProfilePictureController::class, 'delete']);
+    Route::get('/api/profile-picture/info', [ProfilePictureController::class, 'info']);
 });
 
 // Authentication routes for admin portal (uses 'users' table)
