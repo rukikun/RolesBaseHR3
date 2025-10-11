@@ -1,14 +1,38 @@
 <?php
 
+// Simple production-safe bootstrap
 require_once __DIR__ . '/vendor/autoload.php';
-$app = require_once __DIR__ . '/bootstrap/app.php';
-$kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
-$kernel->bootstrap();
+
+// Try to bootstrap Laravel safely
+try {
+    $app = require_once __DIR__ . '/bootstrap/app.php';
+    if ($app && is_object($app)) {
+        $kernel = $app->make(Illuminate\Contracts\Console\Kernel::class);
+        $kernel->bootstrap();
+        $bootstrapped = true;
+    } else {
+        $bootstrapped = false;
+    }
+} catch (Exception $e) {
+    $bootstrapped = false;
+    $bootstrap_error = $e->getMessage();
+}
 
 echo "=== PRODUCTION OTP TEST ===\n";
-echo "Domain: " . request()->getHost() . "\n";
-echo "Environment: " . app()->environment() . "\n";
-echo "Time: " . now() . "\n\n";
+
+if (!$bootstrapped) {
+    echo "❌ Laravel Bootstrap Failed\n";
+    if (isset($bootstrap_error)) {
+        echo "Error: " . $bootstrap_error . "\n";
+    }
+    echo "This indicates a server configuration issue.\n\n";
+} else {
+    echo "✅ Laravel Bootstrap Successful\n";
+    echo "Domain: " . (function_exists('request') ? request()->getHost() : $_SERVER['HTTP_HOST'] ?? 'unknown') . "\n";
+    echo "Environment: " . (function_exists('app') ? app()->environment() : 'unknown') . "\n";
+}
+
+echo "Time: " . date('Y-m-d H:i:s') . "\n\n";
 
 $testEmail = 'johnkaizer19.jh@gmail.com';
 
