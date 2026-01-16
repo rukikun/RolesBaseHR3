@@ -11,11 +11,13 @@ return new class extends Migration
      */
     public function up(): void
     {
-        Schema::table('employees', function (Blueprint $table) {
-            if (!Schema::hasColumn('employees', 'profile_picture_url')) {
-                $table->string('profile_picture_url')->nullable()->after('profile_picture');
-            }
-        });
+        if (Schema::hasTable('employees')) {
+            Schema::table('employees', function (Blueprint $table) {
+                if (!Schema::hasColumn('employees', 'profile_picture_url')) {
+                    $table->string('profile_picture_url')->nullable()->after('profile_picture');
+                }
+            });
+        }
     }
 
     /**
@@ -23,10 +25,12 @@ return new class extends Migration
      */
     public function down(): void
     {
-        Schema::table('employees', function (Blueprint $table) {
-            if (Schema::hasColumn('employees', 'profile_picture_url')) {
-                $table->dropColumn('profile_picture_url');
-            }
-        });
+        if (Schema::hasTable('employees')) {
+            Schema::table('employees', function (Blueprint $table) {
+                if (Schema::hasColumn('employees', 'profile_picture_url')) {
+                    $table->dropColumn('profile_picture_url');
+                }
+            });
+        }
     }
 };

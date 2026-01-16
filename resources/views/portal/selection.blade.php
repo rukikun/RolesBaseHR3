@@ -39,7 +39,7 @@
             border-radius: 20px;
             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
             overflow: hidden;
-            max-width: 900px;
+            max-width: 600px;
             width: 100%;
             margin: 2rem;
         }
@@ -239,35 +239,10 @@
         </div>
         
         <div class="portal-options">
-            <div class="row g-4">
-                <!-- Employee Portal -->
-                <div class="col-md-6">
-                    <div class="portal-card employee" onclick="window.location.href='/employee/login'">
-                        <div>
-                            <div class="portal-icon employee">
-                                <i class="bi bi-person-badge"></i>
-                            </div>
-                            <h3>Self Service Portal</h3>
-                            <p>Access your personal dashboard, manage leave applications, view payslips, and handle employee-related tasks.</p>
-                            
-                            <ul class="portal-features">
-                                <li><i class="bi bi-check"></i> Personal Dashboard</li>
-                                <li><i class="bi bi-check"></i> Leave Applications</li>
-                                <li><i class="bi bi-check"></i> Attendance Tracking</li>
-                                <li><i class="bi bi-check"></i> Payslip Access</li>
-                                <li><i class="bi bi-check"></i> Profile Management</li>
-                            </ul>
-                        </div>
-                        
-                        <a href="https://hr2.jetlougetravels-ph.com/employee/login" class="portal-btn">
-                            <i class="bi bi-person-circle"></i>
-                            Self Service Login
-                        </a>
-                    </div>
-                </div>
+            <div class="row g-4 justify-content-center">
                 
-                <!-- Admin Portal -->
-                <div class="col-md-6">
+                <!-- Employee Portal -->
+                <div class="col-lg-8 col-md-10 col-12">
                     <div class="portal-card admin" onclick="window.location.href='/admin/login'">
                         <div>
                             <div class="portal-icon admin">

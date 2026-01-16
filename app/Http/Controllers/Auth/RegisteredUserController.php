@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
-use App\Models\User;
+use App\Models\Employee;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -31,21 +31,30 @@ class RegisteredUserController extends Controller
     {
         $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:'.User::class],
-            'phone' => ['nullable', 'string', 'max:20'],
+            'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:employees,email'],
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
         ]);
 
-        $user = User::create([
-            'name' => $request->name,
+        $nameParts = preg_split('/\s+/', trim($request->name), 2);
+        $firstName = $nameParts[0] ?? 'Employee';
+        $lastName = $nameParts[1] ?? 'User';
+
+        $employee = Employee::create([
+            'first_name' => $firstName,
+            'last_name' => $lastName,
             'email' => $request->email,
-            'phone' => $request->phone,
+            'phone' => null,
+            'role' => 'employee',
+            'position' => 'Employee',
+            'department' => 'General',
+            'hire_date' => now()->toDateString(),
+            'status' => 'active',
             'password' => Hash::make($request->password),
         ]);
 
-        event(new Registered($user));
+        event(new Registered($employee));
 
-        Auth::login($user);
+        Auth::guard('employee')->login($employee);
 
         return redirect(route('dashboard', absolute: false));
     }

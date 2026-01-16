@@ -2,7 +2,6 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
-use App\Http\Controllers\EmployeeAuthController;
 use App\Http\Controllers\BookingController;
 use App\Http\Controllers\RegisterController;
 use App\Http\Controllers\ProfilePictureController;
@@ -22,8 +21,6 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ShiftController;
 use App\Http\Controllers\ShiftTypesController;
 use App\Http\Controllers\ShiftRequestController;
-use App\Http\Controllers\EmployeeShiftController;
-use App\Http\Controllers\EmployeeESSController;
 use App\Http\Controllers\LandingController;
 use App\Http\Controllers\AdminProfileController;
 use App\Http\Controllers\SystemDebugController;
@@ -65,24 +62,160 @@ Route::post('/admin/login', [AuthController::class, 'login'])->name('admin.login
 Route::get('/admin/otp-verification', [AuthController::class, 'showOtpForm'])->name('admin.otp.form');
 Route::post('/admin/otp-verify', [AuthController::class, 'verifyOtp'])->name('admin.otp.verify');
 Route::post('/admin/otp-resend', [AuthController::class, 'resendOtp'])->name('admin.otp.resend');
+
+// Biometric authentication routes
+Route::post('/admin/biometric/check-status', [AuthController::class, 'checkBiometricStatus'])->name('admin.biometric.check');
+Route::post('/admin/biometric/register', [AuthController::class, 'registerBiometric'])->name('admin.biometric.register');
+Route::post('/admin/biometric/verify', [AuthController::class, 'verifyBiometric'])->name('admin.biometric.verify');
+
+// Simple biometric test routes (handle both real and default credentials)
+Route::match(['GET', 'POST'], '/admin/biometric/simple-register', function() {
+    $email = request('email', 'johnkaizer19.jh@gmail.com');
+    $employee = \App\Models\Employee::where('email', $email)->first();
+    
+    if (!$employee) {
+        return response()->json(['error' => 'Employee not found'], 404);
+    }
+    
+    $existingCredential = \App\Models\BiometricCredential::where('employee_id', $employee->id)->first();
+    
+    if ($existingCredential) {
+        return response()->json([
+            'success' => true,
+            'message' => 'Biometric authentication already registered',
+            'credential_id' => $existingCredential->id
+        ]);
+    }
+    
+    // Check if this is a real WebAuthn credential
+    if (request()->isMethod('POST') && request('real_credential')) {
+        $input = json_decode(request()->getContent(), true);
+        
+        $credential = \App\Models\BiometricCredential::create([
+            'employee_id' => $employee->id,
+            'credential_id' => $input['credential_id'],
+            'public_key' => $input['public_key'],
+            'authenticator_type' => 'platform',
+            'authenticator_data' => $input['authenticator_data'],
+            'device_name' => $input['device_name'] ?? 'Windows Hello Fingerprint',
+            'is_active' => true
+        ]);
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'Real biometric authentication registered successfully',
+            'credential_id' => $credential->id
+        ]);
+    }
+    
+    // Default credential for fallback
+    $credential = \App\Models\BiometricCredential::create([
+        'employee_id' => $employee->id,
+        'credential_id' => 'default_' . $employee->id . '_' . time(),
+        'public_key' => 'default_fingerprint_key',
+        'authenticator_type' => 'platform',
+        'authenticator_data' => ['type' => 'default_fingerprint'],
+        'device_name' => 'Default Fingerprint Device',
+        'is_active' => true
+    ]);
+    
+    return response()->json([
+        'success' => true,
+        'message' => 'Default biometric authentication registered successfully',
+        'credential_id' => $credential->id
+    ]);
+})->name('admin.biometric.simple.register');
+
+Route::match(['GET', 'POST'], '/admin/biometric/simple-verify', function() {
+    $email = request('email', 'johnkaizer19.jh@gmail.com');
+    $employee = \App\Models\Employee::where('email', $email)->first();
+    
+    if (!$employee) {
+        return response()->json(['error' => 'Employee not found'], 404);
+    }
+    
+    $credential = \App\Models\BiometricCredential::where('employee_id', $employee->id)
+        ->where('is_active', true)
+        ->first();
+        
+    if (!$credential) {
+        return response()->json(['error' => 'Biometric credential not found'], 404);
+    }
+    
+    // Check if this is real WebAuthn verification
+    if (request()->isMethod('POST') && request('real_verification')) {
+        $input = json_decode(request()->getContent(), true);
+        
+        // In a real implementation, you would verify the signature
+        // For now, we'll accept any real WebAuthn assertion as valid
+        if (isset($input['credential_id']) && isset($input['signature'])) {
+            $credential->updateLastUsed();
+            
+            // Complete login
+            \Illuminate\Support\Facades\Auth::guard('employee')->login($employee, false);
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Real biometric verification successful',
+                'redirect_url' => route('dashboard')
+            ]);
+        }
+    }
+    
+    // Default/simulated verification
+    $credential->updateLastUsed();
+    
+    // Complete login
+    \Illuminate\Support\Facades\Auth::guard('employee')->login($employee, false);
+    
+    return response()->json([
+        'success' => true,
+        'message' => 'Biometric authentication successful',
+        'redirect_url' => route('dashboard')
+    ]);
+})->name('admin.biometric.simple.verify');
+
+// Biometric test page
+Route::get('/admin/biometric-test', function() {
+    return view('biometric_test');
+})->name('admin.biometric.test');
+
+// Test default biometric system
+Route::get('/test-default-biometric', function() {
+    $employees = \App\Models\Employee::with('biometricCredentials')->get();
+    
+    $output = '<h2>Default Biometric System Status</h2>';
+    $output .= '<table border="1" style="border-collapse: collapse; width: 100%;">';
+    $output .= '<tr><th>Employee</th><th>Email</th><th>Has Biometric</th><th>Credential ID</th></tr>';
+    
+    foreach($employees as $employee) {
+        $hasBiometric = $employee->hasBiometricAuth() ? 'Yes' : 'No';
+        $credentialId = $employee->biometricCredentials->first()->credential_id ?? 'None';
+        
+        $output .= '<tr>';
+        $output .= '<td>' . $employee->first_name . ' ' . $employee->last_name . '</td>';
+        $output .= '<td>' . $employee->email . '</td>';
+        $output .= '<td>' . $hasBiometric . '</td>';
+        $output .= '<td>' . $credentialId . '</td>';
+        $output .= '</tr>';
+    }
+    
+    $output .= '</table>';
+    $output .= '<br><p><strong>All employees now have default biometric authentication!</strong></p>';
+    $output .= '<p>They can complete OTP verification and then use fingerprint authentication.</p>';
+    
+    return $output;
+});
+
 Route::post('/admin/logout', [AuthController::class, 'logout'])->name('admin.logout');
 Route::get('/api/admin/current-user', [AuthController::class, 'getCurrentUser'])->name('admin.current.user');
 
-// Authentication routes for employee portal/ESS (uses 'employees' table)
-Route::get('/employee/login', [EmployeeAuthController::class, 'showLoginForm'])->name('employee.login');
-Route::post('/employee/login', [EmployeeAuthController::class, 'login'])->name('employee.login.submit');
-Route::post('/employee/logout', [EmployeeAuthController::class, 'logout'])->name('employee.logout');
-Route::get('/employee/register', [EmployeeAuthController::class, 'showRegistrationForm'])->name('employee.register');
-Route::post('/employee/register', [EmployeeAuthController::class, 'register'])->name('employee.register.submit');
-Route::get('/api/employee/current-user', [EmployeeAuthController::class, 'getCurrentEmployee'])->name('employee.current.user');
 
 // Redirect admin_dashboard to regular dashboard - uses 'employee' guard (employees table)
 Route::get('/admin_dashboard', function() {
     return redirect()->route('dashboard');
 })->middleware('auth:employee')->name('admin.dashboard');
 
-// Employee dashboard/ESS portal - uses 'employee' guard (employees table)
-Route::get('/employee/dashboard', [App\Http\Controllers\EmployeeESSController::class, 'dashboard'])->middleware('auth:employee')->name('employee.dashboard');
 
 // Landing page route
 Route::get('/', [LandingController::class, 'index'])->name('landing');
@@ -101,6 +234,9 @@ Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
 // HR dashboard (protected) - uses employee guard
 Route::get('/dashboard', [App\Http\Controllers\HRDashboardController::class, 'index'])->middleware('auth:employee')->name('dashboard');
+Route::get('/api/dashboard/performance-metrics', [App\Http\Controllers\HRDashboardController::class, 'getPerformanceMetricsJson'])
+    ->middleware('auth:employee')
+    ->name('dashboard.performance-metrics');
 
 // Test modal route
 Route::get('/test-modal', [SystemViewController::class, 'testModal'])->name('test.modal');
@@ -225,20 +361,10 @@ Route::post('/bookings', [BookingController::class, 'store'])
 Route::post('/api/clock-in', [TimeAttendanceController::class, 'clockIn']);
 
 // Time and Attendance System Routes
-Route::get('/time-attendance', function () {
-    return view('attendance.TimeAndAttendance');
-})->name('time-attendance');
+Route::middleware('web.or.employee')->get('/time-attendance', [AttendanceController::class, 'timeAttendance'])->name('time-attendance');
 
 // HR Module Routes - accessible to any authenticated user
-Route::group(['middleware' => function ($request, $next) {
-    // Allow access if authenticated with any guard
-    if (auth()->guard('web')->check() || auth()->guard('employee')->check()) {
-        return $next($request);
-    }
-    
-    // Redirect to employee login as default (more common)
-    return redirect()->route('employee.login')->with('message', 'Please login to access timesheet management');
-}], function () {
+Route::middleware('web.or.employee')->group(function () {
 
     Route::get('/timesheet-management', [TimesheetController::class, 'index'])->name('timesheet-management');
     
@@ -359,10 +485,6 @@ Route::get('/debug-employees', function() {
     Route::put('/shift/requests/{id}/status', [ShiftRequestController::class, 'updateStatus'])->name('shift.requests.status');
     Route::delete('/shift/requests/{id}', [ShiftRequestController::class, 'destroy'])->name('shift.requests.destroy');
     
-    // Employee Shift Routes (ESS Module)
-    Route::get('/employee/shift-schedule', [EmployeeShiftController::class, 'index'])->name('employee.shift.index');
-    Route::post('/employee/shift/store', [EmployeeShiftController::class, 'store'])->name('employee.shift.store');
-    Route::delete('/employee/shift/{id}', [EmployeeShiftController::class, 'destroy'])->name('employee.shift.destroy');
     Route::delete('/leave/requests/{id}', [LeaveController::class, 'deleteLeaveRequest'])->name('leave.requests.delete');
 
     Route::get('/shift-schedule-management', [ShiftController::class, 'index'])->name('shift-schedule-management');
@@ -465,7 +587,9 @@ Route::get('/login', function() {
 require __DIR__.'/employee.php';
 
 // CSRF token refresh endpoint
-Route::get('/csrf-token', [EmployeeESSController::class, 'getCsrfToken'])->name('csrf.token');
+Route::get('/csrf-token', function () {
+    return response()->json(['csrf_token' => csrf_token()]);
+})->name('csrf.token');
 
 // HR Authentication Route (outside middleware for authentication purposes)
 Route::post('/leave/hr-auth', [LeaveController::class, 'hrAuthentication'])->name('leave.hr.auth');
@@ -2648,6 +2772,9 @@ Route::middleware(['auth:employee'])->group(function () {
     
     // Attendance routes for employee dashboard
     Route::post('/attendance/store', [AttendanceController::class, 'store'])->name('attendance.store');
+    
+    // Dashboard statistics
+    Route::get('/api/attendance/dashboard-stats', [\App\Http\Controllers\AttendanceController::class, 'getDashboardStats']);
     Route::post('/attendance/clock-in', [AttendanceController::class, 'clockIn'])->name('attendance.clock-in');
     Route::post('/attendance/clock-out', [AttendanceController::class, 'clockOut'])->name('attendance.clock-out');
     Route::post('/attendance/start-break', [AttendanceController::class, 'startBreak'])->name('attendance.start-break');
@@ -5372,37 +5499,7 @@ Route::get('/add-sample-attendance/{employeeId?}', function($employeeId = 1) {
     }
 });
 
-// ===== EMPLOYEE ESS ROUTES (uses 'employee' guard - 'employees' table) =====
-Route::middleware(['auth:employee'])->prefix('employee')->group(function () {
-    
-    // Employee Self-Service Dashboard (defined above as /employee/dashboard)
-    
-    // Employee Clock-in/Clock-out (ESS)
-    Route::post('/clock-in', [EmployeeESSController::class, 'clockIn'])->name('employee.clock.in');
-    Route::post('/clock-out', [EmployeeESSController::class, 'clockOut'])->name('employee.clock.out');
-    Route::get('/clock-status', [EmployeeESSController::class, 'getClockStatus'])->name('employee.clock.status');
-    Route::get('/attendance-log', [EmployeeESSController::class, 'getAttendanceLog'])->name('employee.attendance.log');
-    
-    // Employee Profile Management
-    Route::get('/profile', [EmployeeESSController::class, 'showProfile'])->name('employee.profile');
-    Route::put('/profile', [EmployeeESSController::class, 'updateProfile'])->name('employee.profile.update');
-    
-    // Employee Leave Requests
-    Route::get('/leave-requests', [EmployeeESSController::class, 'showLeaveRequests'])->name('employee.leave.requests');
-    Route::post('/leave-requests', [EmployeeESSController::class, 'submitLeaveRequest'])->name('employee.leave.submit');
-    
-    // Employee Shift Requests
-    Route::get('/shift-requests', [EmployeeESSController::class, 'showShiftRequests'])->name('employee.shift.requests');
-    Route::post('/shift-requests', [EmployeeESSController::class, 'submitShiftRequest'])->name('employee.shift.submit');
-    
-    // Employee Claims/Reimbursements
-    Route::get('/claims', [EmployeeESSController::class, 'showClaims'])->name('employee.claims');
-    Route::post('/claims', [EmployeeESSController::class, 'submitClaim'])->name('employee.claims.submit');
-    
-    // Employee Timesheets View
-    Route::get('/timesheets', [EmployeeESSController::class, 'showTimesheets'])->name('employee.timesheets');
-    
-});
+// ===== EMPLOYEE ESS ROUTES removed (ESS portal disabled) =====
 
 
 

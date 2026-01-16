@@ -77,6 +77,9 @@ class ShiftTypeSeeder extends Seeder
             ],
         ];
 
+        // Disable foreign key checks
+        DB::statement('SET FOREIGN_KEY_CHECKS=0');
+        
         // Clear existing data first
         DB::table('shift_types')->truncate();
         
@@ -87,5 +90,8 @@ class ShiftTypeSeeder extends Seeder
                 'updated_at' => now()
             ]));
         }
+        
+        // Re-enable foreign key checks
+        DB::statement('SET FOREIGN_KEY_CHECKS=1');
     }
 }

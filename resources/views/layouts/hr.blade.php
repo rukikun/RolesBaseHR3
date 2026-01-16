@@ -182,6 +182,11 @@
         </a>
       </li>
       <li class="nav-item">
+        <a href="{{ route('time-attendance') }}" class="nav-link text-dark {{ request()->routeIs('time-attendance') ? 'active' : '' }}">
+          <i class="fas fa-user-clock me-2"></i> Time and Attendance
+        </a>
+      </li>
+      <li class="nav-item">
         <a href="{{ route('shift-schedule-management') }}" class="nav-link text-dark {{ request()->routeIs('shift-schedule-management') ? 'active' : '' }}">
           <i class="fas fa-calendar-alt me-2"></i> Shift & Schedule
         </a>

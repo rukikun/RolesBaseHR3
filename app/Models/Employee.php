@@ -246,6 +246,22 @@ class Employee extends Authenticatable implements AuthenticatableContract
         return $this->role === $role;
     }
 
+    /**
+     * Get the biometric credentials for the employee
+     */
+    public function biometricCredentials()
+    {
+        return $this->hasMany(BiometricCredential::class);
+    }
+
+    /**
+     * Check if employee has biometric authentication enabled
+     */
+    public function hasBiometricAuth()
+    {
+        return $this->biometricCredentials()->where('is_active', true)->exists();
+    }
+
     public function hasAnyRole($roles)
     {
         return in_array($this->role, $roles);

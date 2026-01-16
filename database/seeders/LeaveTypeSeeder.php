@@ -72,6 +72,9 @@ class LeaveTypeSeeder extends Seeder
             ],
         ];
 
+        // Disable foreign key checks
+        DB::statement('SET FOREIGN_KEY_CHECKS=0');
+        
         // Clear existing data first
         DB::table('leave_types')->truncate();
         
@@ -82,5 +85,8 @@ class LeaveTypeSeeder extends Seeder
                 'updated_at' => now()
             ]));
         }
+        
+        // Re-enable foreign key checks
+        DB::statement('SET FOREIGN_KEY_CHECKS=1');
     }
 }

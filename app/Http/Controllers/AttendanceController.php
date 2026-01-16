@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
 use App\Models\Attendance;
 use App\Models\Employee;
@@ -69,6 +70,46 @@ class AttendanceController extends Controller
     }
 
     /**
+     * Show time and attendance dashboard page
+     */
+    public function timeAttendance()
+    {
+        try {
+            $employees = Employee::orderBy('first_name')->orderBy('last_name')->get();
+            $workplaceOptions = [
+                'Office' => 'Office',
+                'Outside Workplace' => 'Outside Workplace'
+            ];
+            $selectedWorkplace = 'Office';
+            $currentEmployeeId = Auth::guard('employee')->id();
+
+            if ($currentEmployeeId) {
+                $todayAttendance = Attendance::getTodayAttendance($currentEmployeeId);
+                if ($todayAttendance && $todayAttendance->location) {
+                    $selectedWorkplace = $todayAttendance->location;
+                }
+            }
+
+            if (!array_key_exists($selectedWorkplace, $workplaceOptions)) {
+                $selectedWorkplace = 'Office';
+            }
+
+            return view('attendance.TimeAndAttendance', compact('employees', 'workplaceOptions', 'selectedWorkplace'));
+        } catch (\Exception $e) {
+            \Log::error('Error loading Time and Attendance page: ' . $e->getMessage());
+
+            return view('attendance.TimeAndAttendance', [
+                'employees' => collect([]),
+                'workplaceOptions' => [
+                    'Office' => 'Office',
+                    'Outside Workplace' => 'Outside Workplace'
+                ],
+                'selectedWorkplace' => 'Office'
+            ]);
+        }
+    }
+
+    /**
      * Clock in an employee
      */
     public function clockIn(Request $request)
@@ -76,15 +117,22 @@ class AttendanceController extends Controller
         $validator = Validator::make($request->all(), [
             'employee_id' => 'required|exists:employees,id',
             'location' => 'nullable|string|max:255',
+            'workplace_type' => 'nullable|in:onsite,offsite',
             'notes' => 'nullable|string|max:500',
         ]);
 
         if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed',
-                'errors' => $validator->errors()
-            ], 422);
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            return redirect()->back()
+                ->withErrors($validator)
+                ->withInput();
         }
 
         try {
@@ -113,6 +161,7 @@ class AttendanceController extends Controller
                     'clock_in_time' => $clockInTime,
                     'status' => $status,
                     'location' => $request->location ?? 'Office',
+                    'workplace_type' => $request->workplace_type ?? 'onsite',
                     'ip_address' => $request->ip(),
                     'notes' => $request->notes,
                 ]);
@@ -125,6 +174,7 @@ class AttendanceController extends Controller
                     'clock_in_time' => $clockInTime,
                     'status' => $status,
                     'location' => $request->location ?? 'Office',
+                    'workplace_type' => $request->workplace_type ?? 'onsite',
                     'ip_address' => $request->ip(),
                     'notes' => $request->notes,
                 ]);
@@ -139,6 +189,7 @@ class AttendanceController extends Controller
                     'clock_in_time' => $attendance->formatted_clock_in,
                     'status' => $attendance->status,
                     'location' => $attendance->location,
+                    'workplace_type' => $attendance->workplace_type,
                 ]
             ]);
 
@@ -212,6 +263,7 @@ class AttendanceController extends Controller
                     'total_hours' => $attendance->total_hours, // Now always positive from model
                     'overtime_hours' => $attendance->overtime_hours, // Now always positive from model
                     'status' => $attendance->status,
+                    'workplace_type' => $attendance->workplace_type,
                 ]
             ]);
 
@@ -271,6 +323,7 @@ class AttendanceController extends Controller
                 'data' => [
                     'break_start_time' => $attendance->break_start_time->format('h:i A'),
                     'status' => $attendance->status,
+                    'workplace_type' => $attendance->workplace_type,
                 ]
             ]);
 
@@ -323,6 +376,7 @@ class AttendanceController extends Controller
                 'data' => [
                     'break_end_time' => $attendance->break_end_time->format('h:i A'),
                     'status' => $attendance->status,
+                    'workplace_type' => $attendance->workplace_type,
                 ]
             ]);
 
@@ -366,6 +420,7 @@ class AttendanceController extends Controller
                 'overtime_hours' => $attendance->overtime_hours,
                 'status' => $attendance->status,
                 'location' => $attendance->location,
+                'workplace_type' => $attendance->workplace_type,
                 'is_clocked_in' => $attendance->isClockedIn(),
                 'is_clocked_out' => $attendance->isClockedOut(),
                 'is_on_break' => $attendance->isOnBreak(),
@@ -425,6 +480,7 @@ class AttendanceController extends Controller
                         'status' => $attendance->status,
                         'status_text' => ucfirst(str_replace('_', ' ', $attendance->status)),
                         'location' => $attendance->location,
+                        'workplace_type' => $attendance->workplace_type,
                         'is_today' => $attendance->date->isToday(),
                     ];
                 });
@@ -588,19 +644,29 @@ class AttendanceController extends Controller
                 $attendance->save();
             }
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Attendance record created successfully',
-                'data' => $attendance->load('employee')
-            ]);
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Attendance record created successfully',
+                    'data' => $attendance->load('employee')
+                ]);
+            }
+
+            return redirect()->route('attendance-management')
+                ->with('success', 'Attendance record created successfully.');
 
         } catch (\Exception $e) {
             \Log::error('Error in AttendanceController@store: ' . $e->getMessage());
             
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to create attendance record: ' . $e->getMessage()
-            ], 500);
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to create attendance record: ' . $e->getMessage()
+                ], 500);
+            }
+
+            return redirect()->back()
+                ->with('error', 'Failed to create attendance record.');
         }
     }
 
@@ -681,6 +747,62 @@ class AttendanceController extends Controller
     /**
      * Update attendance record
      */
+    /**
+     * Get attendance statistics for dashboard
+     */
+    public function getDashboardStats()
+    {
+        try {
+            $employeeId = auth('employee')->id();
+            $today = Carbon::today();
+            $weekStart = Carbon::now()->startOfWeek();
+            $monthStart = Carbon::now()->startOfMonth();
+            
+            // Get today's hours
+            $todayHours = Attendance::where('employee_id', $employeeId)
+                ->whereDate('date', $today)
+                ->sum('total_hours');
+                
+            // Get this week's hours
+            $weekHours = Attendance::where('employee_id', $employeeId)
+                ->where('date', '>=', $weekStart)
+                ->sum('total_hours');
+                
+            // Get this month's hours
+            $monthHours = Attendance::where('employee_id', $employeeId)
+                ->where('date', '>=', $monthStart)
+                ->sum('total_hours');
+                
+            // Calculate attendance rate (percentage of work days with attendance this month)
+            $workDays = $monthStart->diffInDaysFiltered(function($date) {
+                return !$date->isWeekend(); // Only count weekdays
+            }, Carbon::now());
+            
+            $attendedDays = Attendance::where('employee_id', $employeeId)
+                ->where('date', '>=', $monthStart)
+                ->distinct('date')
+                ->count('date');
+                
+            $attendanceRate = $workDays > 0 ? round(($attendedDays / $workDays) * 100) : 0;
+            
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'today_hours' => number_format($todayHours, 1),
+                    'week_hours' => number_format($weekHours, 1),
+                    'month_hours' => number_format($monthHours, 1),
+                    'attendance_rate' => $attendanceRate
+                ]
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error fetching dashboard stats: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch attendance statistics'
+            ], 500);
+        }
+    }
+
     public function update(Request $request, $id)
     {
         try {
@@ -689,6 +811,7 @@ class AttendanceController extends Controller
                 'clock_out_time' => 'nullable|date',
                 'status' => 'required|in:present,late,absent,on_break,clocked_out',
                 'location' => 'nullable|string|max:255',
+                'workplace_type' => 'nullable|in:onsite,offsite',
                 'notes' => 'nullable|string|max:1000'
             ]);
 
@@ -712,6 +835,7 @@ class AttendanceController extends Controller
             $updateData = [
                 'status' => $request->status,
                 'location' => $request->location,
+                'workplace_type' => $request->workplace_type,
                 'notes' => $request->notes,
                 'updated_at' => now()
             ];

@@ -56,11 +56,11 @@ class HR3SystemSeeder extends Seeder
 
         // Insert shift types
         DB::table('shift_types')->insert([
-            ['name' => 'Morning Shift', 'description' => 'Standard morning work shift', 'default_start_time' => '08:00:00', 'default_end_time' => '16:00:00', 'color_code' => '#28a745', 'type' => 'morning', 'created_at' => now(), 'updated_at' => now()],
-            ['name' => 'Evening Shift', 'description' => 'Standard evening work shift', 'default_start_time' => '16:00:00', 'default_end_time' => '00:00:00', 'color_code' => '#fd7e14', 'type' => 'evening', 'created_at' => now(), 'updated_at' => now()],
-            ['name' => 'Night Shift', 'description' => 'Overnight work shift', 'default_start_time' => '00:00:00', 'default_end_time' => '08:00:00', 'color_code' => '#6f42c1', 'type' => 'night', 'created_at' => now(), 'updated_at' => now()],
-            ['name' => 'Weekend Day', 'description' => 'Weekend daytime shift', 'default_start_time' => '09:00:00', 'default_end_time' => '17:00:00', 'color_code' => '#20c997', 'type' => 'weekend', 'created_at' => now(), 'updated_at' => now()],
-            ['name' => 'Part-time Morning', 'description' => 'Part-time morning shift', 'default_start_time' => '08:00:00', 'default_end_time' => '12:00:00', 'color_code' => '#17a2b8', 'type' => 'morning', 'created_at' => now(), 'updated_at' => now()]
+            ['code' => 'MORN', 'name' => 'Morning Shift', 'description' => 'Standard morning work shift', 'default_start_time' => '08:00:00', 'default_end_time' => '16:00:00', 'color_code' => '#28a745', 'type' => 'day', 'created_at' => now(), 'updated_at' => now()],
+            ['code' => 'EVE', 'name' => 'Evening Shift', 'description' => 'Standard evening work shift', 'default_start_time' => '16:00:00', 'default_end_time' => '00:00:00', 'color_code' => '#fd7e14', 'type' => 'day', 'created_at' => now(), 'updated_at' => now()],
+            ['code' => 'NIGHT', 'name' => 'Night Shift', 'description' => 'Overnight work shift', 'default_start_time' => '00:00:00', 'default_end_time' => '08:00:00', 'color_code' => '#6f42c1', 'type' => 'night', 'created_at' => now(), 'updated_at' => now()],
+            ['code' => 'WEEKEND', 'name' => 'Weekend Day', 'description' => 'Weekend daytime shift', 'default_start_time' => '09:00:00', 'default_end_time' => '17:00:00', 'color_code' => '#20c997', 'type' => 'day', 'created_at' => now(), 'updated_at' => now()],
+            ['code' => 'PT_MORN', 'name' => 'Part-time Morning', 'description' => 'Part-time morning shift', 'default_start_time' => '08:00:00', 'default_end_time' => '12:00:00', 'color_code' => '#17a2b8', 'type' => 'day', 'created_at' => now(), 'updated_at' => now()]
         ]);
 
         // Insert leave types
@@ -74,11 +74,11 @@ class HR3SystemSeeder extends Seeder
 
         // Insert claim types
         DB::table('claim_types')->insert([
-            ['name' => 'Travel Expenses', 'description' => 'Business travel related expenses', 'max_amount' => 15000.00, 'requires_receipt' => true, 'approval_required' => true, 'created_at' => now(), 'updated_at' => now()],
-            ['name' => 'Meal Allowance', 'description' => 'Meal expenses during business hours', 'max_amount' => 2000.00, 'requires_receipt' => true, 'approval_required' => false, 'created_at' => now(), 'updated_at' => now()],
-            ['name' => 'Office Supplies', 'description' => 'Office equipment and supplies', 'max_amount' => 5000.00, 'requires_receipt' => true, 'approval_required' => true, 'created_at' => now(), 'updated_at' => now()],
-            ['name' => 'Training Fees', 'description' => 'Professional development and training', 'max_amount' => 25000.00, 'requires_receipt' => true, 'approval_required' => true, 'created_at' => now(), 'updated_at' => now()],
-            ['name' => 'Communication', 'description' => 'Phone and internet expenses', 'max_amount' => 2000.00, 'requires_receipt' => true, 'approval_required' => false, 'created_at' => now(), 'updated_at' => now()]
+            ['code' => 'TRAVEL', 'name' => 'Travel Expenses', 'description' => 'Business travel related expenses', 'max_amount' => 15000.00, 'requires_attachment' => true, 'auto_approve' => false, 'created_at' => now(), 'updated_at' => now()],
+            ['code' => 'MEAL', 'name' => 'Meal Allowance', 'description' => 'Meal expenses during business hours', 'max_amount' => 2000.00, 'requires_attachment' => true, 'auto_approve' => true, 'created_at' => now(), 'updated_at' => now()],
+            ['code' => 'OFFICE', 'name' => 'Office Supplies', 'description' => 'Office equipment and supplies', 'max_amount' => 5000.00, 'requires_attachment' => true, 'auto_approve' => false, 'created_at' => now(), 'updated_at' => now()],
+            ['code' => 'TRAIN', 'name' => 'Training Fees', 'description' => 'Professional development and training', 'max_amount' => 25000.00, 'requires_attachment' => true, 'auto_approve' => false, 'created_at' => now(), 'updated_at' => now()],
+            ['code' => 'COMM', 'name' => 'Communication', 'description' => 'Phone and internet expenses', 'max_amount' => 2000.00, 'requires_attachment' => true, 'auto_approve' => true, 'created_at' => now(), 'updated_at' => now()]
         ]);
 
         // Insert sample time entries
@@ -92,26 +92,94 @@ class HR3SystemSeeder extends Seeder
 
         // Insert sample shifts
         DB::table('shifts')->insert([
-            ['employee_id' => 1, 'shift_type_id' => 1, 'date' => now()->addDay()->format('Y-m-d'), 'start_time' => '08:00:00', 'end_time' => '16:00:00', 'status' => 'scheduled', 'created_at' => now(), 'updated_at' => now()],
-            ['employee_id' => 2, 'shift_type_id' => 1, 'date' => now()->addDay()->format('Y-m-d'), 'start_time' => '08:00:00', 'end_time' => '16:00:00', 'status' => 'scheduled', 'created_at' => now(), 'updated_at' => now()],
-            ['employee_id' => 3, 'shift_type_id' => 2, 'date' => now()->addDay()->format('Y-m-d'), 'start_time' => '16:00:00', 'end_time' => '00:00:00', 'status' => 'scheduled', 'created_at' => now(), 'updated_at' => now()],
-            ['employee_id' => 4, 'shift_type_id' => 1, 'date' => now()->addDays(2)->format('Y-m-d'), 'start_time' => '08:00:00', 'end_time' => '16:00:00', 'status' => 'scheduled', 'created_at' => now(), 'updated_at' => now()],
-            ['employee_id' => 5, 'shift_type_id' => 4, 'date' => now()->addDays(3)->format('Y-m-d'), 'start_time' => '09:00:00', 'end_time' => '17:00:00', 'status' => 'scheduled', 'created_at' => now(), 'updated_at' => now()]
+            ['employee_id' => 1, 'shift_type_id' => 1, 'shift_date' => now()->addDay()->format('Y-m-d'), 'start_time' => '08:00:00', 'end_time' => '16:00:00', 'location' => 'Main Office', 'break_duration' => 30, 'status' => 'scheduled', 'notes' => 'Regular work shift', 'created_at' => now(), 'updated_at' => now()],
+            ['employee_id' => 2, 'shift_type_id' => 1, 'shift_date' => now()->addDay()->format('Y-m-d'), 'start_time' => '08:00:00', 'end_time' => '16:00:00', 'location' => 'Main Office', 'break_duration' => 30, 'status' => 'scheduled', 'notes' => 'Regular work shift', 'created_at' => now(), 'updated_at' => now()],
+            ['employee_id' => 3, 'shift_type_id' => 2, 'shift_date' => now()->addDay()->format('Y-m-d'), 'start_time' => '16:00:00', 'end_time' => '00:00:00', 'location' => 'Main Office', 'break_duration' => 30, 'status' => 'scheduled', 'notes' => 'Evening shift', 'created_at' => now(), 'updated_at' => now()],
+            ['employee_id' => 4, 'shift_type_id' => 1, 'shift_date' => now()->addDays(2)->format('Y-m-d'), 'start_time' => '08:00:00', 'end_time' => '16:00:00', 'location' => 'Main Office', 'break_duration' => 30, 'status' => 'scheduled', 'notes' => 'Regular work shift', 'created_at' => now(), 'updated_at' => now()],
+            ['employee_id' => 5, 'shift_type_id' => 4, 'shift_date' => now()->addDays(3)->format('Y-m-d'), 'start_time' => '09:00:00', 'end_time' => '17:00:00', 'location' => 'Main Office', 'break_duration' => 30, 'status' => 'scheduled', 'notes' => 'Weekend shift', 'created_at' => now(), 'updated_at' => now()]
         ]);
 
         // Insert sample leave requests
         DB::table('leave_requests')->insert([
-            ['employee_id' => 1, 'leave_type_id' => 1, 'start_date' => now()->addWeek()->format('Y-m-d'), 'end_date' => now()->addWeek()->addDays(2)->format('Y-m-d'), 'days_requested' => 3, 'reason' => 'Family vacation', 'status' => 'pending', 'created_at' => now(), 'updated_at' => now()],
-            ['employee_id' => 2, 'leave_type_id' => 2, 'start_date' => now()->addDays(2)->format('Y-m-d'), 'end_date' => now()->addDays(2)->format('Y-m-d'), 'days_requested' => 1, 'reason' => 'Medical appointment', 'status' => 'approved', 'approved_by' => 3, 'approved_at' => now(), 'created_at' => now(), 'updated_at' => now()],
-            ['employee_id' => 4, 'leave_type_id' => 1, 'start_date' => now()->addWeeks(2)->format('Y-m-d'), 'end_date' => now()->addWeeks(3)->format('Y-m-d'), 'days_requested' => 7, 'reason' => 'Annual vacation', 'status' => 'pending', 'created_at' => now(), 'updated_at' => now()]
+            ['employee_id' => 1, 'leave_type_id' => 1, 'start_date' => now()->addWeek()->format('Y-m-d'), 'end_date' => now()->addWeek()->addDays(2)->format('Y-m-d'), 'days_requested' => 3, 'reason' => 'Family vacation', 'status' => 'pending', 'admin_notes' => null, 'approved_by' => null, 'approved_at' => null, 'created_at' => now(), 'updated_at' => now()],
+            ['employee_id' => 2, 'leave_type_id' => 2, 'start_date' => now()->addDays(2)->format('Y-m-d'), 'end_date' => now()->addDays(2)->format('Y-m-d'), 'days_requested' => 1, 'reason' => 'Medical appointment', 'status' => 'approved', 'admin_notes' => 'Approved by HR', 'approved_by' => 3, 'approved_at' => now(), 'created_at' => now(), 'updated_at' => now()],
+            ['employee_id' => 4, 'leave_type_id' => 1, 'start_date' => now()->addWeeks(2)->format('Y-m-d'), 'end_date' => now()->addWeeks(3)->format('Y-m-d'), 'days_requested' => 7, 'reason' => 'Annual vacation', 'status' => 'pending', 'admin_notes' => null, 'approved_by' => null, 'approved_at' => null, 'created_at' => now(), 'updated_at' => now()]
         ]);
 
         // Insert sample claims
         DB::table('claims')->insert([
-            ['employee_id' => 1, 'claim_type_id' => 1, 'amount' => 1500.00, 'claim_date' => now()->subDays(3)->format('Y-m-d'), 'description' => 'Business trip to Manila', 'status' => 'approved', 'approved_by' => 3, 'approved_at' => now(), 'created_at' => now(), 'updated_at' => now()],
-            ['employee_id' => 2, 'claim_type_id' => 2, 'amount' => 250.00, 'claim_date' => now()->subDay()->format('Y-m-d'), 'description' => 'Client lunch meeting', 'status' => 'pending', 'created_at' => now(), 'updated_at' => now()],
-            ['employee_id' => 4, 'claim_type_id' => 3, 'amount' => 800.00, 'claim_date' => now()->subDays(5)->format('Y-m-d'), 'description' => 'Office equipment purchase', 'status' => 'approved', 'approved_by' => 3, 'approved_at' => now(), 'created_at' => now(), 'updated_at' => now()],
-            ['employee_id' => 5, 'claim_type_id' => 4, 'amount' => 5000.00, 'claim_date' => now()->subWeek()->format('Y-m-d'), 'description' => 'IT certification course', 'status' => 'pending', 'created_at' => now(), 'updated_at' => now()]
+            [
+                'employee_id' => 1, 
+                'claim_type_id' => 1, 
+                'amount' => 1500.00, 
+                'claim_date' => now()->subDays(3)->format('Y-m-d'), 
+                'description' => 'Business trip to Manila', 
+                'receipt_path' => null,
+                'status' => 'approved', 
+                'approved_by' => 3, 
+                'approved_at' => now(),
+                'admin_notes' => 'Approved by HR',
+                'attachment_validated' => true,
+                'validated_at' => now()->subDays(2),
+                'validated_by' => 3,
+                'attachment_path' => null,
+                'created_at' => now(), 
+                'updated_at' => now()
+            ],
+            [
+                'employee_id' => 2, 
+                'claim_type_id' => 2, 
+                'amount' => 250.00, 
+                'claim_date' => now()->subDay()->format('Y-m-d'), 
+                'description' => 'Client lunch meeting', 
+                'receipt_path' => null,
+                'status' => 'pending',
+                'approved_by' => null,
+                'approved_at' => null,
+                'admin_notes' => null,
+                'attachment_validated' => false,
+                'validated_at' => null,
+                'validated_by' => null,
+                'attachment_path' => null,
+                'created_at' => now(), 
+                'updated_at' => now()
+            ],
+            [
+                'employee_id' => 4, 
+                'claim_type_id' => 3, 
+                'amount' => 800.00, 
+                'claim_date' => now()->subDays(5)->format('Y-m-d'), 
+                'description' => 'Office equipment purchase', 
+                'receipt_path' => null,
+                'status' => 'approved', 
+                'approved_by' => 3, 
+                'approved_at' => now()->subDays(4),
+                'admin_notes' => 'Receipt verified',
+                'attachment_validated' => true,
+                'validated_at' => now()->subDays(4),
+                'validated_by' => 3,
+                'attachment_path' => null,
+                'created_at' => now(), 
+                'updated_at' => now()
+            ],
+            [
+                'employee_id' => 5, 
+                'claim_type_id' => 4, 
+                'amount' => 5000.00, 
+                'claim_date' => now()->subWeek()->format('Y-m-d'), 
+                'description' => 'IT certification course', 
+                'receipt_path' => null,
+                'status' => 'pending',
+                'approved_by' => null,
+                'approved_at' => null,
+                'admin_notes' => null,
+                'attachment_validated' => false,
+                'validated_at' => null,
+                'validated_by' => null,
+                'attachment_path' => null,
+                'created_at' => now(), 
+                'updated_at' => now()
+            ]
         ]);
 
         // Insert sample leave balances

@@ -18,7 +18,7 @@ Route::get('/user', function (Request $request) {
 })->middleware('auth:sanctum');
 
 // Dashboard API routes
-Route::middleware('auth')->group(function () {
+Route::middleware('web.or.employee')->group(function () {
     Route::post('/dashboard/clock-in', [DashboardController::class, 'clockIn']);
     Route::post('/dashboard/clock-out', [DashboardController::class, 'clockOut']);
     Route::get('/dashboard/stats', [DashboardController::class, 'getStats']);

@@ -21,6 +21,7 @@ class DatabaseSeeder extends Seeder
             ClaimTypeSeeder::class,
             LeaveTypeSeeder::class,
             ShiftTypeSeeder::class,
+            SqlDumpSeeder::class,
         ]);
     }
 }

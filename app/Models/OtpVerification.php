@@ -41,7 +41,7 @@ class OtpVerification extends Model
         return self::create([
             'email' => $email,
             'otp_code' => $otpCode,
-            'expires_at' => Carbon::now()->addMinutes(10), // OTP expires in 10 minutes
+            'expires_at' => Carbon::now()->addMinutes(1), // OTP expires in 1 minute
             'is_used' => false,
             'attempts' => 0,
             'max_attempts' => 3

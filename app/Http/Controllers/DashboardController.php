@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\Employee;
 use App\Models\TimeEntry;
+use App\Models\Attendance;
 use App\Models\LeaveRequest;
 use App\Models\Claim;
 use App\Models\Shift;
@@ -133,7 +134,14 @@ class DashboardController extends Controller
 
     public function clockIn(Request $request)
     {
-        $employee = Auth::guard('employee')->user() ?? Employee::find(1);
+        $employee = $this->resolveAttendanceEmployee();
+
+        if (!$employee) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No employee found for clock in'
+            ], 404);
+        }
         
         $todayEntry = $employee->getTodayTimeEntry();
         
@@ -154,6 +162,30 @@ class DashboardController extends Controller
 
         $todayEntry->clockIn();
 
+        // Sync attendance table
+        $clockInTime = Carbon::now();
+        $attendance = Attendance::getTodayAttendance($employee->id);
+        $standardStartTime = Carbon::today()->setTime(9, 0, 0);
+        $status = $clockInTime->gt($standardStartTime) ? 'late' : 'present';
+
+        if ($attendance) {
+            $attendance->update([
+                'clock_in_time' => $clockInTime,
+                'status' => $status,
+                'location' => 'HR Dashboard',
+                'ip_address' => $request->ip()
+            ]);
+        } else {
+            Attendance::create([
+                'employee_id' => $employee->id,
+                'date' => Carbon::today(),
+                'clock_in_time' => $clockInTime,
+                'status' => $status,
+                'location' => 'HR Dashboard',
+                'ip_address' => $request->ip()
+            ]);
+        }
+
         return response()->json([
             'success' => true,
             'message' => 'Clocked in successfully',
@@ -164,7 +196,14 @@ class DashboardController extends Controller
 
     public function clockOut(Request $request)
     {
-        $employee = Auth::guard('employee')->user() ?? Employee::find(1);
+        $employee = $this->resolveAttendanceEmployee();
+
+        if (!$employee) {
+            return response()->json([
+                'success' => false,
+                'message' => 'No employee found for clock out'
+            ], 404);
+        }
         
         $todayEntry = $employee->getTodayTimeEntry();
         
@@ -183,6 +222,16 @@ class DashboardController extends Controller
         }
 
         $todayEntry->clockOut();
+
+        // Sync attendance table
+        $attendance = Attendance::getTodayAttendance($employee->id);
+        if ($attendance && !$attendance->clock_out_time) {
+            $attendance->clock_out_time = Carbon::now();
+            $attendance->status = 'clocked_out';
+            $attendance->total_hours = $attendance->calculateTotalHours();
+            $attendance->overtime_hours = $attendance->calculateOvertimeHours();
+            $attendance->save();
+        }
 
         return response()->json([
             'success' => true,
@@ -212,6 +261,354 @@ class DashboardController extends Controller
         ];
 
         return response()->json($stats);
+    }
+
+    public function getAttendanceStatus()
+    {
+        try {
+            $employee = $this->resolveAttendanceEmployee();
+
+            if (!$employee) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Employee not found'
+                ], 404);
+            }
+
+            $attendance = Attendance::getTodayAttendance($employee->id);
+
+            if (!$attendance) {
+                return response()->json([
+                    'success' => true,
+                    'data' => [
+                        'employee_id' => $employee->id,
+                        'clocked_in' => false,
+                        'last_clock_in' => null,
+                        'last_clock_out' => null,
+                        'status' => 'not_clocked_in'
+                    ]
+                ]);
+            }
+
+            $lastClockIn = $attendance->clock_in_time
+                ? Carbon::parse($attendance->clock_in_time)->format('h:i A')
+                : null;
+            $lastClockOut = $attendance->clock_out_time
+                ? Carbon::parse($attendance->clock_out_time)->format('h:i A')
+                : null;
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'employee_id' => $employee->id,
+                    'clocked_in' => (bool) $attendance->clock_in_time && !$attendance->clock_out_time,
+                    'last_clock_in' => $lastClockIn,
+                    'last_clock_out' => $lastClockOut,
+                    'status' => $attendance->status,
+                    'total_hours' => $attendance->total_hours
+                ]
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error loading attendance status: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to load attendance status'
+            ], 500);
+        }
+    }
+
+    private function resolveAttendanceEmployee(): ?Employee
+    {
+        $employee = Auth::guard('employee')->user();
+
+        if ($employee instanceof Employee) {
+            return $employee;
+        }
+
+        $user = Auth::guard('web')->user();
+
+        if ($user) {
+            try {
+                if (method_exists($user, 'employee')) {
+                    $linkedEmployee = $user->employee;
+                    if ($linkedEmployee instanceof Employee) {
+                        return $linkedEmployee;
+                    }
+                }
+            } catch (\Exception $e) {
+                // Ignore relation lookup issues
+            }
+
+            if (!empty($user->email)) {
+                $employeeByEmail = Employee::where('email', $user->email)->first();
+                if ($employeeByEmail) {
+                    return $employeeByEmail;
+                }
+            }
+        }
+
+        return Employee::active()->first() ?? Employee::first();
+    }
+
+    private function buildAttendanceLogQuery(Request $request)
+    {
+        $query = Attendance::with('employee');
+
+        if ($request->filled('employee_id')) {
+            $query->where('employee_id', $request->employee_id);
+        }
+
+        $period = $request->input('period', 'today');
+
+        switch ($period) {
+            case 'yesterday':
+                $query->whereDate('date', Carbon::yesterday());
+                break;
+            case 'current-week':
+                $query->whereBetween('date', [
+                    Carbon::now()->startOfWeek(),
+                    Carbon::now()->endOfWeek()
+                ]);
+                break;
+            case 'last-week':
+                $lastWeekStart = Carbon::now()->subWeek()->startOfWeek();
+                $lastWeekEnd = Carbon::now()->subWeek()->endOfWeek();
+                $query->whereBetween('date', [$lastWeekStart, $lastWeekEnd]);
+                break;
+            case 'current-month':
+                $query->whereMonth('date', Carbon::now()->month)
+                    ->whereYear('date', Carbon::now()->year);
+                break;
+            case 'last-month':
+                $lastMonth = Carbon::now()->subMonth();
+                $query->whereMonth('date', $lastMonth->month)
+                    ->whereYear('date', $lastMonth->year);
+                break;
+            case 'custom':
+                if ($request->filled('start_date') && $request->filled('end_date')) {
+                    $query->whereBetween('date', [$request->start_date, $request->end_date]);
+                } elseif ($request->filled('start_date')) {
+                    $query->whereDate('date', '>=', $request->start_date);
+                } elseif ($request->filled('end_date')) {
+                    $query->whereDate('date', '<=', $request->end_date);
+                }
+                break;
+            case 'today':
+            default:
+                $query->whereDate('date', Carbon::today());
+                break;
+        }
+
+        return $query;
+    }
+
+    private function formatAttendanceRecord(Attendance $attendance): array
+    {
+        $employeeName = $attendance->employee
+            ? $attendance->employee->full_name
+            : 'Unknown Employee';
+
+        $totalHours = $attendance->total_hours;
+        if (($totalHours === null || $totalHours < 0) && $attendance->clock_in_time && $attendance->clock_out_time) {
+            $totalHours = $attendance->calculateTotalHours();
+        }
+
+        $breakMinutes = null;
+        if ($attendance->break_start_time && $attendance->break_end_time) {
+            $breakMinutes = abs(
+                Carbon::parse($attendance->break_end_time)
+                    ->diffInMinutes(Carbon::parse($attendance->break_start_time))
+            );
+        }
+
+        return [
+            'id' => $attendance->id,
+            'employee_name' => $employeeName,
+            'date' => $attendance->date ? Carbon::parse($attendance->date)->format('Y-m-d') : null,
+            'clock_in' => $attendance->clock_in_time ? Carbon::parse($attendance->clock_in_time)->format('h:i A') : null,
+            'clock_out' => $attendance->clock_out_time ? Carbon::parse($attendance->clock_out_time)->format('h:i A') : null,
+            'total_hours' => $totalHours !== null ? (float) $totalHours : null,
+            'break_time' => $breakMinutes,
+            'status' => $attendance->status ?? 'unknown',
+            'notes' => $attendance->notes,
+            'location' => $attendance->location,
+        ];
+    }
+
+    private function buildAttendanceTimeline(Attendance $attendance): array
+    {
+        $timeline = [];
+
+        if ($attendance->clock_in_time) {
+            $timeline[] = [
+                'time' => Carbon::parse($attendance->clock_in_time)->format('h:i A'),
+                'action' => 'Clocked in'
+            ];
+        }
+
+        if ($attendance->break_start_time) {
+            $timeline[] = [
+                'time' => Carbon::parse($attendance->break_start_time)->format('h:i A'),
+                'action' => 'Break started'
+            ];
+        }
+
+        if ($attendance->break_end_time) {
+            $timeline[] = [
+                'time' => Carbon::parse($attendance->break_end_time)->format('h:i A'),
+                'action' => 'Break ended'
+            ];
+        }
+
+        if ($attendance->clock_out_time) {
+            $timeline[] = [
+                'time' => Carbon::parse($attendance->clock_out_time)->format('h:i A'),
+                'action' => 'Clocked out'
+            ];
+        }
+
+        return $timeline;
+    }
+
+    public function getAttendanceStats()
+    {
+        try {
+            $employee = $this->resolveAttendanceEmployee();
+
+            if (!$employee) {
+                return response()->json([
+                    'success' => true,
+                    'data' => [
+                        'today_hours' => 0,
+                        'week_hours' => 0,
+                        'month_hours' => 0,
+                        'attendance_rate' => 100
+                    ]
+                ]);
+            }
+
+            $todayAttendance = Attendance::getTodayAttendance($employee->id);
+            $todayHours = 0;
+
+            if ($todayAttendance && $todayAttendance->clock_in_time && $todayAttendance->clock_out_time) {
+                if (!$todayAttendance->total_hours) {
+                    $todayAttendance->total_hours = $todayAttendance->calculateTotalHours();
+                    $todayAttendance->overtime_hours = $todayAttendance->calculateOvertimeHours();
+                    $todayAttendance->save();
+                }
+                $todayHours = (float) $todayAttendance->total_hours;
+            }
+
+            $weekHours = (float) Attendance::where('employee_id', $employee->id)
+                ->thisWeek()
+                ->sum('total_hours');
+
+            $monthRecords = Attendance::where('employee_id', $employee->id)
+                ->thisMonth()
+                ->get();
+
+            $monthHours = (float) $monthRecords->sum('total_hours');
+            $totalDays = $monthRecords->count();
+            $presentDays = $monthRecords
+                ->whereIn('status', ['present', 'late', 'clocked_out'])
+                ->count();
+            $attendanceRate = $totalDays > 0 ? round(($presentDays / $totalDays) * 100) : 100;
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'today_hours' => $todayHours,
+                    'week_hours' => $weekHours,
+                    'month_hours' => $monthHours,
+                    'attendance_rate' => $attendanceRate
+                ]
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error loading attendance stats: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to load attendance stats'
+            ], 500);
+        }
+    }
+
+    public function getAttendanceLog(Request $request)
+    {
+        try {
+            $query = $this->buildAttendanceLogQuery($request);
+            $attendances = $query->orderBy('date', 'desc')
+                ->orderBy('clock_in_time', 'desc')
+                ->limit(200)
+                ->get();
+
+            $records = $attendances->map(function (Attendance $attendance) {
+                return $this->formatAttendanceRecord($attendance);
+            });
+
+            return response()->json([
+                'success' => true,
+                'data' => $records
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error loading attendance log: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to load attendance log'
+            ], 500);
+        }
+    }
+
+    public function getAttendanceDetail($id)
+    {
+        try {
+            $attendance = Attendance::with('employee')->find($id);
+
+            if (!$attendance) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Attendance record not found'
+                ], 404);
+            }
+
+            $record = $this->formatAttendanceRecord($attendance);
+            $record['timeline'] = $this->buildAttendanceTimeline($attendance);
+
+            return response()->json([
+                'success' => true,
+                'data' => $record
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error loading attendance detail: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to load attendance detail'
+            ], 500);
+        }
+    }
+
+    public function exportAttendance(Request $request)
+    {
+        try {
+            $query = $this->buildAttendanceLogQuery($request);
+            $attendances = $query->orderBy('date', 'desc')
+                ->orderBy('clock_in_time', 'desc')
+                ->get();
+
+            $records = $attendances->map(function (Attendance $attendance) {
+                return $this->formatAttendanceRecord($attendance);
+            });
+
+            return response()->json([
+                'success' => true,
+                'data' => $records
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Error exporting attendance: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to export attendance data'
+            ], 500);
+        }
     }
 
     public function getRecentEntries()

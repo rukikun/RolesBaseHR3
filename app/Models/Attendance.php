@@ -23,6 +23,7 @@ class Attendance extends Model
         'total_hours',
         'overtime_hours',
         'location',
+        'workplace_type',
         'ip_address',
         'notes',
         'status'

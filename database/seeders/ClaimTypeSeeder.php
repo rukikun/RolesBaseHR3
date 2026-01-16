@@ -62,6 +62,9 @@ class ClaimTypeSeeder extends Seeder
             ],
         ];
 
+        // Disable foreign key checks
+        DB::statement('SET FOREIGN_KEY_CHECKS=0');
+        
         // Clear existing data first
         DB::table('claim_types')->truncate();
         
@@ -72,5 +75,8 @@ class ClaimTypeSeeder extends Seeder
                 'updated_at' => now()
             ]));
         }
+        
+        // Re-enable foreign key checks
+        DB::statement('SET FOREIGN_KEY_CHECKS=1');
     }
 }

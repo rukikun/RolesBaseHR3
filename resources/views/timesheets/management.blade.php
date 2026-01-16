@@ -2149,7 +2149,105 @@ function parseTimeToHours(timeStr) {
         minutes = parseInt(minutesMatch[1]);
     }
     
-    return hours + (minutes / 60);
+    return hours + minutes / 60;
+}
+
+function parseTimeToMinutes(timeStr) {
+    if (!timeStr) {
+        return null;
+    }
+
+    const match = timeStr.trim().match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+    if (!match) {
+        return null;
+    }
+
+    let hours = parseInt(match[1], 10);
+    const minutes = parseInt(match[2], 10);
+    const period = match[3].toUpperCase();
+
+    if (period === 'PM' && hours !== 12) {
+        hours += 12;
+    }
+    if (period === 'AM' && hours === 12) {
+        hours = 0;
+    }
+
+    return hours * 60 + minutes;
+}
+
+function formatBreakMinutes(breakValue) {
+    if (!breakValue || breakValue === '--') {
+        return '--';
+    }
+
+    if (typeof breakValue === 'number' && Number.isFinite(breakValue)) {
+        return `${Math.round(breakValue)}m`;
+    }
+
+    const trimmed = breakValue.toString().trim();
+    if (trimmed.endsWith('m')) {
+        return trimmed;
+    }
+
+    if (trimmed.includes('-')) {
+        const [start, end] = trimmed.split('-').map(part => part.trim());
+        const startMinutes = parseTimeToMinutes(start);
+        const endMinutes = parseTimeToMinutes(end);
+
+        if (startMinutes !== null && endMinutes !== null) {
+            const total = endMinutes < startMinutes ? endMinutes + 24 * 60 - startMinutes : endMinutes - startMinutes;
+            return `${total}m`;
+        }
+    }
+
+    const numericValue = parseFloat(trimmed);
+    if (Number.isFinite(numericValue)) {
+        return `${numericValue}m`;
+    }
+
+    return trimmed;
+}
+
+function normalizeAIInsights(rawInsights) {
+    if (!rawInsights) {
+        return [];
+    }
+
+    let insights = rawInsights;
+    if (typeof insights === 'string') {
+        try {
+            insights = JSON.parse(insights);
+        } catch (error) {
+            return [insights];
+        }
+    }
+
+    if (Array.isArray(insights)) {
+        return insights
+            .filter(value => value !== null && value !== undefined && value !== '')
+            .map(value => value.toString());
+    }
+
+    if (typeof insights === 'object') {
+        const labelMap = {
+            message: 'Message',
+            total_days_with_data: 'Days with data',
+            generation_method: 'Method'
+        };
+
+        return Object.entries(insights)
+            .map(([key, value]) => {
+                if (value === null || value === undefined || value === '') {
+                    return null;
+                }
+                const label = labelMap[key] || key.replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase());
+                return `${label}: ${value}`;
+            })
+            .filter(Boolean);
+    }
+
+    return [insights.toString()];
 }
 
 // Working Modal Functions - Enhanced with Better Error Handling
@@ -5084,7 +5182,7 @@ function viewAITimesheet(employeeId) {
                 weekly_data: data.data.weekly_data,
                 total_hours: data.data.total_hours,
                 overtime_hours: data.data.overtime_hours,
-                ai_insights: data.data.ai_insights,
+                ai_insights: normalizeAIInsights(data.data.ai_insights),
                 generated_at: data.data.generated_at,
                 status: data.data.status || 'pending'
             };
@@ -5141,7 +5239,7 @@ function populateAITimesheetModal(data) {
                         // Real attendance data
                         document.getElementById(`ai-${day}-date`).textContent = dayData.date || '--';
                         document.getElementById(`ai-${day}-time-in`).textContent = dayData.time_in || '--';
-                        document.getElementById(`ai-${day}-break`).textContent = dayData.break || '--';
+                        document.getElementById(`ai-${day}-break`).textContent = formatBreakMinutes(dayData.break) || '--';
                         document.getElementById(`ai-${day}-time-out`).textContent = dayData.time_out || '--';
                         document.getElementById(`ai-${day}-total-hours`).textContent = dayData.total_hours || '--';
                         document.getElementById(`ai-${day}-overtime`).textContent = dayData.overtime || '--';
@@ -5161,8 +5259,9 @@ function populateAITimesheetModal(data) {
         // Populate AI insights
         setTimeout(() => {
             const insightsContainer = document.getElementById('ai-insights');
-            if (data.ai_insights && data.ai_insights.length > 0) {
-                const insightsHtml = data.ai_insights.map(insight => 
+            const insights = normalizeAIInsights(data.ai_insights);
+            if (insights.length > 0) {
+                const insightsHtml = insights.map(insight =>
                     `<div class="insight-item"><i class="fas fa-lightbulb me-2 text-warning"></i>${insight}</div>`
                 ).join('');
                 insightsContainer.innerHTML = insightsHtml;
@@ -5447,7 +5546,7 @@ function extractTimesheetDataFromModal() {
     });
     
     // Extract AI insights
-    const insightElements = document.querySelectorAll('#ai-timesheet-modal .ai-insights-content .insight-item');
+    const insightElements = document.querySelectorAll('#ai-timesheet-modal #ai-insights .insight-item');
     insightElements.forEach(element => {
         aiInsights.push(element.textContent.trim());
     });
@@ -5796,7 +5895,7 @@ function populateSavedTimesheetModal(timesheet) {
                     <td class="fw-bold text-white" style="background: #20B2AA;">${dayNames[index]}</td>
                     <td>${dayData.date || '--'}</td>
                     <td>${dayData.clock_in || '--'}</td>
-                    <td>${dayData.break || '--'}</td>
+                    <td>${formatBreakMinutes(dayData.break) || '--'}</td>
                     <td>${dayData.clock_out || '--'}</td>
                     <td>${dayData.total_hours || '--'}</td>
                     <td>${dayData.overtime || '0m'}</td>
@@ -5806,12 +5905,11 @@ function populateSavedTimesheetModal(timesheet) {
     }
     
     // Populate AI insights
-    const insightsContainer = document.querySelector('.ai-insights-content');
+    const insightsContainer = document.getElementById('ai-insights');
     if (insightsContainer && timesheet.ai_insights) {
-        const insights = typeof timesheet.ai_insights === 'string' ? 
-            JSON.parse(timesheet.ai_insights) : timesheet.ai_insights;
+        const insights = normalizeAIInsights(timesheet.ai_insights);
         
-        if (Array.isArray(insights) && insights.length > 0) {
+        if (insights.length > 0) {
             insightsContainer.innerHTML = insights.map(insight => 
                 `<div class="insight-item mb-2"><i class="fas fa-lightbulb me-2"></i>${insight}</div>`
             ).join('');
