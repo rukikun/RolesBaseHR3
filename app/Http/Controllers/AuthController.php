@@ -43,20 +43,24 @@ class AuthController extends Controller
                 ]);
             }
 
-            // Store OTP session data before logging out
-            $request->session()->put('otp_email', $employee->email);
-            $request->session()->put('remember_me', $request->has('rememberMe'));
-            $request->session()->put('employee_name', $employee->first_name . ' ' . $employee->last_name);
-
-            // Log out until OTP verification is complete
-            Auth::guard('employee')->logout();
-
-            // Regenerate session and redirect to OTP verification
+            // OTP temporarily disabled: complete login immediately
             $request->session()->regenerate();
             $request->session()->forget('url.intended');
 
-            return redirect()->route('admin.otp.form')
-                ->with('info', "Please click 'Send Verification Code' to receive your OTP.");
+            try {
+                $employee->update([
+                    'last_activity' => now(),
+                    'online_status' => 'online'
+                ]);
+
+                if (class_exists('\App\Models\EmployeeActivity')) {
+                    \App\Models\EmployeeActivity::logLogin();
+                }
+            } catch (\Exception $e) {
+                \Log::error('Employee login status update failed: ' . $e->getMessage());
+            }
+
+            return redirect()->route('dashboard')->with('success', 'Login successful!');
         }
 
         return back()->withErrors([
