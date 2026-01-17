@@ -596,7 +596,24 @@
           email: '{{ session("otp_email", $email ?? "") }}'
         })
       })
-      .then(response => response.json())
+      .then(response => {
+        if (!response.ok) {
+          return response.text().then(text => {
+            let message = 'Failed to resend code. Please try again.';
+            try {
+              const errorData = JSON.parse(text);
+              message = errorData.message || errorData.error || message;
+            } catch (parseError) {
+              if (text) {
+                message = text;
+              }
+            }
+            throw new Error(message);
+          });
+        }
+
+        return response.json();
+      })
       .then(data => {
         if (data.success) {
           // Reset countdown
@@ -630,12 +647,12 @@
             alertDiv.remove();
           }, 3000);
         } else {
-          alert('Failed to resend code. Please try again.');
+          showOtpError(data.message || 'Failed to resend code. Please try again.');
         }
       })
       .catch(error => {
         console.error('Error:', error);
-        alert('Failed to resend code. Please try again.');
+        showOtpError(error?.message || 'Failed to resend code. Please try again.');
       })
       .finally(() => {
         resendLink.innerHTML = '<i class="bi bi-arrow-clockwise me-1"></i>Resend Code';
@@ -668,10 +685,21 @@
         })
       })
       .then(response => {
-        console.log('Response status:', response.status);
         if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
+          return response.text().then(text => {
+            let message = 'Failed to send verification code. Please try again.';
+            try {
+              const errorData = JSON.parse(text);
+              message = errorData.message || errorData.error || message;
+            } catch (parseError) {
+              if (text) {
+                message = text;
+              }
+            }
+            throw new Error(message);
+          });
         }
+
         return response.json();
       })
       .then(data => {
@@ -702,14 +730,14 @@
         } else {
           const errorMsg = data.message || 'Failed to send code. Please try again.';
           console.error('Server error:', errorMsg);
-          alert('Error: ' + errorMsg);
+          showOtpError(errorMsg);
           sendBtn.innerHTML = '<i class="bi bi-shield-check me-2"></i>Send Verification Code';
           sendBtn.disabled = false;
         }
       })
       .catch(error => {
         console.error('Network/Parse error:', error);
-        alert('Network error: ' + error.message + '. Please check your connection and try again.');
+        showOtpError(error?.message || 'Failed to send verification code. Please try again.');
         sendBtn.innerHTML = '<i class="bi bi-shield-check me-2"></i>Send Verification Code';
         sendBtn.disabled = false;
       });
