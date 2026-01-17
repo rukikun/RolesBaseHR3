@@ -215,10 +215,6 @@
                       <i class="bi bi-arrow-left me-2"></i>
                       Back to Login
                     </a>
-                    <button type="button" class="btn btn-outline-info btn-sm" onclick="testBiometricModal()">
-                      <i class="bi bi-fingerprint me-1"></i>
-                      Test Biometric
-                    </button>
                   </div>
                 </form>
             </div>
@@ -463,8 +459,21 @@
           }
           
           if (!response.ok) {
-            return response.json().then(errorData => {
-              throw new Error(errorData.message || 'OTP verification failed');
+            return response.text().then(text => {
+              let message = 'OTP verification failed.';
+              try {
+                const errorData = JSON.parse(text);
+                message = errorData.message || errorData.error || message;
+              } catch (parseError) {
+                if (response.status === 419) {
+                  message = 'Session expired. Please refresh the page and try again.';
+                } else if (response.status === 500) {
+                  message = 'Server error occurred. Please try again or check the logs.';
+                } else if (text) {
+                  message = text;
+                }
+              }
+              throw new Error(message);
             });
           }
           
@@ -502,7 +511,7 @@
         })
         .catch(error => {
           console.error('Error:', error);
-          alert('Network error occurred. Please try again.');
+          alert(error?.message || 'Network error occurred. Please try again.');
           
           // Reset button
           submitBtn.innerHTML = originalText;
@@ -1002,37 +1011,6 @@
       }, 2000);
     }
 
-    // Test WebAuthn support
-    function testWebAuthnSupport() {
-      console.log('=== WebAuthn Support Test ===');
-      console.log('navigator.credentials:', !!navigator.credentials);
-      console.log('PublicKeyCredential:', !!window.PublicKeyCredential);
-      console.log('window.isSecureContext:', window.isSecureContext);
-      console.log('window.location.hostname:', window.location.hostname);
-      console.log('window.location.protocol:', window.location.protocol);
-      
-      if (window.PublicKeyCredential) {
-        PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()
-          .then(available => {
-            console.log('Platform authenticator available:', available);
-          })
-          .catch(err => {
-            console.error('Error checking platform authenticator:', err);
-          });
-      }
-    }
-
-    // Test function for biometric modal
-    function testBiometricModal() {
-      console.log('Testing biometric modal...');
-      testWebAuthnSupport();
-      const testData = {
-        employee_id: 1,
-        employee_name: 'Test User',
-        has_biometric: false // Set to false to test registration flow
-      };
-      showBiometricModal(testData);
-    }
   </script>
 </body>
 </html>
