@@ -22,6 +22,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'auth.employee' => \App\Http\Middleware\Authenticate::class,
             'web.or.employee' => \App\Http\Middleware\EnsureWebOrEmployee::class,
+            'attendance.api_key' => \App\Http\Middleware\EnsureAttendanceApiKey::class,
             'role' => \App\Http\Middleware\RoleMiddleware::class,
         ]);
     })

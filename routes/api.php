@@ -178,7 +178,7 @@ Route::middleware('web.or.employee')->group(function () {
     });
 
     // Attendance API routes
-    Route::prefix('attendances')->group(function () {
+    Route::prefix('attendances')->middleware('attendance.api_key')->group(function () {
         Route::get('/', [App\Http\Controllers\Api\AttendanceController::class, 'index']);
         Route::post('/', [App\Http\Controllers\Api\AttendanceController::class, 'store']);
         Route::get('/statistics', [App\Http\Controllers\Api\AttendanceController::class, 'statistics']);

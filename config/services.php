@@ -41,4 +41,8 @@ return [
         'base_url' => env('CLOCKIFY_BASE_URL', 'https://api.clockify.me/api/v1'),
     ],
 
+    'attendance' => [
+        'api_key' => env('ATTENDANCE_API_KEY'),
+    ],
+
 ];
