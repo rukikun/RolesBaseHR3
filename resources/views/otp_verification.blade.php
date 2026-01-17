@@ -191,6 +191,11 @@
                     <input type="hidden" name="otp_code" id="otpCodeInput">
                   </div>
 
+                  <div id="otpErrorContainer" class="alert alert-danger d-none" role="alert">
+                    <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                    <span id="otpErrorMessage"></span>
+                  </div>
+
                   <div class="countdown-timer">
                     <span id="countdown">Code expires in <strong id="timer">1:00</strong></span>
                   </div>
@@ -321,6 +326,40 @@
     let countdownInterval;
     let otpInputs, otpCodeInput, verifyBtn, resendLink;
 
+    function showOtpError(message) {
+      const container = document.getElementById('otpErrorContainer');
+      const messageEl = document.getElementById('otpErrorMessage');
+
+      if (!container || !messageEl) {
+        return;
+      }
+
+      messageEl.textContent = message;
+      container.classList.remove('d-none');
+    }
+
+    function clearOtpError() {
+      const container = document.getElementById('otpErrorContainer');
+      const messageEl = document.getElementById('otpErrorMessage');
+
+      if (!container || !messageEl) {
+        return;
+      }
+
+      messageEl.textContent = '';
+      container.classList.add('d-none');
+    }
+
+    function isBiometricHostAllowed() {
+      const allowedHosts = [
+        'localhost',
+        '127.0.0.1',
+        'hr3.jetlougetravels-ph.com'
+      ];
+
+      return allowedHosts.includes(window.location.hostname);
+    }
+
     // Countdown timer function (global scope)
     function startCountdown() {
       // Clear any existing interval first
@@ -432,6 +471,8 @@
       const otpForm = document.getElementById('otpForm');
       otpForm.addEventListener('submit', function(e) {
         e.preventDefault(); // Prevent default form submission
+
+        clearOtpError();
         
         const submitBtn = this.querySelector('button[type="submit"]');
         const originalText = submitBtn.innerHTML;
@@ -502,7 +543,7 @@
             // Handle error
             const errorMsg = data?.message || 'OTP verification failed';
             console.error('OTP verification error:', errorMsg, data);
-            alert('Error: ' + errorMsg);
+            showOtpError(errorMsg);
             
             // Reset button
             submitBtn.innerHTML = originalText;
@@ -511,7 +552,7 @@
         })
         .catch(error => {
           console.error('Error:', error);
-          alert(error?.message || 'Network error occurred. Please try again.');
+          showOtpError(error?.message || 'Network error occurred. Please try again.');
           
           // Reset button
           submitBtn.innerHTML = originalText;
@@ -775,7 +816,7 @@
         console.log('Is secure context:', window.isSecureContext);
         
         // First try real WebAuthn if conditions are right
-        if (navigator.credentials && window.PublicKeyCredential && window.isSecureContext && window.location.hostname === 'localhost') {
+        if (navigator.credentials && window.PublicKeyCredential && window.isSecureContext && isBiometricHostAllowed()) {
           console.log('Attempting real WebAuthn registration...');
           
           try {
@@ -879,7 +920,7 @@
 
       } catch (error) {
         console.error('Biometric registration error:', error);
-        showBiometricError('Registration failed: ' + error.message + '\n\nPlease try accessing via localhost:8000 for full biometric support.');
+        showBiometricError('Registration failed: ' + error.message + '\n\nPlease use a secure HTTPS domain or localhost for biometric support.');
       }
     }
 
@@ -891,7 +932,7 @@
         console.log('Attempting biometric verification...');
         
         // First try real WebAuthn if conditions are right
-        if (navigator.credentials && window.PublicKeyCredential && window.isSecureContext && window.location.hostname === 'localhost') {
+        if (navigator.credentials && window.PublicKeyCredential && window.isSecureContext && isBiometricHostAllowed()) {
           console.log('Attempting real WebAuthn verification...');
           
           try {
@@ -974,7 +1015,7 @@
 
       } catch (error) {
         console.error('Biometric verification error:', error);
-        showBiometricError('Verification failed: ' + error.message + '\n\nPlease try accessing via localhost:8000 for full biometric support.');
+        showBiometricError('Verification failed: ' + error.message + '\n\nPlease use a secure HTTPS domain or localhost for biometric support.');
       }
     }
 
