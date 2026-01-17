@@ -170,14 +170,10 @@ class AuthController extends Controller
         }
 
         if ($isAjax) {
-            $hasBiometric = $employee->hasBiometricAuth();
             return response()->json([
                 'success' => true,
                 'message' => 'OTP verified successfully.',
-                'requires_biometric' => true,
-                'has_biometric' => $hasBiometric,
-                'employee_id' => $employee->id,
-                'employee_name' => $employee->first_name . ' ' . $employee->last_name,
+                'requires_biometric' => false,
                 'redirect_url' => route('dashboard')
             ]);
         }
