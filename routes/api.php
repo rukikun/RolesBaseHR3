@@ -33,6 +33,16 @@ Route::prefix('attendances')->group(function () {
     Route::post('/{id}/end-break', [App\Http\Controllers\Api\AttendanceController::class, 'endBreak']);
 });
 
+// Legacy Attendance API routes (public)
+Route::get('/attendance', [AttendanceController::class, 'getAttendances']);
+Route::post('/attendance', [AttendanceController::class, 'store']);
+Route::post('/attendance/clock-in', [AttendanceController::class, 'clockIn']);
+Route::post('/attendance/clock-out', [AttendanceController::class, 'clockOut']);
+Route::post('/attendance/start-break', [AttendanceController::class, 'startBreak']);
+Route::post('/attendance/end-break', [AttendanceController::class, 'endBreak']);
+Route::get('/attendance/status/{employeeId}', [AttendanceController::class, 'getStatus']);
+Route::get('/attendance/stats', [AttendanceController::class, 'getStats']);
+
 // Dashboard API routes
 Route::middleware('web.or.employee')->group(function () {
     Route::post('/dashboard/clock-in', [DashboardController::class, 'clockIn']);
@@ -58,17 +68,6 @@ Route::middleware('web.or.employee')->group(function () {
     Route::get('/dashboard/attendance-log', [DashboardController::class, 'getAttendanceLog']);
     Route::get('/dashboard/attendance-detail/{id}', [DashboardController::class, 'getAttendanceDetail']);
     Route::get('/dashboard/attendance-export', [DashboardController::class, 'exportAttendance']);
-    
-    // Attendance Management API routes
-    
-    Route::get('/attendance', [AttendanceController::class, 'getAttendances']);
-    Route::post('/attendance', [AttendanceController::class, 'store']);
-    Route::post('/attendance/clock-in', [AttendanceController::class, 'clockIn']);
-    Route::post('/attendance/clock-out', [AttendanceController::class, 'clockOut']);
-    Route::post('/attendance/start-break', [AttendanceController::class, 'startBreak']);
-    Route::post('/attendance/end-break', [AttendanceController::class, 'endBreak']);
-    Route::get('/attendance/status/{employeeId}', [AttendanceController::class, 'getStatus']);
-    Route::get('/attendance/stats', [AttendanceController::class, 'getStats']);
     
     // Shift Management API routes
     Route::get('/shifts/stats', [ShiftController::class, 'getStats']);
