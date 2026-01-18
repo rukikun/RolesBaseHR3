@@ -13,7 +13,7 @@ use App\Http\Controllers\ClockifyController;
 use App\Http\Controllers\AIController;
 use App\Http\Controllers\UnifiedHRController;
 
-Route::get('attendances', [App\Http\Controllers\Api\AttendanceController::class, 'x']);
+Route::get('/Logattendance', [App\Http\Controllers\Api\LogattendanceController::class, 'x']);
 
 Route::get('/user', function (Request $request) {
     return $request->user();

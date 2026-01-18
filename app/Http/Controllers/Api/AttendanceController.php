@@ -16,9 +16,7 @@ class AttendanceController extends Controller
      * Display a listing of attendance records.
      */
 
-    public function x(){
-        return Attendance::all();
-    }
+    
      
     public function index(Request $request)
     {
