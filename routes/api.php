@@ -43,6 +43,28 @@ Route::post('/attendance/end-break', [AttendanceController::class, 'endBreak']);
 Route::get('/attendance/status/{employeeId}', [AttendanceController::class, 'getStatus']);
 Route::get('/attendance/stats', [AttendanceController::class, 'getStats']);
 
+// Claims API routes (public)
+Route::prefix('claims')->group(function () {
+    Route::get('/', [App\Http\Controllers\Api\ClaimsController::class, 'index']);
+    Route::post('/', [App\Http\Controllers\Api\ClaimsController::class, 'store']);
+    Route::get('/statistics', [App\Http\Controllers\Api\ClaimsController::class, 'statistics']);
+    Route::get('/{id}', [App\Http\Controllers\Api\ClaimsController::class, 'show']);
+    Route::put('/{id}', [App\Http\Controllers\Api\ClaimsController::class, 'update']);
+    Route::delete('/{id}', [App\Http\Controllers\Api\ClaimsController::class, 'destroy']);
+    Route::post('/{id}/approve', [App\Http\Controllers\Api\ClaimsController::class, 'approve']);
+    Route::post('/{id}/reject', [App\Http\Controllers\Api\ClaimsController::class, 'reject']);
+});
+
+// Leave Requests API routes (public)
+Route::prefix('leave-requests')->group(function () {
+    // Single endpoint for external systems to send data and create leave requests
+    Route::post('/receive', [App\Http\Controllers\Api\LeaveRequestController::class, 'receiveData']);
+    
+    // Approval endpoints
+    Route::post('/{id}/approve', [App\Http\Controllers\Api\LeaveRequestController::class, 'approve']);
+    Route::post('/{id}/reject', [App\Http\Controllers\Api\LeaveRequestController::class, 'reject']);
+});
+
 // Dashboard API routes
 Route::middleware('web.or.employee')->group(function () {
     Route::post('/dashboard/clock-in', [DashboardController::class, 'clockIn']);
@@ -170,28 +192,6 @@ Route::middleware('web.or.employee')->group(function () {
     
     // Weekly timesheet view route
     Route::get('/timesheets/{id}/weekly', [TimesheetController::class, 'getWeeklyTimesheetForModal']);
-
-    // Claims API routes
-    Route::prefix('claims')->group(function () {
-        Route::get('/', [App\Http\Controllers\Api\ClaimsController::class, 'index']);
-        Route::post('/', [App\Http\Controllers\Api\ClaimsController::class, 'store']);
-        Route::get('/statistics', [App\Http\Controllers\Api\ClaimsController::class, 'statistics']);
-        Route::get('/{id}', [App\Http\Controllers\Api\ClaimsController::class, 'show']);
-        Route::put('/{id}', [App\Http\Controllers\Api\ClaimsController::class, 'update']);
-        Route::delete('/{id}', [App\Http\Controllers\Api\ClaimsController::class, 'destroy']);
-        Route::post('/{id}/approve', [App\Http\Controllers\Api\ClaimsController::class, 'approve']);
-        Route::post('/{id}/reject', [App\Http\Controllers\Api\ClaimsController::class, 'reject']);
-    });
-
-    // Leave Requests API routes
-    Route::prefix('leave-requests')->group(function () {
-        // Single endpoint for external systems to send data and create leave requests
-        Route::post('/receive', [App\Http\Controllers\Api\LeaveRequestController::class, 'receiveData']);
-        
-        // Approval endpoints
-        Route::post('/{id}/approve', [App\Http\Controllers\Api\LeaveRequestController::class, 'approve']);
-        Route::post('/{id}/reject', [App\Http\Controllers\Api\LeaveRequestController::class, 'reject']);
-    });
 
     // Leave Management API routes
     Route::prefix('leave')->group(function () {
