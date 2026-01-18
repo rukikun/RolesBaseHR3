@@ -19,6 +19,20 @@ Route::get('/user', function (Request $request) {
     return $request->user();
 })->middleware('auth:sanctum');
 
+// Attendance API routes (public)
+Route::prefix('attendances')->group(function () {
+    Route::get('/', [App\Http\Controllers\Api\AttendanceController::class, 'index']);
+    Route::post('/', [App\Http\Controllers\Api\AttendanceController::class, 'store']);
+    Route::get('/statistics', [App\Http\Controllers\Api\AttendanceController::class, 'statistics']);
+    Route::get('/status/{employeeId}', [App\Http\Controllers\Api\AttendanceController::class, 'currentStatus']);
+    Route::get('/{id}', [App\Http\Controllers\Api\AttendanceController::class, 'show']);
+    Route::put('/{id}', [App\Http\Controllers\Api\AttendanceController::class, 'update']);
+    Route::delete('/{id}', [App\Http\Controllers\Api\AttendanceController::class, 'destroy']);
+    Route::post('/{id}/clock-out', [App\Http\Controllers\Api\AttendanceController::class, 'clockOut']);
+    Route::post('/{id}/start-break', [App\Http\Controllers\Api\AttendanceController::class, 'startBreak']);
+    Route::post('/{id}/end-break', [App\Http\Controllers\Api\AttendanceController::class, 'endBreak']);
+});
+
 // Dashboard API routes
 Route::middleware('web.or.employee')->group(function () {
     Route::post('/dashboard/clock-in', [DashboardController::class, 'clockIn']);
@@ -178,20 +192,6 @@ Route::middleware('web.or.employee')->group(function () {
         // Approval endpoints
         Route::post('/{id}/approve', [App\Http\Controllers\Api\LeaveRequestController::class, 'approve']);
         Route::post('/{id}/reject', [App\Http\Controllers\Api\LeaveRequestController::class, 'reject']);
-    });
-
-    // Attendance API routes
-    Route::prefix('attendances')->middleware('attendance.api_key')->group(function () {
-        Route::get('/', [App\Http\Controllers\Api\AttendanceController::class, 'index']);
-        Route::post('/', [App\Http\Controllers\Api\AttendanceController::class, 'store']);
-        Route::get('/statistics', [App\Http\Controllers\Api\AttendanceController::class, 'statistics']);
-        Route::get('/status/{employeeId}', [App\Http\Controllers\Api\AttendanceController::class, 'currentStatus']);
-        Route::get('/{id}', [App\Http\Controllers\Api\AttendanceController::class, 'show']);
-        Route::put('/{id}', [App\Http\Controllers\Api\AttendanceController::class, 'update']);
-        Route::delete('/{id}', [App\Http\Controllers\Api\AttendanceController::class, 'destroy']);
-        Route::post('/{id}/clock-out', [App\Http\Controllers\Api\AttendanceController::class, 'clockOut']);
-        Route::post('/{id}/start-break', [App\Http\Controllers\Api\AttendanceController::class, 'startBreak']);
-        Route::post('/{id}/end-break', [App\Http\Controllers\Api\AttendanceController::class, 'endBreak']);
     });
 
     // Leave Management API routes
