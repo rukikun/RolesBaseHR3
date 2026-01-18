@@ -17,7 +17,7 @@ class AttendanceController extends Controller
      */
 
     public function x(){
-        return respone()->json(Attedance::all());
+        return Attendance::all();
     }
      
     public function index(Request $request)

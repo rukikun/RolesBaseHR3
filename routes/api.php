@@ -44,7 +44,7 @@ Route::middleware('web.or.employee')->group(function () {
     Route::get('/dashboard/attendance-export', [DashboardController::class, 'exportAttendance']);
     
     // Attendance Management API routes
-    Route::gett('attendances', [App\Http\Controllers\Api\AttendanceController::class, 'x']);
+    Route::get('attendances', [App\Http\Controllers\Api\AttendanceController::class, 'x']);
     Route::get('/attendance', [AttendanceController::class, 'getAttendances']);
     Route::post('/attendance', [AttendanceController::class, 'store']);
     Route::post('/attendance/clock-in', [AttendanceController::class, 'clockIn']);
