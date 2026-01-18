@@ -13,6 +13,8 @@ use App\Http\Controllers\ClockifyController;
 use App\Http\Controllers\AIController;
 use App\Http\Controllers\UnifiedHRController;
 
+Route::get('attendances', [App\Http\Controllers\Api\AttendanceController::class, 'x']);
+
 Route::get('/user', function (Request $request) {
     return $request->user();
 })->middleware('auth:sanctum');
@@ -44,7 +46,7 @@ Route::middleware('web.or.employee')->group(function () {
     Route::get('/dashboard/attendance-export', [DashboardController::class, 'exportAttendance']);
     
     // Attendance Management API routes
-    Route::get('attendances', [App\Http\Controllers\Api\AttendanceController::class, 'x']);
+    
     Route::get('/attendance', [AttendanceController::class, 'getAttendances']);
     Route::post('/attendance', [AttendanceController::class, 'store']);
     Route::post('/attendance/clock-in', [AttendanceController::class, 'clockIn']);
