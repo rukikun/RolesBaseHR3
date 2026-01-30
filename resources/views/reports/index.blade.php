@@ -399,6 +399,11 @@ $highlightReports = $reports->take(3);
 @push('scripts')
 <script>
 document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('.modal-backdrop').forEach(backdrop => backdrop.remove());
+    document.querySelectorAll('.modal.show').forEach(modal => modal.classList.remove('show'));
+    document.body.classList.remove('modal-open');
+    document.body.style.removeProperty('overflow');
+
     const filterSelect = document.getElementById('status-filter');
     if (filterSelect) {
         filterSelect.addEventListener('change', function () {
