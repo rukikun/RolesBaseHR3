@@ -29,6 +29,7 @@ use App\Http\Controllers\SystemTestController;
 use App\Http\Controllers\SystemMaintenanceController;
 use App\Http\Controllers\SystemViewController;
 use App\Http\Controllers\SettingsController;
+use App\Http\Controllers\ReportController;
 
 // New MVC Management Controllers
 use App\Http\Controllers\EmployeeManagementController;
@@ -370,6 +371,7 @@ Route::middleware('web.or.employee')->group(function () {
     
     // Payroll Management Routes
     Route::get('/payroll-management', [PayrollController::class, 'index'])->name('payroll-management');
+    Route::get('/payroll-management/export', [PayrollController::class, 'exportPayroll'])->name('payroll.export');
     Route::post('/payroll/send-to-payroll', [PayrollController::class, 'sendToPayroll'])->name('payroll.send');
     Route::patch('/payroll/{id}/process', [PayrollController::class, 'process'])->name('payroll.process');
     Route::patch('/payroll/{id}/mark-paid', [PayrollController::class, 'markPaid'])->name('payroll.mark-paid');
@@ -397,6 +399,14 @@ Route::middleware('web.or.employee')->group(function () {
     Route::post('/settings', [SettingsController::class, 'store'])->name('settings.store');
     Route::get('/settings/export', [SettingsController::class, 'export'])->name('settings.export');
     Route::post('/settings/import', [SettingsController::class, 'import'])->name('settings.import');
+
+    // Reports Routes
+    Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
+    Route::get('/reports/{report}', [ReportController::class, 'show'])->name('reports.show');
+    Route::post('/reports', [ReportController::class, 'store'])->name('reports.store');
+    Route::patch('/reports/{report}', [ReportController::class, 'update'])->name('reports.update');
+    Route::delete('/reports/{report}', [ReportController::class, 'destroy'])->name('reports.destroy');
+    Route::get('/reports-export', [ReportController::class, 'export'])->name('reports.export');
     Route::post('/settings/reset', [SettingsController::class, 'reset'])->name('settings.reset');
     
     // Claims CRUD Routes - Using Proper MVC Controller

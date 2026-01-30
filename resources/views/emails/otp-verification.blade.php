@@ -105,7 +105,7 @@
             
             <div class="warning">
                 <strong>⚠️ Security Notice:</strong><br>
-                • This code expires in <strong>10 minutes</strong><br>
+                • This code expires in <strong>2 minutes</strong><br>
                 • Never share this code with anyone<br>
                 • If you didn't request this code, please ignore this email
             </div>

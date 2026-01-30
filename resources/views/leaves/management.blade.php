@@ -58,6 +58,79 @@
 
 {{-- Data is now passed from LeaveController instead of direct PDO queries --}}
 
+<!-- Leave Balance Overview -->
+<div class="card mb-4">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <h5 class="card-title mb-0">
+      <i class="fas fa-wallet me-2"></i>Leave Balance Overview
+    </h5>
+    <span class="badge bg-primary">{{ $currentLeaveYear }}</span>
+  </div>
+  <div class="card-body">
+    <div class="row g-4" id="leave-balance-section">
+      @forelse($leaveBalanceSummaries as $summary)
+        <div class="col-lg-4 col-md-6">
+          <div class="leave-balance-box">
+            <div class="d-flex justify-content-between align-items-start">
+              <div>
+                <h6 class="mb-1">{{ $summary->employee_name }}</h6>
+                <p class="text-muted small mb-0">{{ $summary->department ?? 'Department N/A' }}</p>
+              </div>
+              <span class="badge bg-info">Balances</span>
+            </div>
+            <div class="d-flex justify-content-between align-items-center mt-3">
+              <span class="text-muted small">Balances hidden</span>
+              <button type="button" class="btn btn-view-balance" onclick="openWorkingModal('leave-balance-modal-{{ $summary->employee_id ?? $loop->index }}')">
+                <i class="fas fa-plus me-2"></i>View Balances
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="working-modal" id="leave-balance-modal-{{ $summary->employee_id ?? $loop->index }}" style="display: none;">
+          <div class="working-modal-backdrop" onclick="closeWorkingModal('leave-balance-modal-{{ $summary->employee_id ?? $loop->index }}')"></div>
+          <div class="working-modal-dialog">
+            <div class="working-modal-content">
+              <div class="working-modal-header">
+                <h5 class="working-modal-title">Leave Balances - {{ $summary->employee_name }}</h5>
+                <button type="button" class="working-modal-close" onclick="closeWorkingModal('leave-balance-modal-{{ $summary->employee_id ?? $loop->index }}')">&times;</button>
+              </div>
+              <div class="working-modal-body">
+                <p class="text-muted small mb-3">Department: {{ $summary->department ?? 'Department N/A' }} • {{ $currentLeaveYear }}</p>
+                <div class="leave-balance-list">
+                  @foreach($summary->balances as $balance)
+                    <div class="leave-balance-row">
+                      <div class="d-flex justify-content-between align-items-center">
+                        <div class="fw-semibold">
+                          {{ $balance->leave_type_name }}
+                          @if(!empty($balance->leave_type_code))
+                            <span class="text-muted">({{ $balance->leave_type_code }})</span>
+                          @endif
+                        </div>
+                        <span class="leave-balance-remaining">{{ $balance->remaining_days }} days</span>
+                      </div>
+                      <div class="small text-muted">Allocated {{ $balance->allocated_days }} • Used {{ $balance->used_days }}</div>
+                    </div>
+                  @endforeach
+                </div>
+              </div>
+              <div class="working-modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeWorkingModal('leave-balance-modal-{{ $summary->employee_id ?? $loop->index }}')">Close</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      @empty
+        <div class="col-12">
+          <div class="alert alert-light border text-center mb-0">
+            No leave balances available for {{ $currentLeaveYear }}.
+          </div>
+        </div>
+      @endforelse
+    </div>
+  </div>
+</div>
+
 <!-- Leave Statistics Cards -->
 <div class="row g-4 mb-4">
   <div class="col-md-3">
@@ -425,7 +498,7 @@
                 <div class="working-modal-body">
                     <div class="alert alert-info mb-3">
                         <i class="fas fa-info-circle me-2"></i>
-                        <strong>Authorization Required:</strong> Only HR Manager, System Administrator, HR Scheduler, Admin, or HR Administrator can perform this action.
+                        <strong>Authorization Required.</strong>
                     </div>
                     <div class="mb-3">
                         <label for="auth-email" class="form-label">Email Address</label>
@@ -1001,6 +1074,52 @@ document.addEventListener('DOMContentLoaded', function() {
   color: #6c757d;
   font-weight: 500;
   margin-top: 4px;
+}
+
+/* Leave balance overview */
+.leave-balance-box {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 18px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.06);
+  height: 100%;
+}
+
+.leave-balance-list {
+  margin-top: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.leave-balance-row {
+  background: #f7f9fc;
+  border-radius: 12px;
+  padding: 10px 12px;
+  border: 1px solid #e3e8f1;
+}
+
+.leave-balance-remaining {
+  font-weight: 700;
+  color: #1f7a8c;
+}
+
+.btn-view-balance {
+  background: linear-gradient(135deg, #1f5fbf, #193f91);
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  box-shadow: 0 4px 10px rgba(25, 63, 145, 0.3);
+}
+
+.btn-view-balance:hover,
+.btn-view-balance:focus {
+  color: #ffffff;
+  background: linear-gradient(135deg, #235fce, #1a4fb5);
+  box-shadow: 0 6px 14px rgba(25, 63, 145, 0.35);
 }
 
 /* Color variations for icons */

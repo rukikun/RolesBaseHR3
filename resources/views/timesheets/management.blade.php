@@ -290,10 +290,10 @@
                 </td>
                 <td>
                   <div class="btn-group" role="group">
-                    <button class="btn btn-sm btn-outline-secondary" onclick="editShift({{ $shift->id }})" title="Edit">
+                    <button class="btn btn-sm btn-outline-secondary" onclick="showTimesheetAuthModal('edit', {{ $shift->id }}, { context: 'shift', callback: function() { editShift({{ $shift->id }}); } })" title="Edit">
                       <i class="fas fa-edit"></i>
                     </button>
-                    <form method="POST" action="/shifts/{{ $shift->id }}" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this shift?')">
+                    <form method="POST" action="/shifts/{{ $shift->id }}" style="display: inline;" onsubmit="showTimesheetAuthModal('delete', {{ $shift->id }}, { context: 'shift', form: this }); return false;">
                       @csrf
                       @method('DELETE')
                       <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete">
@@ -366,17 +366,17 @@
                 <td>
                   <div class="btn-group" role="group">
                     @if($leave->status === 'pending')
-                    <form method="POST" action="/leave-requests/{{ $leave->id }}/approve" style="display: inline;" onsubmit="return confirm('Are you sure you want to approve this leave request?')">
+                    <form method="POST" action="/leave-requests/{{ $leave->id }}/approve" style="display: inline;" onsubmit="return false;">
                       @csrf
                       @method('PATCH')
-                      <button type="submit" class="btn btn-sm btn-outline-success" title="Approve">
+                      <button type="button" class="btn btn-sm btn-outline-success" title="Approve" onclick="showTimesheetAuthModal('approve', {{ $leave->id }}, { context: 'leave-request', form: this.closest('form') });">
                         <i class="fas fa-check"></i>
                       </button>
                     </form>
-                    <form method="POST" action="/leave-requests/{{ $leave->id }}/reject" style="display: inline;" onsubmit="return confirm('Are you sure you want to reject this leave request?')">
+                    <form method="POST" action="/leave-requests/{{ $leave->id }}/reject" style="display: inline;" onsubmit="return false;">
                       @csrf
                       @method('PATCH')
-                      <button type="submit" class="btn btn-sm btn-outline-danger" title="Reject">
+                      <button type="button" class="btn btn-sm btn-outline-danger" title="Reject" onclick="showTimesheetAuthModal('reject', {{ $leave->id }}, { context: 'leave-request', form: this.closest('form') });">
                         <i class="fas fa-times"></i>
                       </button>
                     </form>
@@ -431,15 +431,15 @@
                 <td>
                   <div class="btn-group" role="group">
                     @if($claim->status === 'pending')
-                    <form method="POST" action="/claims/{{ $claim->id }}/approve" style="display: inline;" onsubmit="return confirm('Are you sure you want to approve this claim?')">
+                    <form method="POST" action="/claims/{{ $claim->id }}/approve" style="display: inline;" onsubmit="return false;">
                       @csrf
-                      <button type="submit" class="btn btn-sm btn-outline-success" title="Approve">
+                      <button type="button" class="btn btn-sm btn-outline-success" title="Approve" onclick="showTimesheetAuthModal('approve', {{ $claim->id }}, { context: 'claim', form: this.closest('form') });">
                         <i class="fas fa-check"></i>
                       </button>
                     </form>
-                    <form method="POST" action="/claims/{{ $claim->id }}/reject" style="display: inline;" onsubmit="return confirm('Are you sure you want to reject this claim?')">
+                    <form method="POST" action="/claims/{{ $claim->id }}/reject" style="display: inline;" onsubmit="return false;">
                       @csrf
-                      <button type="submit" class="btn btn-sm btn-outline-danger" title="Reject">
+                      <button type="button" class="btn btn-sm btn-outline-danger" title="Reject" onclick="showTimesheetAuthModal('reject', {{ $claim->id }}, { context: 'claim', form: this.closest('form') });">
                         <i class="fas fa-times"></i>
                       </button>
                     </form>
@@ -590,7 +590,7 @@
                   <td>
                     <div class="btn-group" role="group">
                       @if(!$attendance->clock_out_time)
-                      <button class="btn btn-sm btn-outline-warning" onclick="editAttendance({{ $attendance->id }})" title="Edit">
+                      <button class="btn btn-sm btn-outline-warning" onclick="showTimesheetAuthModal('edit', {{ $attendance->id }}, { context: 'attendance', callback: function() { editAttendance({{ $attendance->id }}); } })" title="Edit">
                         <i class="fas fa-edit"></i>
                       </button>
                       @endif
@@ -1896,6 +1896,47 @@
                 <div class="working-modal-footer">
                     <button type="button" class="btn btn-secondary" onclick="closeWorkingModal('claim-modal')">Cancel</button>
                     <button type="submit" class="btn btn-primary" id="saveClaimBtn">Submit Claim</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Timesheet HR Authorization Modal -->
+<div class="working-modal" id="timesheet-hr-auth-modal" style="display: none;">
+    <div class="working-modal-backdrop" onclick="closeWorkingModal('timesheet-hr-auth-modal')"></div>
+    <div class="working-modal-dialog">
+        <div class="working-modal-content">
+            <div class="working-modal-header">
+                <h5 class="working-modal-title">HR Authorization Required</h5>
+                <button type="button" class="working-modal-close" onclick="closeWorkingModal('timesheet-hr-auth-modal')">&times;</button>
+            </div>
+            <form id="timesheet-hr-auth-form" method="POST" action="/timesheet/hr-auth">
+                @csrf
+                <input type="hidden" id="timesheet-auth-action" name="action">
+                <input type="hidden" id="timesheet-auth-item-id" name="item_id">
+                <input type="hidden" id="timesheet-auth-extra-data" name="extra_data">
+                <input type="hidden" name="validate_only" value="1">
+                <div class="working-modal-body">
+                    <div class="alert alert-info mb-3">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>Authorization Required.</strong>
+                    </div>
+                    <p class="text-muted mb-3">Enter HR credentials to continue.</p>
+                    <div class="mb-3">
+                        <label for="timesheet-auth-email" class="form-label">Email Address</label>
+                        <input type="email" class="form-control" id="timesheet-auth-email" name="email" required placeholder="Enter your email address">
+                    </div>
+                    <div class="mb-3">
+                        <label for="timesheet-auth-password" class="form-label">Password</label>
+                        <input type="password" class="form-control" id="timesheet-auth-password" name="password" required placeholder="Enter your password">
+                    </div>
+                </div>
+                <div class="working-modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeWorkingModal('timesheet-hr-auth-modal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-lock me-2"></i>Authenticate &amp; Proceed
+                    </button>
                 </div>
             </form>
         </div>
@@ -5737,13 +5778,13 @@ function getActionButtons(timesheetId, status) {
         // Show approve, reject, and delete buttons for pending items
         return `
             <div class="btn-group" role="group">
-                <button class="btn btn-sm btn-outline-success" onclick="approveTimesheet('${timesheetId}')" title="Approve">
+                <button class="btn btn-sm btn-outline-success" data-timesheet-action="approve" data-timesheet-id="${timesheetId}" onclick="showTimesheetAuthModal('approve', '${timesheetId}')" title="Approve">
                     <i class="fas fa-check"></i>
                 </button>
-                <button class="btn btn-sm btn-outline-danger" onclick="rejectTimesheet('${timesheetId}')" title="Reject">
+                <button class="btn btn-sm btn-outline-danger" data-timesheet-action="reject" data-timesheet-id="${timesheetId}" onclick="showTimesheetAuthModal('reject', '${timesheetId}')" title="Reject">
                     <i class="fas fa-times"></i>
                 </button>
-                <button class="btn btn-sm btn-outline-danger" onclick="deleteTimesheet('${timesheetId}')" title="Delete">
+                <button class="btn btn-sm btn-outline-danger" data-timesheet-action="delete" data-timesheet-id="${timesheetId}" onclick="showTimesheetAuthModal('delete', '${timesheetId}')" title="Delete">
                     <i class="fas fa-trash"></i>
                 </button>
             </div>
@@ -5752,10 +5793,10 @@ function getActionButtons(timesheetId, status) {
         // Show send to payroll and delete buttons for approved items
         return `
             <div class="btn-group" role="group">
-                <button class="btn btn-sm btn-outline-primary" onclick="sendToPayroll('${timesheetId}')" title="Send to Payroll">
+                <button class="btn btn-sm btn-outline-primary" data-timesheet-action="send_to_payroll" data-timesheet-id="${timesheetId}" onclick="showTimesheetAuthModal('send_to_payroll', '${timesheetId}')" title="Send to Payroll">
                     <i class="fas fa-money-bill-wave"></i>
                 </button>
-                <button class="btn btn-sm btn-outline-danger" onclick="deleteTimesheet('${timesheetId}')" title="Delete">
+                <button class="btn btn-sm btn-outline-danger" data-timesheet-action="delete" data-timesheet-id="${timesheetId}" onclick="showTimesheetAuthModal('delete', '${timesheetId}')" title="Delete">
                     <i class="fas fa-trash"></i>
                 </button>
             </div>
@@ -5767,7 +5808,7 @@ function getActionButtons(timesheetId, status) {
                 <span class="btn btn-sm btn-outline-secondary disabled" title="Already sent to payroll">
                     <i class="fas fa-check-circle"></i>
                 </span>
-                <button class="btn btn-sm btn-outline-danger" onclick="deleteTimesheet('${timesheetId}')" title="Delete">
+                <button class="btn btn-sm btn-outline-danger" data-timesheet-action="delete" data-timesheet-id="${timesheetId}" onclick="showTimesheetAuthModal('delete', '${timesheetId}')" title="Delete">
                     <i class="fas fa-trash"></i>
                 </button>
             </div>
@@ -5776,13 +5817,183 @@ function getActionButtons(timesheetId, status) {
         // Show delete button for rejected items
         return `
             <div class="btn-group" role="group">
-                <button class="btn btn-sm btn-outline-danger" onclick="deleteTimesheet('${timesheetId}')" title="Delete">
+                <button class="btn btn-sm btn-outline-danger" data-timesheet-action="delete" data-timesheet-id="${timesheetId}" onclick="showTimesheetAuthModal('delete', '${timesheetId}')" title="Delete">
                     <i class="fas fa-trash"></i>
                 </button>
             </div>
         `;
     }
 }
+
+let pendingTimesheetAuthAction = null;
+
+// HR authorization modal for timesheet actions
+function showTimesheetAuthModal(action, timesheetId, extraData = {}) {
+    const context = extraData?.context || 'timesheet';
+    const actionLabels = {
+        approve: 'Approve Timesheet',
+        reject: 'Reject Timesheet',
+        delete: 'Delete Timesheet',
+        send_to_payroll: 'Send to Payroll'
+    };
+    const contextLabels = {
+        shift: {
+            edit: 'Edit Shift',
+            delete: 'Delete Shift'
+        },
+        'leave-request': {
+            approve: 'Approve Leave Request',
+            reject: 'Reject Leave Request'
+        },
+        claim: {
+            approve: 'Approve Claim',
+            reject: 'Reject Claim'
+        },
+        attendance: {
+            edit: 'Edit Attendance'
+        }
+    };
+    let pendingExtraData = { ...extraData, context };
+    if (context === 'timesheet' && action === 'reject' && typeof pendingExtraData.reason !== 'string') {
+        pendingExtraData.reason = '';
+    }
+
+    pendingTimesheetAuthAction = {
+        action,
+        itemId: timesheetId,
+        extraData: pendingExtraData
+    };
+
+    const actionInput = document.getElementById('timesheet-auth-action');
+    const itemInput = document.getElementById('timesheet-auth-item-id');
+    const extraInput = document.getElementById('timesheet-auth-extra-data');
+    const emailInput = document.getElementById('timesheet-auth-email');
+    const passwordInput = document.getElementById('timesheet-auth-password');
+    const modalTitle = document.querySelector('#timesheet-hr-auth-modal .working-modal-title');
+    const safeExtraData = { ...pendingExtraData };
+    delete safeExtraData.form;
+    delete safeExtraData.callback;
+
+    if (actionInput) actionInput.value = action;
+    if (itemInput) itemInput.value = timesheetId;
+    if (extraInput) extraInput.value = Object.keys(safeExtraData).length ? JSON.stringify(safeExtraData) : '';
+    if (emailInput) emailInput.value = '';
+    if (passwordInput) passwordInput.value = '';
+    if (modalTitle) {
+        const label = contextLabels[context]?.[action] || actionLabels[action] || 'Action';
+        modalTitle.textContent = `HR Authorization Required - ${label}`;
+    }
+
+    openWorkingModal('timesheet-hr-auth-modal');
+}
+
+function executeTimesheetAuthAction(action, timesheetId, extraData = {}) {
+    const context = extraData?.context || 'timesheet';
+    if (context !== 'timesheet') {
+        if (extraData?.form) {
+            extraData.form.submit();
+            return;
+        }
+        if (typeof extraData?.callback === 'function') {
+            extraData.callback();
+            return;
+        }
+        return;
+    }
+
+    switch (action) {
+        case 'approve':
+            approveTimesheet(timesheetId, { skipConfirm: true });
+            break;
+        case 'reject':
+            rejectTimesheet(timesheetId, { skipPrompt: true, reason: extraData?.reason || '' });
+            break;
+        case 'delete':
+            deleteTimesheet(timesheetId, { skipConfirm: true });
+            break;
+        case 'send_to_payroll':
+            sendToPayroll(timesheetId, { skipConfirm: true });
+            break;
+        default:
+            console.warn('Unknown timesheet action:', action);
+    }
+}
+
+function showTimesheetAuthMessage(type, message) {
+    if (typeof showAlert === 'function') {
+        try {
+            showAlert(type, message);
+            return;
+        } catch (error) {
+            console.warn('showAlert failed, falling back to alert.', error);
+        }
+    }
+    alert(message);
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const authForm = document.getElementById('timesheet-hr-auth-form');
+    if (!authForm) {
+        return;
+    }
+
+    authForm.addEventListener('submit', function(event) {
+        event.preventDefault();
+
+        const submitBtn = authForm.querySelector('button[type="submit"]');
+        const originalText = submitBtn ? submitBtn.innerHTML : '';
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Authenticating...';
+        }
+
+        const formData = new FormData(authForm);
+
+        fetch('/timesheet/hr-auth', {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                closeWorkingModal('timesheet-hr-auth-modal');
+                showTimesheetAuthMessage('success', data.message || 'Authentication successful.');
+
+                const pendingAction = pendingTimesheetAuthAction;
+                pendingTimesheetAuthAction = null;
+
+                if (pendingAction) {
+                    executeTimesheetAuthAction(pendingAction.action, pendingAction.itemId, pendingAction.extraData);
+                } else {
+                    const action = document.getElementById('timesheet-auth-action')?.value;
+                    const itemId = document.getElementById('timesheet-auth-item-id')?.value;
+                    const extraRaw = document.getElementById('timesheet-auth-extra-data')?.value;
+                    const extraData = extraRaw ? JSON.parse(extraRaw) : null;
+
+                    if (action && itemId) {
+                        executeTimesheetAuthAction(action, itemId, extraData);
+                    }
+                }
+            } else {
+                showTimesheetAuthMessage('error', data.message || 'Authentication failed.');
+            }
+        })
+        .catch(error => {
+            console.error('Timesheet auth error:', error);
+            showTimesheetAuthMessage('error', 'An error occurred. Please try again.');
+        })
+        .finally(() => {
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalText;
+            }
+        });
+    });
+});
 
 // Populate saved timesheets table
 function populateSavedTimesheetsTable(timesheets) {
@@ -5926,22 +6137,26 @@ function populateSavedTimesheetModal(timesheet) {
 }
 
 // Send timesheet to payroll
-function sendToPayroll(timesheetId) {
-    if (!confirm('Are you sure you want to send this timesheet to payroll? This will create a payroll entry for processing.')) {
+function sendToPayroll(timesheetId, options = {}) {
+    if (!options.skipConfirm && !confirm('Are you sure you want to send this timesheet to payroll? This will create a payroll entry for processing.')) {
         return;
     }
     
-    const button = document.querySelector(`button[onclick="sendToPayroll('${timesheetId}')"]`);
-    const originalText = button.innerHTML;
-    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-    button.disabled = true;
+    const button = document.querySelector(`[data-timesheet-action="send_to_payroll"][data-timesheet-id="${timesheetId}"]`);
+    const originalText = button ? button.innerHTML : '';
+    if (button) {
+        button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        button.disabled = true;
+    }
     
     // Get timesheet data from the saved timesheets
     const timesheetData = getSavedTimesheetData(timesheetId);
     
     if (!timesheetData) {
-        button.innerHTML = originalText;
-        button.disabled = false;
+        if (button) {
+            button.innerHTML = originalText;
+            button.disabled = false;
+        }
         showAlert('error', 'Unable to find timesheet data. Please try again.');
         return;
     }
@@ -5964,8 +6179,10 @@ function sendToPayroll(timesheetId) {
         return response.json();
     })
     .then(data => {
-        button.innerHTML = originalText;
-        button.disabled = false;
+        if (button) {
+            button.innerHTML = originalText;
+            button.disabled = false;
+        }
         
         if (data.success) {
             showAlert('success', `Timesheet sent to payroll successfully! Payroll ID: ${data.payroll_item_id}`);
@@ -5977,8 +6194,10 @@ function sendToPayroll(timesheetId) {
     })
     .catch(error => {
         console.error('Error sending to payroll:', error);
-        button.innerHTML = originalText;
-        button.disabled = false;
+        if (button) {
+            button.innerHTML = originalText;
+            button.disabled = false;
+        }
         showAlert('error', 'Failed to send to payroll: ' + error.message);
     });
 }
@@ -5986,7 +6205,7 @@ function sendToPayroll(timesheetId) {
 // Helper function to get saved timesheet data
 function getSavedTimesheetData(timesheetId) {
     // Try to find the timesheet data from the saved timesheets table
-    const timesheetRow = document.querySelector(`button[onclick="sendToPayroll('${timesheetId}')"]`)?.closest('tr');
+    const timesheetRow = document.querySelector(`[data-timesheet-id="${timesheetId}"]`)?.closest('tr');
     
     if (!timesheetRow) {
         return null;
@@ -6069,8 +6288,8 @@ function refreshStatisticsAfterAction() {
 }
 
 // Approve timesheet
-function approveTimesheet(timesheetId) {
-    if (!confirm('Are you sure you want to approve this timesheet?')) {
+function approveTimesheet(timesheetId, options = {}) {
+    if (!options.skipConfirm && !confirm('Are you sure you want to approve this timesheet?')) {
         return;
     }
     
@@ -6099,9 +6318,13 @@ function approveTimesheet(timesheetId) {
 }
 
 // Reject timesheet
-function rejectTimesheet(timesheetId) {
-    const reason = prompt('Please provide a reason for rejection (optional):');
-    if (reason === null) return; // User cancelled
+function rejectTimesheet(timesheetId, options = {}) {
+    let reason = options.reason ?? '';
+    if (!options.skipPrompt) {
+        const promptValue = prompt('Please provide a reason for rejection (optional):');
+        if (promptValue === null) return; // User cancelled
+        reason = promptValue;
+    }
     
     fetch(`/api/ai-timesheets/reject/${timesheetId}`, {
         method: 'POST',
@@ -6131,8 +6354,8 @@ function rejectTimesheet(timesheetId) {
 }
 
 // Delete timesheet
-function deleteTimesheet(timesheetId) {
-    if (!confirm('Are you sure you want to delete this timesheet? This action cannot be undone.')) {
+function deleteTimesheet(timesheetId, options = {}) {
+    if (!options.skipConfirm && !confirm('Are you sure you want to delete this timesheet? This action cannot be undone.')) {
         return;
     }
     

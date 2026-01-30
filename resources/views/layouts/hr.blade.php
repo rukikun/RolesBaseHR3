@@ -214,6 +214,11 @@
           <i class="fas fa-money-bill-wave me-2"></i> Payroll
         </a>
       </li>
+      <li class="nav-item">
+        <a href="{{ route('reports.index') }}" class="nav-link text-dark {{ request()->routeIs('reports.*') ? 'active' : '' }}">
+          <i class="fas fa-chart-line me-2"></i> Reports
+        </a>
+      </li>
       <li class="nav-item employee-dropdown">
         <a href="#" class="nav-link text-dark dropdown-toggle {{ request()->routeIs('employees.*') ? 'active' : '' }}" onclick="toggleEmployeeDropdown(event)" aria-expanded="false">
           <i class="bi bi-people me-2"></i> Employees

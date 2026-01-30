@@ -9,7 +9,7 @@ Your verification code is: {{ $otpCode }}
 Please enter this 6-digit code in the verification screen to complete your login.
 
 SECURITY NOTICE:
-- This code expires in 10 minutes
+- This code expires in 2 minutes
 - Never share this code with anyone
 - If you didn't request this code, please ignore this email
 

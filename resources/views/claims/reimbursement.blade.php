@@ -258,7 +258,7 @@ $totalAmount = $totalAmount ?? 0;
         </thead>
         <tbody id="claims-tbody">
           @forelse($claims as $claim)
-            <tr>
+            <tr data-claim-id="{{ $claim->id ?? '' }}">
               <td>{{ $claim->employee_name ?? 'Unknown Employee' }}</td>
               <td>{{ $claim->claim_type_name ?? 'Unknown Type' }}</td>
               <td>₱{{ number_format($claim->amount ?? 0, 2) }}</td>
@@ -273,8 +273,9 @@ $totalAmount = $totalAmount ?? 0;
               </td>
               <td>
                 @php
-                  $status = $claim->status ?? 'pending';
-                  $badgeClass = match($status) {
+                  $rawStatus = $claim->status ?? 'pending';
+                  $normalizedStatus = strtolower(trim($rawStatus));
+                  $badgeClass = match($normalizedStatus) {
                     'approved' => 'success',
                     'pending' => 'warning', 
                     'paid' => 'info',
@@ -283,7 +284,7 @@ $totalAmount = $totalAmount ?? 0;
                   };
                 @endphp
                 <span class="badge bg-{{ $badgeClass }}">
-                  {{ ucfirst($status) }}
+                  {{ ucfirst($normalizedStatus) }}
                 </span>
               </td>
               <td>
@@ -291,21 +292,13 @@ $totalAmount = $totalAmount ?? 0;
                   <button type="button" class="btn btn-sm btn-outline-primary" onclick="viewClaimDetails({{ isset($claim->id) ? $claim->id : 0 }})" title="View">
                     <i class="fas fa-eye"></i>
                   </button>
-                  @if($status === 'pending' && isset($claim->id))
-                        <form method="POST" action="{{ route('claims.approve', $claim->id) }}" style="display: inline;" onsubmit="return confirm('Are you sure you want to approve this claim?')">
-                          @csrf
-                          @method('PATCH')
-                          <button type="submit" class="btn btn-sm btn-outline-success" title="Approve">
-                            <i class="fas fa-check"></i>
-                          </button>
-                        </form>
-                        <form method="POST" action="{{ route('claims.reject', $claim->id) }}" style="display: inline;" onsubmit="return confirm('Are you sure you want to reject this claim?')">
-                          @csrf
-                          @method('PATCH')
-                          <button type="submit" class="btn btn-sm btn-outline-warning" title="Reject">
-                            <i class="fas fa-times"></i>
-                          </button>
-                        </form>
+                  @if($normalizedStatus === 'pending' && isset($claim->id))
+                        <button type="button" class="btn btn-sm btn-outline-success" onclick="showClaimAuthModal('approve', '{{ $claim->id }}')" title="Approve">
+                          <i class="fas fa-check"></i>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-warning" onclick="showClaimAuthModal('reject', '{{ $claim->id }}')" title="Reject">
+                          <i class="fas fa-times"></i>
+                        </button>
                         @endif
                 </div>
               </td>
@@ -558,6 +551,46 @@ $totalAmount = $totalAmount ?? 0;
     </div>
 </div>
 
+<!-- Claim HR Authorization Modal -->
+<div class="working-modal" id="claim-hr-auth-modal" style="display: none;">
+    <div class="working-modal-backdrop" onclick="closeWorkingModal('claim-hr-auth-modal')"></div>
+    <div class="working-modal-dialog">
+        <div class="working-modal-content">
+            <div class="working-modal-header">
+                <h5 class="working-modal-title">HR Authorization Required</h5>
+                <button type="button" class="working-modal-close" onclick="closeWorkingModal('claim-hr-auth-modal')">&times;</button>
+            </div>
+            <form id="claim-hr-auth-form" method="POST" action="/claim/hr-auth">
+                @csrf
+                <input type="hidden" id="claim-auth-action" name="action">
+                <input type="hidden" id="claim-auth-type" name="type" value="claim">
+                <input type="hidden" id="claim-auth-item-id" name="item_id">
+                <input type="hidden" id="claim-auth-extra-data" name="extra_data">
+                <div class="working-modal-body">
+                    <div class="alert alert-info mb-3">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>Authorization Required.</strong>
+                    </div>
+                    <p class="text-muted mb-3">Enter HR credentials to continue.</p>
+                    <div class="mb-3">
+                        <label for="claim-auth-email" class="form-label">Email Address</label>
+                        <input type="email" class="form-control" id="claim-auth-email" name="email" required placeholder="Enter your email address">
+                    </div>
+                    <div class="mb-3">
+                        <label for="claim-auth-password" class="form-label">Password</label>
+                        <input type="password" class="form-control" id="claim-auth-password" name="password" required placeholder="Enter your password">
+                    </div>
+                </div>
+                <div class="working-modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeWorkingModal('claim-hr-auth-modal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-lock me-2"></i>Authenticate &amp; Proceed
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 
 @push('scripts')
 <script>
@@ -681,6 +714,141 @@ function viewClaimDetails(claimId) {
         }
     } else {
         alert('❌ Unable to find claim details. Please refresh the page and try again.');
+    }
+}
+
+function showClaimAuthModal(action, claimId) {
+    const actionLabels = {
+        approve: 'Approve Claim',
+        reject: 'Reject Claim'
+    };
+
+    let extraData = null;
+
+    const actionInput = document.getElementById('claim-auth-action');
+    const itemInput = document.getElementById('claim-auth-item-id');
+    const extraInput = document.getElementById('claim-auth-extra-data');
+    const emailInput = document.getElementById('claim-auth-email');
+    const passwordInput = document.getElementById('claim-auth-password');
+    const modalTitle = document.querySelector('#claim-hr-auth-modal .working-modal-title');
+
+    if (actionInput) actionInput.value = action;
+    if (itemInput) itemInput.value = claimId;
+    if (extraInput) extraInput.value = extraData ? JSON.stringify(extraData) : '';
+    if (emailInput) emailInput.value = '';
+    if (passwordInput) passwordInput.value = '';
+    if (modalTitle) {
+        modalTitle.textContent = `HR Authorization Required - ${actionLabels[action] || 'Action'}`;
+    }
+
+    openWorkingModal('claim-hr-auth-modal');
+}
+
+function showClaimAuthMessage(type, message) {
+    if (type === 'error') {
+        alert(message);
+        return;
+    }
+
+    const alertHtml = `
+        <div class="alert alert-${type} alert-dismissible fade show" role="alert">
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    `;
+    const container = document.querySelector('.page-header-container');
+    if (container) {
+        container.insertAdjacentHTML('afterend', alertHtml);
+    } else {
+        alert(message);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const authForm = document.getElementById('claim-hr-auth-form');
+    if (!authForm) {
+        return;
+    }
+
+    authForm.addEventListener('submit', function(event) {
+        event.preventDefault();
+
+        const submitBtn = authForm.querySelector('button[type="submit"]');
+        const originalText = submitBtn ? submitBtn.innerHTML : '';
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Authenticating...';
+        }
+
+        const formData = new FormData(authForm);
+
+        fetch('/claim/hr-auth', {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                closeWorkingModal('claim-hr-auth-modal');
+                showClaimAuthMessage('success', data.message || 'Claim updated successfully.');
+                const action = formData.get('action');
+                const claimId = formData.get('item_id');
+                updateClaimRowStatus(action, claimId);
+            } else {
+                showClaimAuthMessage('danger', data.message || 'Authentication failed.');
+            }
+        })
+        .catch(error => {
+            console.error('Claim auth error:', error);
+            showClaimAuthMessage('danger', 'An error occurred. Please try again.');
+        })
+        .finally(() => {
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalText;
+            }
+        });
+    });
+});
+
+function updateClaimRowStatus(action, claimId) {
+    if (!action || !claimId) {
+        return;
+    }
+
+    const row = document.querySelector(`tr[data-claim-id="${claimId}"]`);
+    if (!row || row.cells.length < 8) {
+        return;
+    }
+
+    const normalizedStatus = action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : action;
+    const badgeClass = {
+        approved: 'success',
+        rejected: 'danger',
+        pending: 'warning',
+        paid: 'info'
+    }[normalizedStatus] || 'secondary';
+
+    const statusCell = row.cells[6];
+    if (statusCell) {
+        statusCell.innerHTML = `<span class="badge bg-${badgeClass}">${normalizedStatus.charAt(0).toUpperCase()}${normalizedStatus.slice(1)}</span>`;
+    }
+
+    const actionsCell = row.cells[7];
+    if (actionsCell) {
+        const viewButton = actionsCell.querySelector('button[title="View"]');
+        const group = document.createElement('div');
+        group.className = 'btn-group';
+        group.setAttribute('role', 'group');
+        if (viewButton) {
+            group.appendChild(viewButton.cloneNode(true));
+        }
+        actionsCell.innerHTML = '';
+        actionsCell.appendChild(group);
     }
 }
 </script>

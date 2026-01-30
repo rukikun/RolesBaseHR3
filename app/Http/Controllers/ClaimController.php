@@ -1423,13 +1423,16 @@ class ClaimController extends Controller
                 'item_id' => $request->item_id
             ]);
             
+            $validateOnly = $request->boolean('validate_only');
+
             // Validate input
             $validator = Validator::make($request->all(), [
                 'email' => 'required|email',
                 'password' => 'required|string',
-                'action' => 'required|string|in:approve,reject,delete',
-                'type' => 'required|string|in:claim',
+                'action' => $validateOnly ? 'nullable|string' : 'required|string|in:approve,reject,delete',
+                'type' => $validateOnly ? 'nullable|string' : 'required|string|in:claim',
                 'item_id' => 'nullable|string',
+                'validate_only' => 'nullable|boolean',
             ]);
 
             if ($validator->fails()) {
@@ -1450,16 +1453,41 @@ class ClaimController extends Controller
             }
 
             // Check authorization
-            $authorizedPositions = ['HR Manager', 'System Administrator', 'HR Scheduler', 'Admin', 'HR Administrator'];
-            if (!in_array($employee->position, $authorizedPositions)) {
+            $authorizedPositions = [
+                'hr manager',
+                'system administrator',
+                'hr scheduler',
+                'admin',
+                'hr administrator',
+                'superadmin',
+                'super admin'
+            ];
+            $authorizedRoles = ['super_admin', 'superadmin', 'admin', 'hr_manager', 'hr_scheduler'];
+            $normalizedPosition = strtolower((string) $employee->position);
+            $normalizedRole = strtolower((string) $employee->role);
+            if (!in_array($normalizedPosition, $authorizedPositions, true) && !in_array($normalizedRole, $authorizedRoles, true)) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Access denied. Only HR Manager, System Administrator, HR Scheduler, Admin, or HR Administrator can perform this action.'
+                    'message' => 'Access denied. Only HR Manager, SuperAdmin, Admin, HR Scheduler, or System Administrator can perform this action.'
                 ], 403);
             }
 
+            if ($validateOnly) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Authentication successful.',
+                    'employee' => [
+                        'id' => $employee->id,
+                        'name' => trim($employee->first_name . ' ' . $employee->last_name),
+                        'position' => $employee->position,
+                        'email' => $employee->email
+                    ]
+                ]);
+            }
+
             // Perform action
-            $result = $this->performClaimAction($request->action, $request->item_id, $employee->id);
+            $extraData = $request->extra_data ? json_decode($request->extra_data, true) : null;
+            $result = $this->performClaimAction($request->action, $request->item_id, $employee->id, $extraData);
             return response()->json($result);
 
         } catch (\Exception $e) {
@@ -1471,7 +1499,7 @@ class ClaimController extends Controller
         }
     }
 
-    private function performClaimAction($action, $claimId, $authorizedById)
+    private function performClaimAction($action, $claimId, $authorizedById, $extraData = null)
     {
         Log::info('Performing claim action', [
             'action' => $action,
@@ -1482,11 +1510,18 @@ class ClaimController extends Controller
         try {
             switch ($action) {
                 case 'approve':
-                    DB::update("UPDATE claims SET status = 'approved', updated_at = NOW() WHERE id = ?", [$claimId]);
+                    DB::update(
+                        "UPDATE claims SET status = 'approved', approved_by = ?, approved_at = NOW(), updated_at = NOW() WHERE id = ?",
+                        [$authorizedById, $claimId]
+                    );
                     return ['success' => true, 'message' => 'Claim approved successfully'];
                     
                 case 'reject':
-                    DB::update("UPDATE claims SET status = 'rejected', updated_at = NOW() WHERE id = ?", [$claimId]);
+                    $rejectionReason = $extraData['reason'] ?? null;
+                    DB::update(
+                        "UPDATE claims SET status = 'rejected', approved_by = ?, approved_at = NOW(), rejection_reason = ?, updated_at = NOW() WHERE id = ?",
+                        [$authorizedById, $rejectionReason, $claimId]
+                    );
                     return ['success' => true, 'message' => 'Claim rejected successfully'];
                     
                 case 'delete':

@@ -5,9 +5,13 @@
 .modal {
     z-index: 1055 !important;
     padding: 60px 0 !important; /* Space from navbar and bottom */
-    display: flex !important;
+    display: none !important;
     align-items: center !important;
     justify-content: center !important;
+}
+
+.modal.show {
+    display: flex !important;
 }
 
 .modal-dialog {

@@ -197,7 +197,7 @@
                   </div>
 
                   <div class="countdown-timer">
-                    <span id="countdown">Code expires in <strong id="timer">1:00</strong></span>
+                    <span id="countdown">Code expires in <strong id="timer">2:00</strong></span>
                   </div>
 
                   <button type="submit" class="btn btn-login mb-3" id="verifyBtn" disabled>
@@ -322,7 +322,7 @@
 
   <script>
     // Global variables for timer
-    let countdown = 60; // 1 minute in seconds
+    let countdown = 120; // 2 minutes in seconds
     let countdownInterval;
     let otpInputs, otpCodeInput, verifyBtn, resendLink;
 
@@ -617,8 +617,8 @@
       .then(data => {
         if (data.success) {
           // Reset countdown
-          countdown = 60;
-          document.getElementById('countdown').innerHTML = 'Code expires in <strong id="timer">1:00</strong>';
+          countdown = 120;
+          document.getElementById('countdown').innerHTML = 'Code expires in <strong id="timer">2:00</strong>';
           
           // Restart countdown
           startCountdown();
@@ -718,8 +718,8 @@
           sendBtn.parentElement.appendChild(alertDiv);
           
           // Start countdown
-          countdown = 60;
-          document.getElementById('countdown').innerHTML = 'Code expires in <strong id="timer">1:00</strong>';
+          countdown = 120;
+          document.getElementById('countdown').innerHTML = 'Code expires in <strong id="timer">2:00</strong>';
           
           // Start the countdown timer
           startCountdown();

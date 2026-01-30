@@ -528,6 +528,208 @@ function setupShiftTypeAutoFill(modalId) {
     }
 }
 
+let pendingShiftAuthAction = null;
+
+function showShiftAuthModal(action, shiftId, extraData = {}) {
+    const context = extraData?.context || 'shift-assignment';
+    const contextLabels = {
+        'shift-assignment': {
+            create: 'Create Shift Assignment',
+            edit: 'Edit Shift Assignment',
+            delete: 'Delete Shift Assignment'
+        },
+        'shift-type': {
+            create: 'Create Shift Type',
+            edit: 'Edit Shift Type',
+            delete: 'Delete Shift Type'
+        },
+        'shift-request': {
+            approve: 'Approve Shift Request',
+            reject: 'Reject Shift Request'
+        }
+    };
+    const actionLabels = contextLabels[context] || contextLabels['shift-assignment'];
+
+    let confirmMessage = null;
+    if (context === 'shift-request') {
+        if (action === 'approve') {
+            confirmMessage = 'Approve this shift request? This will update the schedule calendar.';
+        } else if (action === 'reject') {
+            confirmMessage = 'Reject this shift request?';
+        }
+    } else if (action === 'delete') {
+        const employeeName = extraData.employeeName || extraData.shiftTypeName || 'this item';
+        const shiftDate = extraData.shiftDate || '';
+        confirmMessage = shiftDate
+            ? `Are you sure you want to delete the shift for ${employeeName} on ${shiftDate}?\n\nThis action cannot be undone.`
+            : `Are you sure you want to delete ${employeeName}?\n\nThis action cannot be undone.`;
+    }
+
+    if (confirmMessage && !confirm(confirmMessage)) {
+        return;
+    }
+
+    pendingShiftAuthAction = {
+        action,
+        shiftId,
+        extraData
+    };
+
+    const actionInput = document.getElementById('shift-auth-action');
+    const itemInput = document.getElementById('shift-auth-item-id');
+    const extraInput = document.getElementById('shift-auth-extra-data');
+    const emailInput = document.getElementById('shift-auth-email');
+    const passwordInput = document.getElementById('shift-auth-password');
+    const modalTitle = document.querySelector('#shift-hr-auth-modal .working-modal-title');
+    const safeExtraData = { ...extraData };
+    if (safeExtraData.form) {
+        delete safeExtraData.form;
+    }
+
+    if (actionInput) actionInput.value = action;
+    if (itemInput) itemInput.value = shiftId || '';
+    if (extraInput) extraInput.value = Object.keys(safeExtraData).length ? JSON.stringify(safeExtraData) : '';
+    if (emailInput) emailInput.value = '';
+    if (passwordInput) passwordInput.value = '';
+    if (modalTitle) {
+        modalTitle.textContent = `HR Authorization Required - ${actionLabels[action] || 'Action'}`;
+    }
+
+    openWorkingModal('shift-hr-auth-modal');
+}
+
+function executeShiftAuthAction() {
+    if (!pendingShiftAuthAction) {
+        return;
+    }
+
+    const { action, shiftId, extraData } = pendingShiftAuthAction;
+    pendingShiftAuthAction = null;
+
+    const context = extraData?.context || 'shift-assignment';
+
+    if (context === 'shift-type') {
+        if (action === 'create') {
+            openWorkingModal('create-shift-type-modal');
+            return;
+        }
+        if (action === 'edit' && extraData?.payload) {
+            editShiftTypeForm(
+                shiftId,
+                extraData.payload.name,
+                extraData.payload.code,
+                extraData.payload.startTime,
+                extraData.payload.endTime,
+                extraData.payload.duration,
+                extraData.payload.breakDuration
+            );
+            return;
+        }
+        if (action === 'delete' && extraData?.form) {
+            extraData.form.submit();
+            return;
+        }
+    }
+
+    if (context === 'shift-request') {
+        if (extraData?.form) {
+            extraData.form.submit();
+        }
+        return;
+    }
+
+    if (action === 'create') {
+        if (extraData?.date) {
+            openCreateShiftModal(extraData.date, { skipAuth: true });
+        } else {
+            openWorkingModal('create-shift-modal');
+        }
+        return;
+    }
+
+    if (action === 'edit') {
+        if (shiftId) {
+            editShift(shiftId, { skipAuth: true });
+        }
+        return;
+    }
+
+    if (action === 'delete') {
+        if (extraData?.form) {
+            handleShiftDelete(extraData.form, extraData.employeeName, extraData.shiftDate, { skipAuth: true, skipConfirm: true });
+        }
+    }
+}
+
+function showShiftAuthMessage(type, message) {
+    if (type === 'error') {
+        alert(message);
+        return;
+    }
+
+    const alertHtml = `
+        <div class="alert alert-${type} alert-dismissible fade show" role="alert">
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+    `;
+    const container = document.querySelector('.page-header-container');
+    if (container) {
+        container.insertAdjacentHTML('afterend', alertHtml);
+    } else {
+        alert(message);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    const authForm = document.getElementById('shift-hr-auth-form');
+    if (!authForm) {
+        return;
+    }
+
+    authForm.addEventListener('submit', function(event) {
+        event.preventDefault();
+
+        const submitBtn = authForm.querySelector('button[type="submit"]');
+        const originalText = submitBtn ? submitBtn.innerHTML : '';
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Authenticating...';
+        }
+
+        const formData = new FormData(authForm);
+
+        fetch('/shift/hr-auth', {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                closeWorkingModal('shift-hr-auth-modal');
+                showShiftAuthMessage('success', data.message || 'Authorization successful.');
+                executeShiftAuthAction();
+            } else {
+                showShiftAuthMessage('danger', data.message || 'Authentication failed.');
+            }
+        })
+        .catch(error => {
+            console.error('Shift auth error:', error);
+            showShiftAuthMessage('danger', 'An error occurred. Please try again.');
+        })
+        .finally(() => {
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalText;
+            }
+        });
+    });
+});
+
 // Edit shift type function - MAIN VERSION
 function editShiftTypeForm(id, name, code, startTime, endTime, duration, breakDuration) {
     console.log('Editing shift type:', {id, name, code, startTime, endTime, duration, breakDuration});
@@ -630,7 +832,11 @@ function viewShiftRequestDetails(id) {
 }
 
 // Open create shift modal with selected date
-function openCreateShiftModal(selectedDate) {
+function openCreateShiftModal(selectedDate, options = {}) {
+    if (!options.skipAuth) {
+        showShiftAuthModal('create', null, { context: 'shift-assignment', date: selectedDate });
+        return;
+    }
     document.getElementById('shift-assignment-date').value = selectedDate;
     openWorkingModal('create-shift-modal');
 }
@@ -959,6 +1165,7 @@ document.addEventListener('DOMContentLoaded', function() {
       <div class="dashboard-logo me-3">
         <img src="{{ asset('assets/images/jetlouge_logo.png') }}" alt="Jetlouge Travels" class="logo-img">
       </div>
+
       <div>
         <h2 class="fw-bold mb-1">Shift Schedule Management</h2>
         <p class="text-muted mb-0">Manage employee shifts, schedules, and requests</p>
@@ -1096,7 +1303,7 @@ setTimeout(function() {
         </h5>
       </div>
       <div class="card-body">
-        <button class="btn btn-primary mb-2 me-2" onclick="openWorkingModal('create-shift-modal')">
+        <button class="btn btn-primary mb-2 me-2" onclick="showShiftAuthModal('create', null, { context: 'shift-assignment' })">
           <i class="fas fa-plus me-2"></i>Add Shift
         </button>
         <button class="btn btn-outline-primary mb-2" onclick="scrollToCalendarSection()">
@@ -1130,7 +1337,7 @@ setTimeout(function() {
     <h5 class="card-title mb-0">
       <i class="fas fa-list me-2"></i>Shift Types
     </h5>
-    <button class="btn btn-primary" onclick="openWorkingModal('create-shift-type-modal')">
+    <button class="btn btn-primary" onclick="showShiftAuthModal('create', null, { context: 'shift-type' })">
       <i class="fas fa-plus me-2"></i>Create Shift Type
     </button>
   </div>
@@ -1182,10 +1389,10 @@ setTimeout(function() {
                     <button class="btn btn-sm btn-outline-info" onclick="viewShiftTypeDetails({{ $shiftTypeId }})" title="View">
                       <i class="fas fa-eye"></i>
                     </button>
-                    <button class="btn btn-sm btn-outline-primary" onclick="editShiftTypeForm({{ $shiftTypeId }}, '{{ addslashes($shiftTypeName) }}', '{{ addslashes($shiftTypeCode) }}', '{{ $startTime ?? '' }}', '{{ $endTime ?? '' }}', {{ $shiftType->duration_hours ?? $shiftType['duration_hours'] ?? 8 }}, {{ $shiftType->break_duration_minutes ?? $shiftType['break_duration_minutes'] ?? 60 }})" title="Edit">
+                    <button class="btn btn-sm btn-outline-primary" onclick="showShiftAuthModal('edit', {{ $shiftTypeId }}, { context: 'shift-type', shiftTypeName: '{{ addslashes($shiftTypeName) }}', payload: { name: '{{ addslashes($shiftTypeName) }}', code: '{{ addslashes($shiftTypeCode) }}', startTime: '{{ addslashes((string) ($startTime ?? '')) }}', endTime: '{{ addslashes((string) ($endTime ?? '')) }}', duration: {{ $shiftType->duration_hours ?? $shiftType['duration_hours'] ?? 8 }}, breakDuration: {{ $shiftType->break_duration_minutes ?? $shiftType['break_duration_minutes'] ?? 60 }} } })" title="Edit">
                       <i class="fas fa-edit"></i>
                     </button>
-                    <form method="POST" action="{{ route('shift-types.destroy', $shiftTypeId) }}" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this shift type?')">
+                    <form method="POST" action="{{ route('shift-types.destroy', $shiftTypeId) }}" style="display: inline;" onsubmit="showShiftAuthModal('delete', {{ $shiftTypeId }}, { context: 'shift-type', shiftTypeName: '{{ addslashes($shiftTypeName) }}', form: this }); return false;">
                       @csrf
                       @method('DELETE')
                       <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete">
@@ -1200,7 +1407,7 @@ setTimeout(function() {
             <tr>
               <td colspan="7" class="text-center text-muted py-4">
                 <i class="fas fa-calendar-alt fa-3x mb-3 text-muted"></i><br>
-                No shift types found. <a href="#" onclick="openWorkingModal('create-shift-type-modal')" class="text-primary">Create your first shift type</a>
+                No shift types found. <a href="#" onclick="showShiftAuthModal('create', null, { context: 'shift-type' })" class="text-primary">Create your first shift type</a>
               </td>
             </tr>
           @endforelse
@@ -1353,7 +1560,7 @@ setTimeout(function() {
                       <div class="shift-actions position-absolute" style="top: 2px; right: 2px; display: none;">
                         @if(isset($shift['id']) && $shift['id'] > 0)
                         <button type="button" class="btn btn-sm btn-outline-primary" style="padding: 1px 4px; font-size: 8px; line-height: 1;" 
-                                onclick="event.stopPropagation(); editShift({{ $shift['id'] }})" title="Edit Shift">
+                                onclick="event.stopPropagation(); showShiftAuthModal('edit', {{ $shift['id'] }})" title="Edit Shift">
                           <i class="fas fa-edit"></i>
                         </button>
                         @else
@@ -1365,7 +1572,7 @@ setTimeout(function() {
                         @endif
                         
                         <!-- Delete Form with Fade Effect -->
-                        <form method="POST" action="{{ route('admin.shifts.destroy', $shift['id'] ?? 0) }}" style="display: inline;" 
+                        <form method="POST" action="{{ route('admin.shifts.destroy', $shift['id'] ?? 0) }}" data-shift-id="{{ $shift['id'] ?? 0 }}" style="display: inline;" 
                               onsubmit="event.stopPropagation(); return handleShiftDelete(this, '{{ addslashes($shift['employee_name'] ?? 'Unknown') }}', '{{ $day->format('Y-m-d') }}')">
                           @csrf
                           @method('DELETE')
@@ -1477,15 +1684,15 @@ setTimeout(function() {
                     <i class="fas fa-eye"></i>
                   </button>
                   @if($request->status === 'pending')
-                    <form method="POST" action="{{ route('shift-requests.approve', $request->id) }}" class="d-inline" onsubmit="handleApprovalSubmit(event, this)">
+                    <form method="POST" action="{{ route('shift-requests.approve', $request->id) }}" class="d-inline" onsubmit="return false;">
                       @csrf
-                      <button type="submit" class="btn btn-sm btn-success" title="Approve" onclick="return confirm('Approve this shift request? This will automatically add the shift to the schedule calendar.')">
+                      <button type="button" class="btn btn-sm btn-success" title="Approve" onclick="showShiftAuthModal('approve', {{ $request->id }}, { context: 'shift-request', form: this.closest('form') });">
                         <i class="fas fa-check"></i>
                       </button>
                     </form>
-                    <form method="POST" action="{{ route('shift-requests.reject', $request->id) }}" class="d-inline">
+                    <form method="POST" action="{{ route('shift-requests.reject', $request->id) }}" class="d-inline" onsubmit="return false;">
                       @csrf
-                      <button type="submit" class="btn btn-sm btn-danger" title="Reject" onclick="return confirm('Reject this shift request?')">
+                      <button type="button" class="btn btn-sm btn-danger" title="Reject" onclick="showShiftAuthModal('reject', {{ $request->id }}, { context: 'shift-request', form: this.closest('form') });">
                         <i class="fas fa-times"></i>
                       </button>
                     </form>
@@ -2539,14 +2746,23 @@ function initializeShiftDropdowns() {
 // Old edit shift function removed - replaced with working version below
 
 // Handle shift deletion with fade effect
-function handleShiftDelete(form, employeeName, shiftDate) {
+function handleShiftDelete(form, employeeName, shiftDate, options = {}) {
     // Check if already being deleted
     const deleteButton = form.querySelector('.delete-shift-btn');
     if (deleteButton && deleteButton.classList.contains('btn-deleting')) {
         return false; // Already being deleted
     }
-    
-    if (confirm(`Are you sure you want to delete the shift for ${employeeName} on ${shiftDate}?\n\nThis action cannot be undone.`)) {
+
+    if (!options.skipAuth && !options.skipConfirm) {
+        showShiftAuthModal('delete', form.getAttribute('data-shift-id') || null, {
+            form,
+            employeeName,
+            shiftDate
+        });
+        return false;
+    }
+
+    if (options.skipConfirm || confirm(`Are you sure you want to delete the shift for ${employeeName} on ${shiftDate}?\n\nThis action cannot be undone.`)) {
         // Get the shift item container
         const shiftItem = form.closest('.shift-item');
         
@@ -2853,7 +3069,7 @@ function viewShiftRequestDetails(requestId) {
 }
 
 // Edit Shift Function for Calendar
-function editShift(shiftId) {
+function editShift(shiftId, options = {}) {
     console.log('editShift called with ID:', shiftId, 'Type:', typeof shiftId);
     
     // Validate shift ID
@@ -2864,6 +3080,11 @@ function editShift(shiftId) {
     }
 
     console.log('Fetching shift data for valid ID:', shiftId);
+
+    if (!options.skipAuth) {
+        showShiftAuthModal('edit', shiftId);
+        return;
+    }
 
     // Fetch shift data from server using the correct endpoint
     fetch(`/shifts/${shiftId}/edit`, {
@@ -3252,6 +3473,47 @@ console.log('All functions made globally available');
             <div class="working-modal-footer">
                 <button type="button" class="btn btn-secondary" onclick="closeWorkingModal('view-shift-request-modal')">Close</button>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- Shift HR Authorization Modal -->
+<div class="working-modal" id="shift-hr-auth-modal" style="display: none;">
+    <div class="working-modal-backdrop" onclick="closeWorkingModal('shift-hr-auth-modal')"></div>
+    <div class="working-modal-dialog">
+        <div class="working-modal-content">
+            <div class="working-modal-header">
+                <h5 class="working-modal-title">HR Authorization Required</h5>
+                <button type="button" class="working-modal-close" onclick="closeWorkingModal('shift-hr-auth-modal')">&times;</button>
+            </div>
+            <form id="shift-hr-auth-form" method="POST" action="/shift/hr-auth">
+                @csrf
+                <input type="hidden" id="shift-auth-action" name="action">
+                <input type="hidden" id="shift-auth-type" name="type" value="shift">
+                <input type="hidden" id="shift-auth-item-id" name="item_id">
+                <input type="hidden" id="shift-auth-extra-data" name="extra_data">
+                <input type="hidden" name="validate_only" value="1">
+                <div class="working-modal-body">
+                    <div class="alert alert-info mb-3">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>Authorization Required.</strong>
+                    </div>
+                    <div class="mb-3">
+                        <label for="shift-auth-email" class="form-label">Email Address</label>
+                        <input type="email" class="form-control" id="shift-auth-email" name="email" required placeholder="Enter your email address">
+                    </div>
+                    <div class="mb-3">
+                        <label for="shift-auth-password" class="form-label">Password</label>
+                        <input type="password" class="form-control" id="shift-auth-password" name="password" required placeholder="Enter your password">
+                    </div>
+                </div>
+                <div class="working-modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeWorkingModal('shift-hr-auth-modal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-lock me-2"></i>Authenticate &amp; Proceed
+                    </button>
+                </div>
+            </form>
         </div>
     </div>
 </div>

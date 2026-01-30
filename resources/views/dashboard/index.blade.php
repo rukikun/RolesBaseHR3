@@ -347,14 +347,16 @@
               @endif
             </td>
             <td>
-              @if($entry->total_hours !== null && $entry->total_hours >= 8)
-                <span class="badge bg-success">
-                  Clocked Out
-                </span>
+              @php
+                $hasClockIn = !empty($entry->formatted_clock_in) && $entry->formatted_clock_in !== '--';
+                $hasClockOut = !empty($entry->formatted_clock_out) && $entry->formatted_clock_out !== '--';
+              @endphp
+              @if($hasClockOut)
+                <span class="badge bg-success">Clocked Out</span>
+              @elseif($hasClockIn)
+                <span class="badge bg-warning text-dark">Clocked In</span>
               @else
-                <span class="badge bg-secondary">
-                  Clocked Out
-                </span>
+                <span class="badge bg-secondary">No Entry</span>
               @endif
             </td>
           </tr>
@@ -726,9 +728,14 @@ function updateRecentTimeEntriesTable(entries) {
           `<span class="text-muted">${entry.formatted_total_time || parseFloat(entry.total_hours).toFixed(2) + ' hrs'}</span>`) :
         '<span class="text-muted">--</span>';
 
-      const statusBadge = entry.status === 'success' ?
-        '<span class="badge bg-success">Clocked Out</span>' :
-        '<span class="badge bg-secondary">Clocked Out</span>';
+      const hasClockIn = entry.formatted_clock_in && entry.formatted_clock_in !== '--';
+      const hasClockOut = entry.formatted_clock_out && entry.formatted_clock_out !== '--';
+      let statusBadge = '<span class="badge bg-secondary">No Entry</span>';
+      if (hasClockOut) {
+        statusBadge = '<span class="badge bg-success">Clocked Out</span>';
+      } else if (hasClockIn) {
+        statusBadge = '<span class="badge bg-warning text-dark">Clocked In</span>';
+      }
 
       const profileImage = entry.profile_picture ?
         `<img src="/storage/${entry.profile_picture}" alt="${entry.employee_name}" class="rounded-circle me-2" style="width: 32px; height: 32px; object-fit: cover;">` :

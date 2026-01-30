@@ -14,11 +14,16 @@ class LeaveBalance extends Model
         'leave_type_id',
         'year',
         'allocated_days',
-        'used_days'
+        'used_days',
+        'remaining_days',
+        'notes'
     ];
 
     protected $casts = [
-        'year' => 'integer'
+        'year' => 'integer',
+        'allocated_days' => 'integer',
+        'used_days' => 'integer',
+        'remaining_days' => 'integer'
     ];
 
     // Relationships
@@ -33,8 +38,15 @@ class LeaveBalance extends Model
     }
 
     // Accessors
-    public function getRemainingDaysAttribute()
+    public function getRemainingDaysAttribute($value)
     {
-        return $this->allocated_days - $this->used_days;
+        if ($value !== null) {
+            return (int) $value;
+        }
+
+        $allocated = (int) ($this->attributes['allocated_days'] ?? 0);
+        $used = (int) ($this->attributes['used_days'] ?? 0);
+
+        return max($allocated - $used, 0);
     }
 }

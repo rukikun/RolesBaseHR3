@@ -1296,13 +1296,16 @@ class ShiftController extends Controller
     public function hrAuthentication(Request $request)
     {
         try {
+            $validateOnly = $request->boolean('validate_only');
+
             // Validate input
             $validator = Validator::make($request->all(), [
                 'email' => 'required|email',
                 'password' => 'required|string',
-                'action' => 'required|string|in:edit,delete,create',
-                'type' => 'required|string|in:shift',
+                'action' => $validateOnly ? 'nullable|string' : 'required|string|in:edit,delete,create',
+                'type' => $validateOnly ? 'nullable|string' : 'required|string|in:shift',
                 'item_id' => 'nullable|string',
+                'validate_only' => 'nullable|boolean',
             ]);
 
             if ($validator->fails()) {
@@ -1314,7 +1317,7 @@ class ShiftController extends Controller
 
             // Authenticate user
             $employee = Employee::where('email', $request->email)->first();
-            
+
             if (!$employee || !Hash::check($request->password, $employee->password)) {
                 return response()->json([
                     'success' => false,
@@ -1323,12 +1326,26 @@ class ShiftController extends Controller
             }
 
             // Check authorization
-            $authorizedPositions = ['HR Manager', 'System Administrator', 'HR Scheduler', 'Admin', 'HR Administrator'];
-            if (!in_array($employee->position, $authorizedPositions)) {
+            $authorizedPositions = ['HR Manager', 'System Administrator', 'HR Scheduler', 'Admin', 'HR Administrator', 'SuperAdmin'];
+            $authorizedRoles = ['super_admin', 'superadmin', 'admin', 'hr_manager', 'hr_scheduler'];
+            if (!in_array($employee->position, $authorizedPositions) && !in_array($employee->role, $authorizedRoles)) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Access denied. Only HR Manager, System Administrator, HR Scheduler, Admin, or HR Administrator can perform this action.'
+                    'message' => 'Access denied. Only HR Manager, SuperAdmin, Admin, HR Scheduler, or System Administrator can perform this action.'
                 ], 403);
+            }
+
+            if ($validateOnly) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Authentication successful.',
+                    'employee' => [
+                        'id' => $employee->id,
+                        'name' => trim($employee->first_name . ' ' . $employee->last_name),
+                        'position' => $employee->position,
+                        'email' => $employee->email
+                    ]
+                ]);
             }
 
             // Perform action

@@ -43,24 +43,20 @@ class AuthController extends Controller
                 ]);
             }
 
-            // OTP temporarily disabled: complete login immediately
+            // Store OTP session data before logging out
+            $request->session()->put('otp_email', $employee->email);
+            $request->session()->put('remember_me', $request->has('rememberMe'));
+            $request->session()->put('employee_name', $employee->first_name . ' ' . $employee->last_name);
+
+            // Log out until OTP verification is complete
+            Auth::guard('employee')->logout();
+
+            // Regenerate session and redirect to OTP verification
             $request->session()->regenerate();
             $request->session()->forget('url.intended');
 
-            try {
-                $employee->update([
-                    'last_activity' => now(),
-                    'online_status' => 'online'
-                ]);
-
-                if (class_exists('\App\Models\EmployeeActivity')) {
-                    \App\Models\EmployeeActivity::logLogin();
-                }
-            } catch (\Exception $e) {
-                \Log::error('Employee login status update failed: ' . $e->getMessage());
-            }
-
-            return redirect()->route('dashboard')->with('success', 'Login successful!');
+            return redirect()->route('admin.otp.form')
+                ->with('info', "Please click 'Send Verification Code' to receive your OTP.");
         }
 
         return back()->withErrors([
@@ -174,10 +170,15 @@ class AuthController extends Controller
         }
 
         if ($isAjax) {
+            $hasBiometric = $employee->hasBiometricAuth();
+
             return response()->json([
                 'success' => true,
                 'message' => 'OTP verified successfully.',
-                'requires_biometric' => false,
+                'requires_biometric' => true,
+                'has_biometric' => $hasBiometric,
+                'employee_id' => $employee->id,
+                'employee_name' => $employee->first_name . ' ' . $employee->last_name,
                 'redirect_url' => route('dashboard')
             ]);
         }

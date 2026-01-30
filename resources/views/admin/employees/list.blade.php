@@ -184,20 +184,10 @@
                   <i class="fas fa-eye"></i>
                 </button>
                 
-                <!-- Edit Action -->
-                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="openEditEmployeeModal({{ $employee->id }})" title="Edit">
-                  <i class="fas fa-edit"></i>
-                </button>
-                
                 <!-- View Timesheets Action -->
                 <a href="/timesheet-management?employee={{ $employee->id }}" class="btn btn-sm btn-outline-info" title="View Timesheets">
                   <i class="fas fa-clock"></i>
                 </a>
-                
-                <!-- Delete Action -->
-                <button type="button" class="btn btn-sm btn-outline-danger" onclick="deleteEmployee({{ $employee->id }})" title="Delete">
-                  <i class="fas fa-trash"></i>
-                </button>
               </div>
             </td>
           </tr>
@@ -302,6 +292,48 @@
                 <div class="working-modal-footer">
                     <button type="button" class="btn btn-secondary" onclick="closeWorkingModal('add-employee-modal')">Cancel</button>
                     <button type="submit" class="btn btn-primary" id="add-employee-btn">Save Employee</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Employee HR Authorization Modal -->
+<div class="working-modal" id="employee-hr-auth-modal" style="display: none;">
+    <div class="working-modal-backdrop" onclick="closeWorkingModal('employee-hr-auth-modal')"></div>
+    <div class="working-modal-dialog">
+        <div class="working-modal-content">
+            <div class="working-modal-header">
+                <h5 class="working-modal-title">HR Authorization Required</h5>
+                <button type="button" class="working-modal-close" onclick="closeWorkingModal('employee-hr-auth-modal')">&times;</button>
+            </div>
+            <form id="employee-hr-auth-form" method="POST" action="/timesheet/hr-auth">
+                @csrf
+                <input type="hidden" id="employee-auth-action" name="action">
+                <input type="hidden" id="employee-auth-item-id" name="item_id">
+                <input type="hidden" id="employee-auth-extra-data" name="extra_data">
+                <input type="hidden" name="validate_only" value="1">
+                <div class="working-modal-body">
+                    <div class="alert alert-info mb-3">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>Authorization Required.</strong>
+                    </div>
+                    <p class="text-muted mb-3">Enter HR credentials to continue.</p>
+                    <p id="employee-auth-message" class="text-danger small mb-2" style="display: none;"></p>
+                    <div class="mb-3">
+                        <label for="employee-auth-email" class="form-label">Email Address</label>
+                        <input type="email" class="form-control" id="employee-auth-email" name="email" required placeholder="Enter your email address">
+                    </div>
+                    <div class="mb-3">
+                        <label for="employee-auth-password" class="form-label">Password</label>
+                        <input type="password" class="form-control" id="employee-auth-password" name="password" required placeholder="Enter your password">
+                    </div>
+                </div>
+                <div class="working-modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="closeWorkingModal('employee-hr-auth-modal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-lock me-2"></i>Authenticate &amp; Proceed
+                    </button>
                 </div>
             </form>
         </div>
@@ -760,16 +792,142 @@ function clearFilters() {
     document.getElementById('status-filter').value = '';
 }
 
-// Delete employee function
-function deleteEmployee(employeeId) {
-    if (!confirm('Are you sure you want to delete this employee? This action cannot be undone.')) {
+let pendingEmployeeAuthAction = null;
+
+function resolveEmployeeId(rawId) {
+    if (rawId && typeof rawId === 'object') {
+        if (rawId.value) return rawId.value;
+        if (rawId.dataset?.employeeId) return rawId.dataset.employeeId;
+        if (rawId.dataset?.id) return rawId.dataset.id;
+        if (rawId.getAttribute) {
+            return rawId.getAttribute('data-employee-id') || rawId.getAttribute('data-id') || rawId.getAttribute('value');
+        }
+        if (rawId.target) {
+            return resolveEmployeeId(rawId.target);
+        }
+    }
+    return rawId;
+}
+
+function showEmployeeAuthModal(action, employeeId, extraData = {}) {
+    const resolvedEmployeeId = resolveEmployeeId(employeeId);
+    pendingEmployeeAuthAction = {
+        action,
+        employeeId: resolvedEmployeeId,
+        extraData
+    };
+
+    const actionLabels = {
+        edit: 'Edit Employee',
+        delete: 'Delete Employee'
+    };
+
+    const actionInput = document.getElementById('employee-auth-action');
+    const itemInput = document.getElementById('employee-auth-item-id');
+    const extraInput = document.getElementById('employee-auth-extra-data');
+    const emailInput = document.getElementById('employee-auth-email');
+    const passwordInput = document.getElementById('employee-auth-password');
+    const messageEl = document.getElementById('employee-auth-message');
+    const modalTitle = document.querySelector('#employee-hr-auth-modal .working-modal-title');
+    const safeExtraData = { ...extraData };
+
+    if (actionInput) actionInput.value = action;
+    if (itemInput) itemInput.value = resolvedEmployeeId || '';
+    if (extraInput) {
+        extraInput.value = Object.keys(safeExtraData).length ? JSON.stringify(safeExtraData) : '';
+    }
+    if (emailInput) emailInput.value = '';
+    if (passwordInput) passwordInput.value = '';
+    if (messageEl) {
+        messageEl.textContent = '';
+        messageEl.style.display = 'none';
+    }
+    if (modalTitle) {
+        modalTitle.textContent = `HR Authorization Required - ${actionLabels[action] || 'Action'}`;
+    }
+
+    document.getElementById('employee-hr-auth-modal').style.display = 'block';
+}
+
+function executeEmployeeAuthAction(action, employeeId, extraData = {}) {
+    const resolvedEmployeeId = resolveEmployeeId(employeeId);
+    if (!resolvedEmployeeId) {
+        console.error('Missing employee ID for action:', action);
         return;
     }
-    
+    if (action === 'edit') {
+        openEditEmployeeModal(resolvedEmployeeId);
+        return;
+    }
+    if (action === 'delete') {
+        deleteEmployee(resolvedEmployeeId);
+    }
+}
+
+function showEmployeeAuthMessage(message) {
+    const messageEl = document.getElementById('employee-auth-message');
+    if (!messageEl) {
+        return;
+    }
+    if (!message) {
+        messageEl.textContent = '';
+        messageEl.style.display = 'none';
+        return;
+    }
+    messageEl.textContent = message;
+    messageEl.style.display = 'block';
+}
+
+const employeeAuthForm = document.getElementById('employee-hr-auth-form');
+if (employeeAuthForm) {
+    employeeAuthForm.addEventListener('submit', function(event) {
+        event.preventDefault();
+
+        const formData = new FormData(employeeAuthForm);
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+
+        fetch(employeeAuthForm.action, {
+            method: 'POST',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRF-TOKEN': csrfToken
+            },
+            body: formData
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    closeWorkingModal('employee-hr-auth-modal');
+                    showEmployeeAuthMessage('');
+
+                    const pendingAction = pendingEmployeeAuthAction;
+                    pendingEmployeeAuthAction = null;
+
+                    if (pendingAction) {
+                        executeEmployeeAuthAction(pendingAction.action, pendingAction.employeeId, pendingAction.extraData);
+                    }
+                } else {
+                    showEmployeeAuthMessage(data.message || 'Authentication failed.');
+                }
+            })
+            .catch(error => {
+                console.error('Employee auth error:', error);
+                showEmployeeAuthMessage('An error occurred. Please try again.');
+            });
+    });
+}
+
+// Delete employee function
+function deleteEmployee(employeeId) {
+    const resolvedEmployeeId = resolveEmployeeId(employeeId);
+    if (!resolvedEmployeeId) {
+        console.error('Missing employee ID for delete.');
+        return;
+    }
     // Create a form and submit it
     const form = document.createElement('form');
     form.method = 'POST';
-    form.action = `/employees/list/${employeeId}`;
+    form.action = `/employees/list/${resolvedEmployeeId}`;
     form.style.display = 'none';
     
     // Add CSRF token

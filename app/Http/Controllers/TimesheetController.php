@@ -436,13 +436,15 @@ class TimesheetController extends Controller
             // Check if employee has authorized position
             $authorizedPositions = [
                 'HR Manager',
-                'System Administrator', 
+                'System Administrator',
                 'HR Scheduler',
                 'Admin',
-                'HR Administrator'
+                'HR Administrator',
+                'SuperAdmin'
             ];
+            $authorizedRoles = ['super_admin', 'superadmin', 'admin', 'hr_manager', 'hr_scheduler'];
 
-            if (!in_array($employee->position, $authorizedPositions)) {
+            if (!in_array($employee->position, $authorizedPositions) && !in_array($employee->role, $authorizedRoles)) {
                 return response()->json([
                     'success' => false,
                     'message' => 'You are not authorized to perform this action. Contact your HR Manager.'

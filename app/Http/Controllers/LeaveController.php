@@ -20,6 +20,9 @@ class LeaveController extends Controller
 
     public function index()
     {
+        $currentLeaveYear = (int) date('Y');
+        $leaveBalanceSummaries = collect([]);
+
         try {
             // Use Eloquent models with fallback to raw queries
             $leaveTypes = collect([]);
@@ -152,8 +155,57 @@ class LeaveController extends Controller
             $weeklyHours = $leaves->where('status', 'approved')
                 ->whereBetween('start_date', [Carbon::now()->startOfWeek()->format('Y-m-d'), Carbon::now()->endOfWeek()->format('Y-m-d')])
                 ->sum('days_requested') * 8; // Assuming 8 hours per day
-                
-            return view('leaves.management', compact('leaveTypes', 'employees', 'leaves', 'totalLeaveTypes', 'assignedEmployees', 'pendingRequests', 'weeklyHours'));
+
+            try {
+                $employeeIds = collect($employees)->pluck('id')->filter()->values();
+                $leaveTypesCollection = collect($leaveTypes);
+
+                if ($employeeIds->isNotEmpty() && $leaveTypesCollection->isNotEmpty()) {
+                    $balances = LeaveBalance::with('leaveType')
+                        ->whereIn('employee_id', $employeeIds)
+                        ->where('year', $currentLeaveYear)
+                        ->get();
+
+                    $balancesByEmployee = $balances->groupBy('employee_id');
+
+                    $leaveBalanceSummaries = collect($employees)->map(function ($employee) use ($balancesByEmployee, $leaveTypesCollection) {
+                        $employeeBalances = $balancesByEmployee->get($employee->id, collect());
+                        $balancesByType = $employeeBalances->keyBy('leave_type_id');
+
+                        $balanceRows = $leaveTypesCollection->map(function ($leaveType) use ($balancesByType) {
+                            $balance = $balancesByType->get($leaveType->id);
+                            $allocated = (int) ($balance->allocated_days ?? $leaveType->max_days_per_year ?? 0);
+                            $used = (int) ($balance->used_days ?? 0);
+                            $remaining = (int) ($balance->remaining_days ?? max($allocated - $used, 0));
+
+                            return (object) [
+                                'leave_type_id' => $leaveType->id ?? null,
+                                'leave_type_name' => $leaveType->name ?? 'Leave',
+                                'leave_type_code' => $leaveType->code ?? null,
+                                'allocated_days' => $allocated,
+                                'used_days' => $used,
+                                'remaining_days' => $remaining
+                            ];
+                        });
+
+                        $employeeName = trim(($employee->first_name ?? '') . ' ' . ($employee->last_name ?? ''));
+                        if ($employeeName === '') {
+                            $employeeName = $employee->name ?? 'Employee';
+                        }
+
+                        return (object) [
+                            'employee_id' => $employee->id ?? null,
+                            'employee_name' => $employeeName,
+                            'department' => $employee->department ?? null,
+                            'balances' => $balanceRows
+                        ];
+                    });
+                }
+            } catch (\Exception $e) {
+                \Log::warning('Leave balance summary load failed: ' . $e->getMessage());
+            }
+
+            return view('leaves.management', compact('leaveTypes', 'employees', 'leaves', 'totalLeaveTypes', 'assignedEmployees', 'pendingRequests', 'weeklyHours', 'leaveBalanceSummaries', 'currentLeaveYear'));
             
         } catch (\Exception $e) {
             // Final fallback with empty collections
@@ -161,7 +213,7 @@ class LeaveController extends Controller
             $employees = collect([]);
             $leaves = collect([]);
             
-            return view('leaves.management', compact('leaveTypes', 'employees', 'leaves'))
+            return view('leaves.management', compact('leaveTypes', 'employees', 'leaves', 'leaveBalanceSummaries', 'currentLeaveYear'))
                 ->with('error', 'Error loading leave data: ' . $e->getMessage());
         }
     }
@@ -1246,9 +1298,20 @@ class LeaveController extends Controller
             Log::info('Employee found', ['email' => $employee->email, 'position' => $employee->position, 'role' => $employee->role]);
 
             // Check if user has required position
-            $authorizedPositions = ['HR Manager', 'System Administrator', 'HR Scheduler', 'Admin', 'HR Administrator'];
-            
-            if (!in_array($employee->position, $authorizedPositions)) {
+            $authorizedPositions = [
+                'hr manager',
+                'system administrator',
+                'hr scheduler',
+                'admin',
+                'hr administrator',
+                'superadmin',
+                'super admin'
+            ];
+            $authorizedRoles = ['super_admin', 'superadmin', 'admin', 'hr_manager', 'hr_scheduler'];
+            $normalizedPosition = strtolower((string) $employee->position);
+            $normalizedRole = strtolower((string) $employee->role);
+
+            if (!in_array($normalizedPosition, $authorizedPositions, true) && !in_array($normalizedRole, $authorizedRoles, true)) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Access denied. Only HR Manager, SuperAdmin, Admin, HR Scheduler, or System Administrator can perform this action.'

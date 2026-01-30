@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Http;
 use App\Models\Claim;
 use App\Models\ClaimType;
 use App\Models\Employee;
@@ -28,18 +29,63 @@ class ClaimsReimbursementController extends Controller
                 // Try using Eloquent first
                 $claimTypes = ClaimType::where('is_active', true)->orderBy('name')->get();
                 $employees = Employee::where('status', 'active')->orderBy('first_name')->get();
-                $claims = Claim::with(['employee', 'claimType', 'approver'])
-                    ->orderBy('created_at', 'desc')
-                    ->get()
-                    ->map(function($claim) {
-                        // Add computed properties for blade compatibility
-                        $claim->employee_name = ($claim->employee->first_name ?? 'Employee') . ' ' . ($claim->employee->last_name ?? 'Unknown');
-                        $claim->claim_type_name = $claim->claimType->name ?? 'Unknown Type';
-                        $claim->claim_type_code = $claim->claimType->code ?? 'N/A';
-                        return $claim;
-                    });
+
+                // Fetch claims from HR2 API, fallback to local DB
+                try {
+                    $response = Http::timeout(10)->get('https://hr2.jetlougetravels-ph.com/api/claims');
+
+                    if ($response->successful()) {
+                        $apiData = $response->json();
+                        $apiItems = $apiData['data'] ?? $apiData;
+
+                        if (is_array($apiItems) && !empty($apiItems)) {
+                            $claims = collect($apiItems)->map(function ($claim) {
+                                $employeeName = $claim['employee_name']
+                                    ?? $claim['employee']['name']
+                                    ?? trim((($claim['employee']['first_name'] ?? $claim['first_name'] ?? 'Employee') . ' ' . ($claim['employee']['last_name'] ?? $claim['last_name'] ?? '')));
+                                $claimTypeName = $claim['claim_type_name']
+                                    ?? $claim['claim_type']['name']
+                                    ?? $claim['claim_type']
+                                    ?? $claim['type']
+                                    ?? 'Unknown Type';
+                                $status = strtolower($claim['status'] ?? 'pending');
+
+                                return (object) [
+                                    'id' => $claim['id'] ?? null,
+                                    'claim_id' => $claim['claim_id'] ?? $claim['claim_number'] ?? null,
+                                    'external_id' => $claim['external_id'] ?? null,
+                                    'employee_name' => $employeeName ?: 'Unknown Employee',
+                                    'claim_type_name' => $claimTypeName,
+                                    'amount' => $claim['amount'] ?? 0,
+                                    'claim_date' => $claim['claim_date'] ?? $claim['date'] ?? $claim['created_at'] ?? null,
+                                    'description' => $claim['description'] ?? $claim['details'] ?? '',
+                                    'receipt_path' => $claim['receipt_path'] ?? $claim['attachment_path'] ?? $claim['attachment'] ?? $claim['receipt_file'] ?? null,
+                                    'attachment_path' => $claim['attachment_path'] ?? $claim['receipt_path'] ?? null,
+                                    'status' => $status,
+                                ];
+                            });
+                        }
+                    } else {
+                        Log::warning('HR2 claims API request failed with status: ' . $response->status());
+                    }
+                } catch (\Exception $apiException) {
+                    Log::warning('HR2 claims API request failed: ' . $apiException->getMessage());
+                }
+
+                if ($claims->isEmpty()) {
+                    $claims = Claim::with(['employee', 'claimType', 'approver'])
+                        ->orderBy('created_at', 'desc')
+                        ->get()
+                        ->map(function($claim) {
+                            // Add computed properties for blade compatibility
+                            $claim->employee_name = ($claim->employee->first_name ?? 'Employee') . ' ' . ($claim->employee->last_name ?? 'Unknown');
+                            $claim->claim_type_name = $claim->claimType->name ?? 'Unknown Type';
+                            $claim->claim_type_code = $claim->claimType->code ?? 'N/A';
+                            return $claim;
+                        });
+                }
                 
-                Log::info('Eloquent - Retrieved ' . $claimTypes->count() . ' claim types, ' . $claims->count() . ' claims');
+                Log::info('Eloquent/API - Retrieved ' . $claimTypes->count() . ' claim types, ' . $claims->count() . ' claims');
             } catch (\Exception $e) {
                 Log::warning('Eloquent failed, falling back to raw queries: ' . $e->getMessage());
                 
@@ -302,14 +348,130 @@ class ClaimsReimbursementController extends Controller
     /**
      * Approve claim
      */
-    public function approve($id)
+    public function approve(Request $request, $id)
     {
         try {
+            $apiResponse = null;
+            $apiFailed = false;
+            $apiMessage = null;
+            $notes = $request->input('notes');
+            $externalClaimId = $request->input('external_claim_id');
+            $apiClaimId = $id;
+            if ($externalClaimId && preg_match('/^\d+$/', (string) $externalClaimId)) {
+                $apiClaimId = $externalClaimId;
+            }
+
+            try {
+                $payload = array_filter([
+                    'claim_id' => $externalClaimId,
+                    'notes' => $notes,
+                ], static fn($value) => $value !== null && $value !== '');
+
+                $apiResponse = Http::asJson()->acceptJson()->timeout(10)
+                    ->post("https://hr2.jetlougetravels-ph.com/api/claims/{$apiClaimId}/approve", $payload);
+
+                if ($apiResponse->successful()) {
+                    $apiData = $apiResponse->json();
+                    $apiStatusValue = $apiData['status'] ?? $apiData['success'] ?? 'success';
+                    $apiStatus = is_bool($apiStatusValue)
+                        ? ($apiStatusValue ? 'success' : 'error')
+                        : strtolower((string) $apiStatusValue);
+
+                    if ($apiStatus === 'success') {
+                        try {
+                            $localClaim = Claim::find($id);
+                            if ($localClaim) {
+                                $localClaim->update([
+                                    'status' => 'approved',
+                                    'approved_by' => auth()->id() ?? 1,
+                                    'approved_at' => now(),
+                                    'notes' => $notes ?? $localClaim->notes
+                                ]);
+                            }
+                        } catch (\Exception $syncException) {
+                            Log::warning('Local claim sync after API approve failed: ' . $syncException->getMessage());
+                        }
+
+                        return redirect()->route('claims-reimbursement')
+                            ->with('success', 'Claim approved successfully!');
+                    }
+
+                    $apiFailed = true;
+                    $apiMessage = $apiData['message']
+                        ?? ('HR2 API update failed (HTTP ' . $apiResponse->status() . ').');
+                    Log::warning('HR2 claims approve failed: ' . $apiMessage);
+                } else {
+                    if ($apiResponse->status() === 404) {
+                        $fallbackPayload = array_filter(
+                            array_merge(['status' => 'approved'], $payload),
+                            static fn($value) => $value !== null && $value !== ''
+                        );
+                        $fallbackResponse = Http::asJson()->acceptJson()->timeout(10)
+                            ->put("https://hr2.jetlougetravels-ph.com/api/claims/{$apiClaimId}", $fallbackPayload);
+
+                        if ($fallbackResponse->successful()) {
+                            $fallbackData = $fallbackResponse->json();
+                            $fallbackStatusValue = $fallbackData['status'] ?? $fallbackData['success'] ?? 'success';
+                            $fallbackStatus = is_bool($fallbackStatusValue)
+                                ? ($fallbackStatusValue ? 'success' : 'error')
+                                : strtolower((string) $fallbackStatusValue);
+
+                            if ($fallbackStatus === 'success') {
+                                try {
+                                    $localClaim = Claim::find($id);
+                                    if ($localClaim) {
+                                        $localClaim->update([
+                                            'status' => 'approved',
+                                            'approved_by' => auth()->id() ?? 1,
+                                            'approved_at' => now(),
+                                            'notes' => $notes ?? $localClaim->notes
+                                        ]);
+                                    }
+                                } catch (\Exception $syncException) {
+                                    Log::warning('Local claim sync after API approve fallback failed: ' . $syncException->getMessage());
+                                }
+
+                                return redirect()->route('claims-reimbursement')
+                                    ->with('success', 'Claim approved successfully!');
+                            }
+
+                            $apiFailed = true;
+                            $apiMessage = $fallbackData['message']
+                                ?? ('HR2 API update failed (HTTP ' . $fallbackResponse->status() . ').');
+                            Log::warning('HR2 claims approve fallback failed: ' . $apiMessage);
+                        } else {
+                            $apiFailed = true;
+                            $apiMessage = $fallbackResponse->json('message')
+                                ?? trim($fallbackResponse->body())
+                                ?? ('HR2 API update failed (HTTP ' . $fallbackResponse->status() . ').');
+                            Log::warning('HR2 claims approve fallback failed with status: ' . $fallbackResponse->status());
+                        }
+                    }
+
+                    if (!$apiFailed) {
+                        $apiFailed = true;
+                        $apiMessage = $apiResponse->json('message')
+                            ?? trim($apiResponse->body())
+                            ?? ('HR2 API update failed (HTTP ' . $apiResponse->status() . ').');
+                        Log::warning('HR2 claims approve failed with status: ' . $apiResponse->status());
+                    }
+                }
+            } catch (\Exception $apiException) {
+                $apiFailed = true;
+                $apiMessage = 'HR2 API update failed: ' . $apiException->getMessage();
+                Log::warning('HR2 claims approve failed: ' . $apiException->getMessage());
+            }
+
             // Try Eloquent first
             try {
                 $claim = Claim::findOrFail($id);
                 
-                if ($claim->status !== 'pending') {
+                $claimStatus = strtolower(trim($claim->status ?? ''));
+                if ($claimStatus !== 'pending') {
+                    if ($apiFailed) {
+                        return redirect()->route('claims-reimbursement')
+                            ->with('error', $apiMessage ?: "Unable to approve locally (status: {$claim->status}). HR2 API update failed.");
+                    }
                     return redirect()->route('claims-reimbursement')
                         ->with('error', 'Only pending claims can be approved.');
                 }
@@ -320,8 +482,13 @@ class ClaimsReimbursementController extends Controller
                     'approved_at' => now()
                 ]);
 
+                $message = 'Claim approved successfully!';
+                if ($apiFailed) {
+                    $message = $apiMessage ?: 'Claim approved locally, but HR2 API update failed.';
+                }
+
                 return redirect()->route('claims-reimbursement')
-                    ->with('success', 'Claim approved successfully!');
+                    ->with('success', $message);
                     
             } catch (\Exception $e) {
                 // Fallback to raw PDO
@@ -335,8 +502,13 @@ class ClaimsReimbursementController extends Controller
                 ");
                 $stmt->execute([$id]);
                 
+                $message = 'Claim approved successfully!';
+                if ($apiFailed) {
+                    $message = $apiMessage ?: 'Claim approved locally, but HR2 API update failed.';
+                }
+
                 return redirect()->route('claims-reimbursement')
-                    ->with('success', 'Claim approved successfully!');
+                    ->with('success', $message);
             }
             
         } catch (\Exception $e) {
@@ -349,14 +521,146 @@ class ClaimsReimbursementController extends Controller
     /**
      * Reject claim
      */
-    public function reject($id)
+    public function reject(Request $request, $id)
     {
+        $validator = Validator::make($request->all(), [
+            'rejection_reason' => 'required|string|max:1000'
+        ]);
+
+        if ($validator->fails()) {
+            return redirect()->route('claims-reimbursement')
+                ->withErrors($validator)
+                ->withInput()
+                ->with('error', 'Rejection reason is required.');
+        }
+
         try {
+            $apiResponse = null;
+            $apiFailed = false;
+            $apiMessage = null;
+            $rejectionReason = $request->input('rejection_reason');
+            $notes = $request->input('notes');
+            $externalClaimId = $request->input('external_claim_id');
+            $apiClaimId = $id;
+            if ($externalClaimId && preg_match('/^\d+$/', (string) $externalClaimId)) {
+                $apiClaimId = $externalClaimId;
+            }
+
+            try {
+                $payload = array_filter([
+                    'claim_id' => $externalClaimId,
+                    'rejection_reason' => $rejectionReason,
+                    'rejected_reason' => $rejectionReason,
+                    'notes' => $notes,
+                ], static fn($value) => $value !== null && $value !== '');
+
+                $apiResponse = Http::asJson()->acceptJson()->timeout(10)
+                    ->post("https://hr2.jetlougetravels-ph.com/api/claims/{$apiClaimId}/reject", $payload);
+
+                if ($apiResponse->successful()) {
+                    $apiData = $apiResponse->json();
+                    $apiStatusValue = $apiData['status'] ?? $apiData['success'] ?? 'success';
+                    $apiStatus = is_bool($apiStatusValue)
+                        ? ($apiStatusValue ? 'success' : 'error')
+                        : strtolower((string) $apiStatusValue);
+
+                    if ($apiStatus === 'success') {
+                        try {
+                            $localClaim = Claim::find($id);
+                            if ($localClaim) {
+                                $localClaim->update([
+                                    'status' => 'rejected',
+                                    'approved_by' => auth()->id() ?? 1,
+                                    'approved_at' => now(),
+                                    'rejection_reason' => $rejectionReason,
+                                    'notes' => $notes ?? $localClaim->notes
+                                ]);
+                            }
+                        } catch (\Exception $syncException) {
+                            Log::warning('Local claim sync after API reject failed: ' . $syncException->getMessage());
+                        }
+
+                        return redirect()->route('claims-reimbursement')
+                            ->with('success', 'Claim rejected successfully!');
+                    }
+
+                    $apiFailed = true;
+                    $apiMessage = $apiData['message']
+                        ?? ('HR2 API update failed (HTTP ' . $apiResponse->status() . ').');
+                    Log::warning('HR2 claims reject failed: ' . $apiMessage);
+                } else {
+                    if ($apiResponse->status() === 404) {
+                        $fallbackPayload = array_filter(
+                            array_merge(['status' => 'rejected'], $payload),
+                            static fn($value) => $value !== null && $value !== ''
+                        );
+                        $fallbackResponse = Http::asJson()->acceptJson()->timeout(10)
+                            ->put("https://hr2.jetlougetravels-ph.com/api/claims/{$apiClaimId}", $fallbackPayload);
+
+                        if ($fallbackResponse->successful()) {
+                            $fallbackData = $fallbackResponse->json();
+                            $fallbackStatusValue = $fallbackData['status'] ?? $fallbackData['success'] ?? 'success';
+                            $fallbackStatus = is_bool($fallbackStatusValue)
+                                ? ($fallbackStatusValue ? 'success' : 'error')
+                                : strtolower((string) $fallbackStatusValue);
+
+                            if ($fallbackStatus === 'success') {
+                                try {
+                                    $localClaim = Claim::find($id);
+                                    if ($localClaim) {
+                                        $localClaim->update([
+                                            'status' => 'rejected',
+                                            'approved_by' => auth()->id() ?? 1,
+                                            'approved_at' => now(),
+                                            'rejection_reason' => $rejectionReason,
+                                            'notes' => $notes ?? $localClaim->notes
+                                        ]);
+                                    }
+                                } catch (\Exception $syncException) {
+                                    Log::warning('Local claim sync after API reject fallback failed: ' . $syncException->getMessage());
+                                }
+
+                                return redirect()->route('claims-reimbursement')
+                                    ->with('success', 'Claim rejected successfully!');
+                            }
+
+                            $apiFailed = true;
+                            $apiMessage = $fallbackData['message']
+                                ?? ('HR2 API update failed (HTTP ' . $fallbackResponse->status() . ').');
+                            Log::warning('HR2 claims reject fallback failed: ' . $apiMessage);
+                        } else {
+                            $apiFailed = true;
+                            $apiMessage = $fallbackResponse->json('message')
+                                ?? trim($fallbackResponse->body())
+                                ?? ('HR2 API update failed (HTTP ' . $fallbackResponse->status() . ').');
+                            Log::warning('HR2 claims reject fallback failed with status: ' . $fallbackResponse->status());
+                        }
+                    }
+
+                    if (!$apiFailed) {
+                        $apiFailed = true;
+                        $apiMessage = $apiResponse->json('message')
+                            ?? trim($apiResponse->body())
+                            ?? ('HR2 API update failed (HTTP ' . $apiResponse->status() . ').');
+                        Log::warning('HR2 claims reject failed with status: ' . $apiResponse->status());
+                    }
+                }
+            } catch (\Exception $apiException) {
+                $apiFailed = true;
+                $apiMessage = 'HR2 API update failed: ' . $apiException->getMessage();
+                Log::warning('HR2 claims reject failed: ' . $apiException->getMessage());
+            }
+
             // Try Eloquent first
             try {
                 $claim = Claim::findOrFail($id);
                 
-                if ($claim->status !== 'pending') {
+                $claimStatus = strtolower(trim($claim->status ?? ''));
+                if ($claimStatus !== 'pending') {
+                    if ($apiFailed) {
+                        return redirect()->route('claims-reimbursement')
+                            ->with('error', $apiMessage ?: "Unable to reject locally (status: {$claim->status}). HR2 API update failed.");
+                    }
                     return redirect()->route('claims-reimbursement')
                         ->with('error', 'Only pending claims can be rejected.');
                 }
@@ -367,8 +671,13 @@ class ClaimsReimbursementController extends Controller
                     'approved_at' => now()
                 ]);
 
+                $message = 'Claim rejected successfully!';
+                if ($apiFailed) {
+                    $message = $apiMessage ?: 'Claim rejected locally, but HR2 API update failed.';
+                }
+
                 return redirect()->route('claims-reimbursement')
-                    ->with('success', 'Claim rejected successfully!');
+                    ->with('success', $message);
                     
             } catch (\Exception $e) {
                 // Fallback to raw PDO
@@ -382,8 +691,13 @@ class ClaimsReimbursementController extends Controller
                 ");
                 $stmt->execute([$id]);
                 
+                $message = 'Claim rejected successfully!';
+                if ($apiFailed) {
+                    $message = $apiMessage ?: 'Claim rejected locally, but HR2 API update failed.';
+                }
+
                 return redirect()->route('claims-reimbursement')
-                    ->with('success', 'Claim rejected successfully!');
+                    ->with('success', $message);
             }
             
         } catch (\Exception $e) {

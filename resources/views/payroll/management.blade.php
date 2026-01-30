@@ -637,8 +637,7 @@ document.getElementById('generate-report-btn')?.addEventListener('click', functi
 });
 
 document.getElementById('export-payroll-btn')?.addEventListener('click', function() {
-    // Implementation for exporting to Excel
-    alert('Export to Excel feature coming soon!');
+    window.location.href = "{{ route('payroll.export') }}";
 });
 </script>
 @endpush

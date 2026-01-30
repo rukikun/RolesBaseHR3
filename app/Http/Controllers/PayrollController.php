@@ -292,4 +292,64 @@ class PayrollController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Export payroll items and validated attachments to CSV (Excel-friendly)
+     */
+    public function exportPayroll()
+    {
+        $payrollItems = PayrollItem::orderBy('created_at', 'desc')->get();
+        $fileName = 'payroll-export-' . now()->format('Ymd_His') . '.csv';
+
+        return response()->streamDownload(function () use ($payrollItems) {
+            $handle = fopen('php://output', 'w');
+
+            fputcsv($handle, ['Payroll Items']);
+            fputcsv($handle, [
+                'ID',
+                'Employee ID',
+                'Employee Name',
+                'Department',
+                'Week Period',
+                'Week Start Date',
+                'Total Hours',
+                'Overtime Hours',
+                'Regular Rate',
+                'Overtime Rate',
+                'Regular Amount',
+                'Overtime Amount',
+                'Total Amount',
+                'Status',
+                'Processed Date',
+                'Paid Date',
+                'Created At'
+            ]);
+
+            foreach ($payrollItems as $item) {
+                fputcsv($handle, [
+                    $item->id,
+                    $item->employee_id,
+                    $item->employee_name,
+                    $item->department,
+                    $item->week_period,
+                    $item->week_start_date ? $item->week_start_date->format('Y-m-d') : null,
+                    $item->total_hours,
+                    $item->overtime_hours,
+                    $item->regular_rate,
+                    $item->overtime_rate,
+                    $item->regular_amount,
+                    $item->overtime_amount,
+                    $item->total_amount,
+                    $item->status,
+                    $item->processed_date ? $item->processed_date->format('Y-m-d H:i:s') : null,
+                    $item->paid_date ? $item->paid_date->format('Y-m-d H:i:s') : null,
+                    $item->created_at ? $item->created_at->format('Y-m-d H:i:s') : null
+                ]);
+            }
+
+            fclose($handle);
+        }, $fileName, [
+            'Content-Type' => 'text/csv; charset=UTF-8'
+        ]);
+    }
 }
