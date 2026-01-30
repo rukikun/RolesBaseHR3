@@ -24,6 +24,12 @@
     pointer-events: none !important;
 }
 
+.modal[aria-hidden="true"] {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+}
+
 .modal-dialog {
     margin: 0 auto !important;
     max-width: 90vw !important;
