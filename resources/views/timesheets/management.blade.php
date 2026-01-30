@@ -2250,6 +2250,68 @@ function formatBreakMinutes(breakValue) {
     return trimmed;
 }
 
+function parseHoursValue(value) {
+    if (value === null || value === undefined || value === '' || value === '--') {
+        return 0;
+    }
+
+    if (typeof value === 'number' && Number.isFinite(value)) {
+        return value;
+    }
+
+    const trimmed = value.toString().trim();
+    if (!trimmed || trimmed === '--') {
+        return 0;
+    }
+
+    const hoursMatch = trimmed.match(/(\d+(?:\.\d+)?)h/i);
+    const minutesMatch = trimmed.match(/(\d+(?:\.\d+)?)m/i);
+    if (hoursMatch || minutesMatch) {
+        const hours = hoursMatch ? parseFloat(hoursMatch[1]) : 0;
+        const minutes = minutesMatch ? parseFloat(minutesMatch[1]) : 0;
+        return (Number.isFinite(hours) ? hours : 0) + (Number.isFinite(minutes) ? minutes / 60 : 0);
+    }
+
+    const numericValue = parseFloat(trimmed);
+    return Number.isFinite(numericValue) ? numericValue : 0;
+}
+
+function formatOvertimeDisplay(dayData) {
+    if (!dayData) {
+        return '--';
+    }
+
+    const hasClockData =
+        (dayData.time_in && dayData.time_in !== '--') ||
+        (dayData.time_out && dayData.time_out !== '--') ||
+        (dayData.total_hours && dayData.total_hours !== '--');
+
+    if (!hasClockData) {
+        return '--';
+    }
+
+    const overtimeValue = dayData.overtime;
+    if (overtimeValue === null || overtimeValue === undefined || overtimeValue === '' || overtimeValue === '--') {
+        return '0.00h';
+    }
+
+    if (typeof overtimeValue === 'number' && Number.isFinite(overtimeValue)) {
+        return `${overtimeValue.toFixed(2)}h`;
+    }
+
+    const trimmed = overtimeValue.toString().trim();
+    if (trimmed === '' || trimmed === '--' || trimmed === '0m' || trimmed === '0h') {
+        return '0.00h';
+    }
+
+    const numericValue = parseFloat(trimmed);
+    if (Number.isFinite(numericValue) && !/[hm]/i.test(trimmed)) {
+        return `${numericValue.toFixed(2)}h`;
+    }
+
+    return trimmed;
+}
+
 function normalizeAIInsights(rawInsights) {
     if (!rawInsights) {
         return [];
@@ -2289,6 +2351,67 @@ function normalizeAIInsights(rawInsights) {
     }
 
     return [insights.toString()];
+}
+
+function generateDetailedAIInsights(timesheetData) {
+    const insights = [];
+    const baseInsights = normalizeAIInsights(timesheetData.ai_insights)
+        .filter(insight => !/simple generation from attendance database/i.test(insight));
+    const weeklyData = timesheetData.weekly_data || {};
+    const dayKeys = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+    let daysWithData = 0;
+    let totalHours = 0;
+    let overtimeHours = 0;
+    let shortDays = 0;
+
+    dayKeys.forEach(dayKey => {
+        const dayData = weeklyData[dayKey];
+        if (!dayData) {
+            return;
+        }
+
+        const hasClockData =
+            (dayData.time_in && dayData.time_in !== '--') ||
+            (dayData.time_out && dayData.time_out !== '--') ||
+            (dayData.total_hours && dayData.total_hours !== '--');
+
+        if (!hasClockData) {
+            return;
+        }
+
+        daysWithData += 1;
+        const dayHours = parseHoursValue(dayData.total_hours);
+        totalHours += dayHours;
+        overtimeHours += parseHoursValue(dayData.overtime);
+        if (dayHours > 0 && dayHours < 6) {
+            shortDays += 1;
+        }
+    });
+
+    if (daysWithData > 0) {
+        insights.push(`Recorded days: ${daysWithData} of 7.`);
+        insights.push(`Total recorded hours: ${totalHours.toFixed(2)}h.`);
+        if (overtimeHours > 0) {
+            insights.push(`Overtime logged: ${overtimeHours.toFixed(2)}h.`);
+        } else {
+            insights.push('Overtime logged: 0.00h.');
+        }
+
+        let performanceMessage = 'Performance: Needs improvement - attendance records are limited this week.';
+        if (daysWithData >= 5 && totalHours >= 38) {
+            performanceMessage = 'Performance: Good - consistent attendance with solid weekly hours.';
+        } else if (daysWithData >= 4 && totalHours >= 32) {
+            performanceMessage = 'Performance: Fair - attendance is acceptable but below a full week.';
+        }
+        insights.push(performanceMessage);
+
+        if (shortDays > 0) {
+            insights.push(`Short days detected: ${shortDays}. Aim for full shifts when possible.`);
+        }
+    }
+
+    return [...insights, ...baseInsights].filter(Boolean);
 }
 
 // Working Modal Functions - Enhanced with Better Error Handling
@@ -5283,7 +5406,7 @@ function populateAITimesheetModal(data) {
                         document.getElementById(`ai-${day}-break`).textContent = formatBreakMinutes(dayData.break) || '--';
                         document.getElementById(`ai-${day}-time-out`).textContent = dayData.time_out || '--';
                         document.getElementById(`ai-${day}-total-hours`).textContent = dayData.total_hours || '--';
-                        document.getElementById(`ai-${day}-overtime`).textContent = dayData.overtime || '--';
+                        document.getElementById(`ai-${day}-overtime`).textContent = formatOvertimeDisplay(dayData);
                     } else {
                         // No data - show dashes
                         document.getElementById(`ai-${day}-date`).textContent = '--';
@@ -5291,7 +5414,7 @@ function populateAITimesheetModal(data) {
                         document.getElementById(`ai-${day}-break`).textContent = '--';
                         document.getElementById(`ai-${day}-time-out`).textContent = '--';
                         document.getElementById(`ai-${day}-total-hours`).textContent = '--';
-                        document.getElementById(`ai-${day}-overtime`).textContent = '--';
+                        document.getElementById(`ai-${day}-overtime`).textContent = formatOvertimeDisplay(null);
                     }
                 }
             });
@@ -5300,7 +5423,7 @@ function populateAITimesheetModal(data) {
         // Populate AI insights
         setTimeout(() => {
             const insightsContainer = document.getElementById('ai-insights');
-            const insights = normalizeAIInsights(data.ai_insights);
+            const insights = generateDetailedAIInsights(data);
             if (insights.length > 0) {
                 const insightsHtml = insights.map(insight =>
                     `<div class="insight-item"><i class="fas fa-lightbulb me-2 text-warning"></i>${insight}</div>`
