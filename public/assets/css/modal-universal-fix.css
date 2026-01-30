@@ -8,10 +8,20 @@
     display: none !important;
     align-items: center !important;
     justify-content: center !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
 }
 
 .modal.show {
     display: flex !important;
+    visibility: visible !important;
+    pointer-events: auto !important;
+}
+
+.modal:not(.show) {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
 }
 
 .modal-dialog {
