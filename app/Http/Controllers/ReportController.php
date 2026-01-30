@@ -3,8 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\Report;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
@@ -15,6 +17,20 @@ class ReportController extends Controller
      */
     public function index()
     {
+        if (!$this->ensureReportsTableExists()) {
+            $reports = collect();
+            $reportStats = [
+                'total_reports' => 0,
+                'generated_reports' => 0,
+                'draft_reports' => 0,
+                'scheduled_reports' => 0,
+                'total_records' => 0,
+            ];
+
+            return view('reports.index', compact('reports', 'reportStats'))
+                ->with('error', 'Reports table is missing. Please run migrations on the server.');
+        }
+
         $reports = Report::orderByDesc('generated_at')
             ->orderByDesc('created_at')
             ->get();
@@ -33,9 +49,16 @@ class ReportController extends Controller
     /**
      * Display a single report.
      */
-    public function show(Report $report)
+    public function show($report)
     {
-        return view('reports.show', compact('report'));
+        if (!$this->ensureReportsTableExists()) {
+            return redirect()->route('reports.index')
+                ->with('error', 'Reports table is missing. Please run migrations on the server.');
+        }
+
+        $reportRecord = Report::findOrFail($report);
+
+        return view('reports.show', ['report' => $reportRecord]);
     }
 
     /**
@@ -43,6 +66,11 @@ class ReportController extends Controller
      */
     public function store(Request $request)
     {
+        if (!$this->ensureReportsTableExists()) {
+            return redirect()->route('reports.index')
+                ->with('error', 'Reports table is missing. Please run migrations on the server.');
+        }
+
         $validated = $request->validate([
             'title' => ['required', 'string', 'max:255'],
             'category' => ['required', 'string', 'max:100'],
@@ -75,6 +103,11 @@ class ReportController extends Controller
      */
     public function export()
     {
+        if (!$this->ensureReportsTableExists()) {
+            return redirect()->route('reports.index')
+                ->with('error', 'Reports table is missing. Please run migrations on the server.');
+        }
+
         $reports = Report::orderByDesc('generated_at')
             ->orderByDesc('created_at')
             ->get();
@@ -112,8 +145,13 @@ class ReportController extends Controller
     /**
      * Update a report record.
      */
-    public function update(Request $request, Report $report)
+    public function update(Request $request, $report)
     {
+        if (!$this->ensureReportsTableExists()) {
+            return redirect()->route('reports.index')
+                ->with('error', 'Reports table is missing. Please run migrations on the server.');
+        }
+
         $validated = $request->validate([
             'title' => ['required', 'string', 'max:255'],
             'category' => ['required', 'string', 'max:100'],
@@ -123,7 +161,8 @@ class ReportController extends Controller
             'status' => ['nullable', Rule::in(['generated', 'draft', 'scheduled'])],
         ]);
 
-        $report->update($validated);
+        $reportRecord = Report::findOrFail($report);
+        $reportRecord->update($validated);
 
         return redirect()->route('reports.index')
             ->with('success', 'Report updated successfully.');
@@ -132,11 +171,44 @@ class ReportController extends Controller
     /**
      * Delete a report record.
      */
-    public function destroy(Report $report)
+    public function destroy($report)
     {
-        $report->delete();
+        if (!$this->ensureReportsTableExists()) {
+            return redirect()->route('reports.index')
+                ->with('error', 'Reports table is missing. Please run migrations on the server.');
+        }
+
+        $reportRecord = Report::findOrFail($report);
+        $reportRecord->delete();
 
         return redirect()->route('reports.index')
             ->with('success', 'Report deleted successfully.');
+    }
+
+    private function ensureReportsTableExists(): bool
+    {
+        try {
+            if (!Schema::hasTable('reports')) {
+                Schema::create('reports', function (Blueprint $table) {
+                    $table->id();
+                    $table->string('title');
+                    $table->string('category')->index();
+                    $table->date('period_start')->nullable();
+                    $table->date('period_end')->nullable();
+                    $table->string('status')->default('draft')->index();
+                    $table->string('generated_by')->nullable();
+                    $table->dateTime('generated_at')->nullable()->index();
+                    $table->text('summary')->nullable();
+                    $table->unsignedInteger('total_records')->default(0);
+                    $table->string('file_path')->nullable();
+                    $table->timestamps();
+                });
+            }
+        } catch (\Exception $e) {
+            \Log::error('Reports table creation error: ' . $e->getMessage());
+            return false;
+        }
+
+        return Schema::hasTable('reports');
     }
 }
