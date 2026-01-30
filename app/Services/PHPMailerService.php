@@ -25,15 +25,27 @@ class PHPMailerService
             $this->mail->SMTPAuth   = true;
             $this->mail->Username   = env('MAIL_USERNAME');
             $this->mail->Password   = env('MAIL_PASSWORD');
-            $this->mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+
+            $encryption = strtolower((string) env('MAIL_ENCRYPTION', 'tls'));
+            if ($encryption === 'ssl') {
+                $this->mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS;
+                $this->mail->SMTPAutoTLS = false;
+            } elseif ($encryption === 'tls') {
+                $this->mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+            } else {
+                $this->mail->SMTPSecure = false;
+                $this->mail->SMTPAutoTLS = false;
+            }
+
             $this->mail->Port       = env('MAIL_PORT', 587);
 
             // Set charset
             $this->mail->CharSet = 'UTF-8';
 
             // Default sender
+            $fromAddress = env('MAIL_FROM_ADDRESS') ?: env('MAIL_USERNAME', 'noreply@jetlouge.com');
             $this->mail->setFrom(
-                env('MAIL_FROM_ADDRESS', 'noreply@jetlouge.com'),
+                $fromAddress,
                 env('MAIL_FROM_NAME', 'Jetlouge Travels Admin')
             );
 
@@ -187,7 +199,7 @@ class PHPMailerService
             
             <div class="warning">
                 <strong>⚠️ Security Notice:</strong><br>
-                • This code expires in <strong>10 minutes</strong><br>
+                • This code expires in <strong>2 minutes</strong><br>
                 • Never share this code with anyone<br>
                 • If you didn\'t request this code, please ignore this email
             </div>
@@ -224,7 +236,7 @@ Your verification code is: {$otpCode}
 Please enter this 6-digit code in the verification screen to complete your login.
 
 SECURITY NOTICE:
-- This code expires in 10 minutes
+- This code expires in 2 minutes
 - Never share this code with anyone
 - If you didn't request this code, please ignore this email
 
