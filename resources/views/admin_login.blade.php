@@ -32,7 +32,7 @@
                   <img src="{{ asset('assets/images/jetlouge_logo.png') }}" alt="Jetlouge Travels">
                 </div>
                 <h1 class="brand-text">Jetlouge Travels</h1>
-                <p class="brand-subtitle">Employee Portal</p>
+                <p class="brand-subtitle">Admin Portal</p>
               </div>
 
               <h2 class="welcome-text">Welcome Back!</h2>

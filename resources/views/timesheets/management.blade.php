@@ -248,6 +248,70 @@
             </table>
           </div>
         </div>
+
+        <!-- Monthly Timesheets Table -->
+        <div class="mt-5">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="mb-0">
+              <i class="fas fa-calendar-alt me-2"></i>Monthly Timesheets Summary
+            </h5>
+            <a class="btn btn-outline-success btn-sm" href="{{ route('timesheet.monthly.export.all') }}">
+              <i class="fas fa-file-excel me-1"></i>Export Current Month (All)
+            </a>
+          </div>
+          
+          <div class="table-responsive">
+            <table class="table table-hover" id="monthly-timesheets-table">
+              <thead class="table-light">
+                <tr>
+                  <th>Employee</th>
+                  <th>Department</th>
+                  <th>Month</th>
+                  <th>Total Hours</th>
+                  <th>Overtime Hours</th>
+                  <th>Weeks Included</th>
+                  <th>Generated Date</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                @forelse($monthlyTimesheets ?? [] as $monthly)
+                @php
+                  $monthlyStart = isset($monthly->month_start_date)
+                    ? \Carbon\Carbon::parse($monthly->month_start_date)->startOfMonth()->format('Y-m-d')
+                    : null;
+                  $isCurrentMonth = $monthlyStart && isset($currentMonthStart) && $monthlyStart === $currentMonthStart;
+                @endphp
+                <tr>
+                  <td>{{ $monthly->employee_name ?? 'Unknown Employee' }}</td>
+                  <td>{{ $monthly->department ?? 'General' }}</td>
+                  <td>{{ isset($monthly->month_start_date) ? \Carbon\Carbon::parse($monthly->month_start_date)->format('M Y') : 'N/A' }}</td>
+                  <td>{{ number_format($monthly->total_hours ?? 0, 2) }}</td>
+                  <td>{{ number_format($monthly->overtime_hours ?? 0, 2) }}</td>
+                  <td>{{ $monthly->timesheet_count ?? 0 }}</td>
+                  <td>{{ isset($monthly->generated_at) ? \Carbon\Carbon::parse($monthly->generated_at)->format('M d, Y') : 'N/A' }}</td>
+                  <td>
+                    @if($isCurrentMonth)
+                      <a class="btn btn-sm btn-outline-success" href="{{ route('timesheet.monthly.export', $monthly->id) }}">
+                        <i class="fas fa-file-excel me-1"></i>Export
+                      </a>
+                    @else
+                      <span class="badge bg-secondary">Current month only</span>
+                    @endif
+                  </td>
+                </tr>
+                @empty
+                <tr>
+                  <td colspan="8" class="text-center text-muted py-4">
+                    <i class="fas fa-inbox fa-2x mb-2"></i><br>
+                    No monthly timesheets available
+                  </td>
+                </tr>
+                @endforelse
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
       
       

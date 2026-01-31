@@ -120,7 +120,7 @@
       <i class="fas fa-users me-2"></i>Employee Directory
     </h5>
     <div>
-      <button class="btn btn-success me-2" onclick="exportAllData()">
+      <button class="btn btn-success me-2" onclick="exportAllData(this)">
         <i class="fas fa-download me-2"></i>Export All Data
       </button>
     </div>
@@ -205,7 +205,7 @@
               @endif
             </td>
             <td>
-              <button class="btn btn-sm btn-success" onclick="exportEmployeeData({{ $employee->id }})" title="Export Data">
+              <button class="btn btn-sm btn-success" onclick="exportEmployeeData(this, {{ $employee->id }})" title="Export Data">
                 <i class="fas fa-download me-1"></i>Export Data
               </button>
             </td>
@@ -1561,12 +1561,11 @@ td .btn-group .btn-sm i {
 
 <script>
 // Export all data functionality
-function exportAllData() {
+function exportAllData(button) {
     if (!confirm('This will export all API employee data to your local database. Continue?')) {
         return;
     }
     
-    const button = event.target;
     const originalText = button.innerHTML;
     button.disabled = true;
     button.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Exporting...';
@@ -1599,12 +1598,11 @@ function exportAllData() {
 }
 
 // Export individual employee data
-function exportEmployeeData(employeeId) {
+function exportEmployeeData(button, employeeId) {
     if (!confirm('Export this employee to your local database?')) {
         return;
     }
     
-    const button = event.target;
     const originalText = button.innerHTML;
     button.disabled = true;
     button.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Exporting...';

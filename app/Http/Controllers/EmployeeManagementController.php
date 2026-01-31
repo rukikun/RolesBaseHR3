@@ -9,6 +9,8 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Schema;
+use Carbon\Carbon;
 
 
 class EmployeeManagementController extends Controller
@@ -26,62 +28,111 @@ class EmployeeManagementController extends Controller
         $employees = collect();
         
         try {
-            // Fetch data from HR4 API
-            $response = Http::timeout(10)->get('https://hr4.jetlougetravels-ph.com/api/employees');
+            $apiErrors = [];
+            $apiUrls = [
+                'https://hr4.jetlougetravels-ph.com/api/employees',
+                'http://hr4.jetlougetravels-ph.com/api/employees'
+            ];
 
-            if ($response->successful()) {
-                $apiData = $response->json();
-                \Log::info('API Response received - Count: ' . count($apiData));
-                
-                if (is_array($apiData) && !empty($apiData)) {
-                    // Transform API data to objects that match the view expectations
-                    $employees = collect($apiData)->map(function ($employee) {
-                        return (object) [
-                            'id' => $employee['id'],
-                            'first_name' => $employee['first_name'] ?? '',
-                            'last_name' => $employee['last_name'] ?? '',
-                            'name' => $employee['name'],
-                            'email' => $employee['email'],
-                            'position' => $employee['role'] ?? $employee['job_title'] ?? 'N/A',
-                            'department' => $this->mapDepartment($employee['role'] ?? ''),
-                            'status' => $this->mapStatus($employee['status'] ?? 'Active'),
-                            'phone' => $employee['phone'] ?? null,
-                            'hire_date' => $employee['date_hired'] ?? $employee['start_date'] ?? null,
-                            'external_id' => $employee['external_employee_id'] ?? null,
-                            'salary' => null, // Not provided by API
-                            'age' => $employee['age'] ?? null,
-                            'gender' => $employee['gender'] ?? null,
-                            'address' => $employee['address'] ?? null
-                        ];
-                    });
-                    
-                    \Log::info('Successfully transformed ' . $employees->count() . ' employees from HR4 API');
+            foreach ($apiUrls as $apiUrl) {
+                try {
+                    $response = Http::timeout(15)
+                        ->acceptJson()
+                        ->withoutVerifying()
+                        ->get($apiUrl);
+
+                    if ($response->successful()) {
+                        $apiData = $response->json();
+                        $apiPayload = $apiData;
+                        if (is_array($apiData)) {
+                            if (array_key_exists('data', $apiData) && is_array($apiData['data'])) {
+                                $apiPayload = $apiData['data'];
+                            } elseif (array_key_exists('employees', $apiData) && is_array($apiData['employees'])) {
+                                $apiPayload = $apiData['employees'];
+                            }
+                        }
+
+                        if (is_array($apiPayload)) {
+                            \Log::info('API Response received from ' . $apiUrl . ' - Count: ' . count($apiPayload));
+                        }
+
+                        if (is_array($apiPayload) && !empty($apiPayload)) {
+                            // Transform API data to objects that match the view expectations
+                            $employees = collect($apiPayload)->map(function ($employee) {
+                                $fullName = $employee['full_name']
+                                    ?? $employee['name']
+                                    ?? trim(($employee['first_name'] ?? '') . ' ' . ($employee['last_name'] ?? ''));
+                                $firstName = $employee['first_name'] ?? '';
+                                $lastName = $employee['last_name'] ?? '';
+                                $position = $employee['position']
+                                    ?? $employee['job_title']
+                                    ?? $employee['role']
+                                    ?? $employee['title']
+                                    ?? 'N/A';
+                                $departmentRaw = '';
+                                if (array_key_exists('department', $employee)) {
+                                    if (is_array($employee['department'])) {
+                                        $departmentRaw = $employee['department']['name'] ?? '';
+                                    } else {
+                                        $departmentRaw = $employee['department'] ?? '';
+                                    }
+                                }
+                                if ($departmentRaw === '') {
+                                    $departmentRaw = $employee['division']
+                                        ?? $employee['team']
+                                        ?? '';
+                                }
+                                $department = $departmentRaw !== ''
+                                    ? $departmentRaw
+                                    : $this->mapDepartment($employee['role'] ?? $position);
+
+                                if ($firstName === '' && $lastName === '' && !empty($fullName)) {
+                                    $nameParts = preg_split('/\s+/', trim($fullName));
+                                    $firstName = $nameParts[0] ?? '';
+                                    $lastName = trim(implode(' ', array_slice($nameParts, 1)));
+                                }
+
+                                return (object) [
+                                    'id' => $employee['id'],
+                                    'first_name' => $firstName,
+                                    'last_name' => $lastName,
+                                    'name' => $fullName,
+                                    'email' => $employee['email'],
+                                    'position' => $position,
+                                    'department' => $department,
+                                    'status' => $this->mapStatus($employee['status'] ?? 'Active'),
+                                    'phone' => $employee['phone'] ?? null,
+                                    'hire_date' => $employee['date_hired'] ?? $employee['start_date'] ?? null,
+                                    'external_id' => $employee['external_employee_id'] ?? null,
+                                    'salary' => null, // Not provided by API
+                                    'age' => $employee['age'] ?? null,
+                                    'gender' => $employee['gender'] ?? null,
+                                    'address' => $employee['address'] ?? null
+                                ];
+                            });
+
+                            \Log::info('Successfully transformed ' . $employees->count() . ' employees from HR4 API');
+                            break;
+                        }
+                    } else {
+                        $apiErrors[] = $apiUrl . ' responded with status ' . $response->status();
+                    }
+                } catch (\Exception $innerException) {
+                    $apiErrors[] = $apiUrl . ' error: ' . $innerException->getMessage();
                 }
-            } else {
-                \Log::warning('HR4 API request failed with status: ' . $response->status());
-                // Fallback to local database if API fails
-                $employees = Employee::orderBy('first_name')->orderBy('last_name')->get();
-                $employees = $employees->map(function($employee) {
-                    $employee->name = $employee->first_name . ' ' . $employee->last_name;
-                    return $employee;
-                });
-                \Log::info('Fallback: Retrieved ' . $employees->count() . ' employees from local database');
             }
-            
+
+            if ($employees->isEmpty()) {
+                if (!empty($apiErrors)) {
+                    \Log::warning('HR4 API request failed: ' . implode(' | ', $apiErrors));
+                }
+                session()->flash('error', 'Unable to load employees from HR4 at the moment.');
+            }
+
         } catch (\Exception $e) {
             \Log::error('Employee Management API Error: ' . $e->getMessage());
-            // Fallback to local database
-            try {
-                $employees = Employee::orderBy('first_name')->orderBy('last_name')->get();
-                $employees = $employees->map(function($employee) {
-                    $employee->name = $employee->first_name . ' ' . $employee->last_name;
-                    return $employee;
-                });
-                \Log::info('Fallback: Retrieved ' . $employees->count() . ' employees from local database');
-            } catch (\Exception $e2) {
-                \Log::error('Both API and local database failed: ' . $e2->getMessage());
-                $employees = collect();
-            }
+            $employees = collect();
+            session()->flash('error', 'Unable to load employees from HR4 at the moment.');
         }
 
         // Calculate statistics from the fetched employees
@@ -110,78 +161,73 @@ class EmployeeManagementController extends Controller
     {
         try {
             Log::info('Starting export data process...');
-            
-            // Fetch data from API
-            $response = Http::timeout(10)->get('https://hr4.jetlougetravels-ph.com/api/employees');
 
-            if (!$response->successful()) {
-                Log::error('API request failed with status: ' . $response->status());
-                return response()->json(['error' => 'Failed to fetch data from API. Status: ' . $response->status()], 500);
+            $apiErrors = [];
+            $employeesPayload = $this->fetchApiPayload([
+                'https://hr4.jetlougetravels-ph.com/api/employees',
+                'http://hr4.jetlougetravels-ph.com/api/employees'
+            ], $apiErrors);
+
+            if (!$employeesPayload) {
+                Log::error('Employees API request failed: ' . implode(' | ', $apiErrors));
+                return response()->json(['error' => 'Failed to fetch employees from API.'], 500);
             }
 
-            $apiData = $response->json();
-            Log::info('API data received. Count: ' . count($apiData));
-            
-            if (empty($apiData)) {
-                return response()->json(['error' => 'No data received from API'], 400);
+            $employees = $this->extractEmployees($employeesPayload);
+            Log::info('Employees API data received. Count: ' . count($employees));
+
+            if (empty($employees)) {
+                return response()->json(['error' => 'No employee data received from API'], 400);
             }
+
+            $accountsPayload = $this->fetchApiPayload([
+                'https://hr4.jetlougetravels-ph.com/api/accounts',
+                'http://hr4.jetlougetravels-ph.com/api/accounts'
+            ], $apiErrors);
+            $accounts = $this->extractAccounts($accountsPayload);
+            [$accountsByEmployeeId, $accountsByEmail] = $this->indexAccounts($accounts);
 
             $imported = 0;
+            $updated = 0;
             $skipped = 0;
             $errors = [];
 
-            foreach ($apiData as $index => $employeeData) {
+            foreach ($employees as $index => $employeeData) {
                 try {
-                    // Validate required fields
-                    if (empty($employeeData['email'])) {
+                    $email = $employeeData['email'] ?? null;
+                    if (!$email) {
+                        $skipped++;
                         $errors[] = "Employee at index {$index}: Missing email";
                         continue;
                     }
 
-                    // Check if employee already exists by email
-                    $existingEmployee = Employee::where('email', $employeeData['email'])->first();
-                    
-                    if ($existingEmployee) {
-                        $skipped++;
-                        continue;
+                    $account = $this->resolveAccount($employeeData, $accountsByEmployeeId, $accountsByEmail);
+                    $updateData = $this->buildEmployeeSyncData($employeeData, $account);
+
+                    $employee = Employee::updateOrCreate(['email' => $email], $updateData);
+                    if ($employee->wasRecentlyCreated) {
+                        $imported++;
+                    } else {
+                        $updated++;
                     }
-
-                    // Create new employee record (only using columns that exist in the table)
-                    $newEmployee = Employee::create([
-                        'first_name' => $employeeData['first_name'] ?? '',
-                        'last_name' => $employeeData['last_name'] ?? '',
-                        'email' => $employeeData['email'],
-                        'phone' => $employeeData['phone'] ?? null,
-                        'position' => $employeeData['role'] ?? $employeeData['job_title'] ?? 'N/A',
-                        'department' => $this->mapDepartment($employeeData['role'] ?? ''),
-                        'status' => $this->mapStatus($employeeData['status'] ?? 'Active'),
-                        'hire_date' => $employeeData['date_hired'] ?? $employeeData['start_date'] ?? null,
-                        'salary' => 0.00, // Default salary
-                        'role' => 'employee', // Default role for imported employees
-                        'online_status' => 'offline',
-                        'password' => \Hash::make('password123'), // Default password
-                    ]);
-
-                    $imported++;
-                    Log::info("Imported employee: {$newEmployee->email}");
-
                 } catch (\Exception $e) {
                     $errors[] = "Employee at index {$index}: " . $e->getMessage();
-                    Log::error("Error importing employee at index {$index}: " . $e->getMessage());
+                    Log::error("Error syncing employee at index {$index}: " . $e->getMessage());
                 }
             }
 
-            Log::info("Data export completed: {$imported} imported, {$skipped} skipped, " . count($errors) . " errors");
-            
-            $message = "Successfully imported {$imported} employees. {$skipped} employees were skipped (already exist).";
+            Log::info("Employee sync completed: {$imported} created, {$updated} updated, {$skipped} skipped, " . count($errors) . " errors");
+
+            $message = "Sync completed: {$imported} created, {$updated} updated, {$skipped} skipped.";
             if (!empty($errors)) {
                 $message .= " " . count($errors) . " errors occurred.";
             }
-            
+
             return response()->json([
                 'success' => true,
                 'message' => $message,
                 'imported' => $imported,
+                'updated' => $updated,
                 'skipped' => $skipped,
                 'errors' => $errors
             ]);
@@ -199,60 +245,42 @@ class EmployeeManagementController extends Controller
     public function exportSingleEmployee(Request $request, $id)
     {
         try {
-            // Fetch data from API
-            $response = Http::timeout(10)->get('https://hr4.jetlougetravels-ph.com/api/employees');
+            $apiErrors = [];
+            $employeesPayload = $this->fetchApiPayload([
+                'https://hr4.jetlougetravels-ph.com/api/employees',
+                'http://hr4.jetlougetravels-ph.com/api/employees'
+            ], $apiErrors);
 
-            if (!$response->successful()) {
-                return response()->json(['error' => 'Failed to fetch data from API'], 500);
+            if (!$employeesPayload) {
+                return response()->json(['error' => 'Failed to fetch employees from API'], 500);
             }
 
-            $apiData = $response->json();
-            $employeeData = null;
-
-            // Find the specific employee by ID
-            foreach ($apiData as $employee) {
-                if ($employee['id'] == $id) {
-                    $employeeData = $employee;
-                    break;
-                }
-            }
+            $employees = $this->extractEmployees($employeesPayload);
+            $employeeData = collect($employees)->firstWhere('id', (int) $id);
 
             if (!$employeeData) {
                 return response()->json(['error' => 'Employee not found in API data'], 404);
             }
 
-            // Check if employee already exists by email
-            $existingEmployee = Employee::where('email', $employeeData['email'])->first();
-            
-            if ($existingEmployee) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Employee already exists in local database'
-                ]);
-            }
+            $accountsPayload = $this->fetchApiPayload([
+                'https://hr4.jetlougetravels-ph.com/api/accounts',
+                'http://hr4.jetlougetravels-ph.com/api/accounts'
+            ], $apiErrors);
+            $accounts = $this->extractAccounts($accountsPayload);
+            [$accountsByEmployeeId, $accountsByEmail] = $this->indexAccounts($accounts);
 
-            // Create new employee record (only using columns that exist in the table)
-            $newEmployee = Employee::create([
-                'first_name' => $employeeData['first_name'] ?? '',
-                'last_name' => $employeeData['last_name'] ?? '',
-                'email' => $employeeData['email'],
-                'phone' => $employeeData['phone'] ?? null,
-                'position' => $employeeData['role'] ?? $employeeData['job_title'] ?? 'N/A',
-                'department' => $this->mapDepartment($employeeData['role'] ?? ''),
-                'status' => $this->mapStatus($employeeData['status'] ?? 'Active'),
-                'hire_date' => $employeeData['date_hired'] ?? $employeeData['start_date'] ?? null,
-                'salary' => 0.00, // Default salary
-                'role' => 'employee', // Default role for imported employees
-                'online_status' => 'offline',
-                'password' => \Hash::make('password123'), // Default password
-            ]);
+            $account = $this->resolveAccount($employeeData, $accountsByEmployeeId, $accountsByEmail);
+            $updateData = $this->buildEmployeeSyncData($employeeData, $account);
 
-            Log::info("Individual employee exported: {$newEmployee->first_name} {$newEmployee->last_name}");
-            
+            $employee = Employee::updateOrCreate(['email' => $employeeData['email']], $updateData);
+            $action = $employee->wasRecentlyCreated ? 'imported' : 'updated';
+
+            Log::info("Individual employee synced: {$employee->first_name} {$employee->last_name}");
+
             return response()->json([
                 'success' => true,
-                'message' => "Successfully imported employee: {$newEmployee->first_name} {$newEmployee->last_name}",
-                'employee' => $newEmployee
+                'message' => "Successfully {$action} employee: {$employee->first_name} {$employee->last_name}",
+                'employee' => $employee
             ]);
 
         } catch (\Exception $e) {
@@ -283,14 +311,300 @@ class EmployeeManagementController extends Controller
      */
     private function mapStatus($apiStatus)
     {
+        $normalized = strtolower(trim((string) $apiStatus));
         $statusMap = [
-            'Passed' => 'active',
-            'Active' => 'active',
-            'Inactive' => 'inactive',
-            'Terminated' => 'terminated'
+            'passed' => 'active',
+            'active' => 'active',
+            'regular' => 'active',
+            'new_hire' => 'active',
+            'inactive' => 'inactive',
+            'terminated' => 'terminated',
+            'resigned' => 'terminated',
+            'separated' => 'terminated'
         ];
-        
-        return $statusMap[$apiStatus] ?? 'active';
+
+        return $statusMap[$normalized] ?? 'active';
+    }
+
+    /**
+     * Fetch API payload with HTTP and stream/cURL fallback.
+     */
+    private function fetchApiPayload(array $urls, array &$apiErrors): ?array
+    {
+        foreach ($urls as $url) {
+            try {
+                $response = Http::timeout(15)
+                    ->acceptJson()
+                    ->withoutVerifying()
+                    ->get($url);
+
+                if ($response->successful()) {
+                    $payload = $response->json();
+                    if (is_array($payload)) {
+                        return $payload;
+                    }
+                } else {
+                    $apiErrors[] = $url . ' responded with status ' . $response->status();
+                }
+            } catch (\Exception $e) {
+                $apiErrors[] = $url . ' error: ' . $e->getMessage();
+            }
+
+            $streamPayload = $this->fetchPayloadViaStream($url, $apiErrors);
+            if ($streamPayload) {
+                return $streamPayload;
+            }
+        }
+
+        return null;
+    }
+
+    private function fetchPayloadViaStream(string $url, array &$apiErrors): ?array
+    {
+        $allowUrlFopen = filter_var(ini_get('allow_url_fopen'), FILTER_VALIDATE_BOOLEAN);
+        if ($allowUrlFopen) {
+            $context = stream_context_create([
+                'ssl' => [
+                    'verify_peer' => false,
+                    'verify_peer_name' => false,
+                ],
+                'http' => [
+                    'timeout' => 15,
+                ],
+            ]);
+            $response = @file_get_contents($url, false, $context);
+            if ($response !== false) {
+                $payload = json_decode($response, true);
+                return is_array($payload) ? $payload : null;
+            }
+
+            $error = error_get_last();
+            $apiErrors[] = $url . ' stream error: ' . ($error['message'] ?? 'unknown error');
+        }
+
+        if (!function_exists('curl_init')) {
+            return null;
+        }
+
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
+        $response = curl_exec($ch);
+        $curlError = curl_error($ch);
+        $statusCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($response === false || $statusCode >= 400) {
+            $apiErrors[] = $url . ' curl error: ' . ($curlError ?: 'HTTP ' . $statusCode);
+            return null;
+        }
+
+        $payload = json_decode($response, true);
+        return is_array($payload) ? $payload : null;
+    }
+
+    private function extractEmployees($payload): array
+    {
+        if (!is_array($payload)) {
+            return [];
+        }
+
+        if (isset($payload['data']) && is_array($payload['data'])) {
+            return $payload['data'];
+        }
+
+        if (isset($payload['employees']) && is_array($payload['employees'])) {
+            return $payload['employees'];
+        }
+
+        return array_values($payload);
+    }
+
+    private function extractAccounts($payload): array
+    {
+        if (!is_array($payload)) {
+            return [];
+        }
+
+        if (isset($payload['data']) && is_array($payload['data'])) {
+            $payload = $payload['data'];
+        }
+
+        $systemAccounts = $payload['system_accounts'] ?? [];
+        $essAccounts = $payload['ess_accounts'] ?? [];
+
+        return array_merge(
+            is_array($systemAccounts) ? $systemAccounts : [],
+            is_array($essAccounts) ? $essAccounts : []
+        );
+    }
+
+    private function indexAccounts(array $accounts): array
+    {
+        $byEmployeeId = [];
+        $byEmail = [];
+
+        foreach ($accounts as $account) {
+            if (!is_array($account)) {
+                continue;
+            }
+
+            $employee = $account['employee'] ?? [];
+            $employeeId = $account['employee_id'] ?? $employee['id'] ?? null;
+            $email = $employee['email'] ?? $account['email'] ?? null;
+
+            if ($employeeId) {
+                $this->storeAccountWithPriority($byEmployeeId, $employeeId, $account);
+            }
+
+            if ($email) {
+                $this->storeAccountWithPriority($byEmail, strtolower(trim($email)), $account);
+            }
+        }
+
+        return [$byEmployeeId, $byEmail];
+    }
+
+    private function storeAccountWithPriority(array &$bucket, $key, array $account): void
+    {
+        $priority = $this->accountPriority($account);
+        if (!isset($bucket[$key]) || $priority > $this->accountPriority($bucket[$key])) {
+            $bucket[$key] = $account;
+        }
+    }
+
+    private function accountPriority(array $account): int
+    {
+        $accountType = strtolower(trim((string) ($account['account_type'] ?? '')));
+        return $accountType === 'system' ? 2 : 1;
+    }
+
+    private function resolveAccount(array $employeeData, array $accountsByEmployeeId, array $accountsByEmail): ?array
+    {
+        $employeeId = $employeeData['id'] ?? null;
+        if ($employeeId && isset($accountsByEmployeeId[$employeeId])) {
+            return $accountsByEmployeeId[$employeeId];
+        }
+
+        $email = $employeeData['email'] ?? null;
+        if ($email) {
+            $key = strtolower(trim($email));
+            return $accountsByEmail[$key] ?? null;
+        }
+
+        return null;
+    }
+
+    private function buildEmployeeSyncData(array $employeeData, ?array $account): array
+    {
+        $firstName = $employeeData['first_name'] ?? '';
+        $lastName = $employeeData['last_name'] ?? '';
+        if ($firstName === '' && $lastName === '' && !empty($employeeData['full_name'])) {
+            $nameParts = preg_split('/\s+/', trim($employeeData['full_name']));
+            $firstName = $nameParts[0] ?? 'Unknown';
+            $lastName = trim(implode(' ', array_slice($nameParts, 1)));
+        }
+
+        $position = $employeeData['position']
+            ?? $employeeData['role']
+            ?? $employeeData['job_title']
+            ?? 'Employee';
+
+        $department = null;
+        if (isset($employeeData['department'])) {
+            if (is_array($employeeData['department'])) {
+                $department = $employeeData['department']['name'] ?? null;
+            } else {
+                $department = $employeeData['department'];
+            }
+        }
+        if (!$department) {
+            $department = $this->mapDepartment($position);
+        }
+
+        $hireDate = $this->normalizeDate($employeeData['date_hired'] ?? $employeeData['start_date'] ?? null)
+            ?? now()->toDateString();
+
+        $status = $this->mapStatus($employeeData['status'] ?? $employeeData['employee_status'] ?? null);
+        $role = $this->mapRoleFromPosition($position);
+
+        $data = [
+            'first_name' => $firstName ?: 'Unknown',
+            'last_name' => $lastName ?: 'Employee',
+            'email' => $employeeData['email'],
+            'phone' => $employeeData['phone'] ?? null,
+            'position' => $position,
+            'department' => $department ?: 'General',
+            'hire_date' => $hireDate,
+            'status' => $status,
+            'role' => $role,
+            'online_status' => 'offline',
+            'salary' => $employeeData['salary'] ?? 0.00,
+        ];
+
+        if (Schema::hasColumn('employees', 'address')) {
+            $data['address'] = $employeeData['address'] ?? null;
+        }
+
+        if (Schema::hasColumn('employees', 'gender')) {
+            $data['gender'] = $employeeData['gender'] ?? null;
+        }
+
+        if (Schema::hasColumn('employees', 'date_of_birth')) {
+            $data['date_of_birth'] = $this->normalizeDate($employeeData['birth_date'] ?? null);
+        }
+
+        if ($account && !empty($account['password'])) {
+            $data['password'] = Hash::make(trim((string) $account['password']));
+        }
+
+        if ($account) {
+            if (Schema::hasColumn('employees', 'profile_picture_url')) {
+                $data['profile_picture_url'] = $account['profile_picture'] ?? null;
+            } elseif (Schema::hasColumn('employees', 'profile_picture')) {
+                $data['profile_picture'] = $account['profile_picture'] ?? null;
+            }
+        }
+
+        return $data;
+    }
+
+    private function normalizeDate(?string $value): ?string
+    {
+        if (!$value) {
+            return null;
+        }
+
+        try {
+            return Carbon::parse($value)->toDateString();
+        } catch (\Exception $e) {
+            return null;
+        }
+    }
+
+    private function mapRoleFromPosition(?string $position): string
+    {
+        $position = strtolower(trim((string) $position));
+
+        if (str_contains($position, 'super admin') || str_contains($position, 'system administrator')) {
+            return 'super_admin';
+        }
+
+        if (str_contains($position, 'hr manager')) {
+            return 'hr_manager';
+        }
+
+        if (str_contains($position, 'hr scheduler')) {
+            return 'hr_scheduler';
+        }
+
+        if (str_contains($position, 'admin')) {
+            return 'admin';
+        }
+
+        return 'employee';
     }
 
     /**

@@ -257,60 +257,11 @@ $totalAmount = $totalAmount ?? 0;
           </tr>
         </thead>
         <tbody id="claims-tbody">
-          @forelse($claims as $claim)
-            <tr data-claim-id="{{ $claim->id ?? '' }}">
-              <td>{{ $claim->employee_name ?? 'Unknown Employee' }}</td>
-              <td>{{ $claim->claim_type_name ?? 'Unknown Type' }}</td>
-              <td>₱{{ number_format($claim->amount ?? 0, 2) }}</td>
-              <td>{{ isset($claim->claim_date) ? date('M d, Y', strtotime($claim->claim_date)) : 'N/A' }}</td>
-              <td>{{ isset($claim->description) ? Str::limit($claim->description, 30) : 'N/A' }}</td>
-              <td>
-                @if((isset($claim->receipt_path) && $claim->receipt_path) || (isset($claim->attachment_path) && $claim->attachment_path))
-                  <i class="fas fa-paperclip text-success" title="Has attachment"></i>
-                @else
-                  <i class="fas fa-times text-muted" title="No attachment"></i>
-                @endif
-              </td>
-              <td>
-                @php
-                  $rawStatus = $claim->status ?? 'pending';
-                  $normalizedStatus = strtolower(trim($rawStatus));
-                  $badgeClass = match($normalizedStatus) {
-                    'approved' => 'success',
-                    'pending' => 'warning', 
-                    'paid' => 'info',
-                    'rejected' => 'danger',
-                    default => 'secondary'
-                  };
-                @endphp
-                <span class="badge bg-{{ $badgeClass }}">
-                  {{ ucfirst($normalizedStatus) }}
-                </span>
-              </td>
-              <td>
-                <div class="btn-group" role="group">
-                  <button type="button" class="btn btn-sm btn-outline-primary" onclick="viewClaimDetails({{ isset($claim->id) ? $claim->id : 0 }})" title="View">
-                    <i class="fas fa-eye"></i>
-                  </button>
-                  @if($normalizedStatus === 'pending' && isset($claim->id))
-                        <button type="button" class="btn btn-sm btn-outline-success" onclick="showClaimAuthModal('approve', '{{ $claim->id }}')" title="Approve">
-                          <i class="fas fa-check"></i>
-                        </button>
-                        <button type="button" class="btn btn-sm btn-outline-warning" onclick="showClaimAuthModal('reject', '{{ $claim->id }}')" title="Reject">
-                          <i class="fas fa-times"></i>
-                        </button>
-                        @endif
-                </div>
-              </td>
-            </tr>
-          @empty
           <tr>
             <td colspan="8" class="text-center text-muted py-4">
-              <i class="fas fa-inbox fa-2x mb-2 d-block"></i>
-              No claims found. <a href="#" onclick="openWorkingModal('create-claim-modal')" class="text-primary">Create your first claim</a>
+              <i class="fas fa-spinner fa-spin me-2"></i>Loading claims...
             </td>
           </tr>
-          @endforelse
         </tbody>
       </table>
     </div>
@@ -580,6 +531,10 @@ $totalAmount = $totalAmount ?? 0;
                         <label for="claim-auth-password" class="form-label">Password</label>
                         <input type="password" class="form-control" id="claim-auth-password" name="password" required placeholder="Enter your password">
                     </div>
+                    <div class="mb-3" id="claim-rejection-reason-group" style="display: none;">
+                        <label for="claim-rejection-reason" class="form-label">Rejection Reason</label>
+                        <textarea class="form-control" id="claim-rejection-reason" rows="3" placeholder="Provide a reason for rejection"></textarea>
+                    </div>
                 </div>
                 <div class="working-modal-footer">
                     <button type="button" class="btn btn-secondary" onclick="closeWorkingModal('claim-hr-auth-modal')">Cancel</button>
@@ -602,6 +557,204 @@ function openWorkingModal(modalId) {
         document.body.style.overflow = 'hidden';
     }
 }
+
+const HR2_CLAIMS_API = 'https://hr2.jetlougetravels-ph.com/api/claims';
+let hr2ClaimsCache = [];
+
+function normalizeClaimsResponse(payload) {
+    if (Array.isArray(payload)) {
+        return payload;
+    }
+    if (payload && Array.isArray(payload.data)) {
+        return payload.data;
+    }
+    if (payload && Array.isArray(payload.claims)) {
+        return payload.claims;
+    }
+    return [];
+}
+
+function formatClaimDate(value) {
+    if (!value) {
+        return 'N/A';
+    }
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+        return 'N/A';
+    }
+    return parsed.toLocaleDateString('en-US', {
+        month: 'short',
+        day: '2-digit',
+        year: 'numeric'
+    });
+}
+
+function truncateText(text, limit = 30) {
+    if (!text) {
+        return 'N/A';
+    }
+    const trimmed = String(text).trim();
+    if (trimmed.length <= limit) {
+        return trimmed;
+    }
+    return `${trimmed.slice(0, limit)}...`;
+}
+
+function getClaimId(claim) {
+    return claim?.id ?? claim?.claim_id ?? claim?.claimId ?? '';
+}
+
+function getEmployeeName(claim) {
+    if (claim?.employee_name) {
+        return claim.employee_name;
+    }
+    if (claim?.employee?.name) {
+        return claim.employee.name;
+    }
+    const firstName = claim?.employee?.first_name ?? '';
+    const lastName = claim?.employee?.last_name ?? '';
+    const combined = `${firstName} ${lastName}`.trim();
+    return combined || 'Unknown Employee';
+}
+
+function getClaimTypeName(claim) {
+    return claim?.claim_type_name
+        ?? claim?.claim_type?.name
+        ?? claim?.type_name
+        ?? 'Unknown Type';
+}
+
+function hasAttachment(claim) {
+    return Boolean(
+        claim?.receipt_path
+        || claim?.attachment_path
+        || claim?.receipt_url
+        || claim?.attachment_url
+        || claim?.attachment
+    );
+}
+
+function getStatusBadgeClass(status) {
+    return {
+        approved: 'success',
+        pending: 'warning',
+        paid: 'info',
+        rejected: 'danger'
+    }[status] || 'secondary';
+}
+
+function renderClaimsTable(statusFilter = '') {
+    const tbody = document.getElementById('claims-tbody');
+    if (!tbody) {
+        return;
+    }
+
+    const normalizedFilter = statusFilter ? statusFilter.toLowerCase() : '';
+    const claimsToRender = normalizedFilter
+        ? hr2ClaimsCache.filter((claim) => {
+            const status = String(claim?.status ?? 'pending').trim().toLowerCase();
+            return status === normalizedFilter;
+        })
+        : hr2ClaimsCache;
+
+    if (!claimsToRender.length) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="8" class="text-center text-muted py-4">
+                    <i class="fas fa-inbox fa-2x mb-2 d-block"></i>
+                    No claims found. <a href="#" onclick="openWorkingModal('create-claim-modal')" class="text-primary">Create your first claim</a>
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    tbody.innerHTML = claimsToRender.map((claim) => {
+        const claimId = getClaimId(claim);
+        const status = String(claim?.status ?? 'pending').trim().toLowerCase();
+        const badgeClass = getStatusBadgeClass(status);
+        const amountValue = Number(claim?.amount ?? 0);
+        const formattedAmount = Number.isFinite(amountValue)
+            ? amountValue.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+            : '0.00';
+        const attachmentIcon = hasAttachment(claim)
+            ? '<i class="fas fa-paperclip text-success" title="Has attachment"></i>'
+            : '<i class="fas fa-times text-muted" title="No attachment"></i>';
+
+        const approveRejectButtons = status === 'pending' && claimId
+            ? `
+                <button type="button" class="btn btn-sm btn-outline-success" onclick="showClaimAuthModal('approve', '${claimId}')" title="Approve">
+                    <i class="fas fa-check"></i>
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-warning" onclick="showClaimAuthModal('reject', '${claimId}')" title="Reject">
+                    <i class="fas fa-times"></i>
+                </button>
+            `
+            : '';
+
+        return `
+            <tr data-claim-id="${claimId}">
+                <td>${getEmployeeName(claim)}</td>
+                <td>${getClaimTypeName(claim)}</td>
+                <td>₱${formattedAmount}</td>
+                <td>${formatClaimDate(claim?.claim_date ?? claim?.date ?? claim?.created_at)}</td>
+                <td>${truncateText(claim?.description, 30)}</td>
+                <td>${attachmentIcon}</td>
+                <td><span class="badge bg-${badgeClass}">${status.charAt(0).toUpperCase()}${status.slice(1)}</span></td>
+                <td>
+                    <div class="btn-group" role="group">
+                        <button type="button" class="btn btn-sm btn-outline-primary" onclick="viewClaimDetails(${claimId ? `'${claimId}'` : 0})" title="View">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                        ${approveRejectButtons}
+                    </div>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+function setClaimsLoadingState(message = 'Loading claims...') {
+    const tbody = document.getElementById('claims-tbody');
+    if (!tbody) {
+        return;
+    }
+
+    tbody.innerHTML = `
+        <tr>
+            <td colspan="8" class="text-center text-muted py-4">
+                <i class="fas fa-spinner fa-spin me-2"></i>${message}
+            </td>
+        </tr>
+    `;
+}
+
+function loadClaimsFromApi() {
+    setClaimsLoadingState();
+    fetch(HR2_CLAIMS_API, {
+        headers: {
+            'Accept': 'application/json'
+        }
+    })
+        .then((response) => {
+            if (!response.ok) {
+                throw new Error(`Request failed with ${response.status}`);
+            }
+            return response.json();
+        })
+        .then((payload) => {
+            hr2ClaimsCache = normalizeClaimsResponse(payload);
+            const filterValue = document.getElementById('claim-status-filter')?.value || '';
+            renderClaimsTable(filterValue);
+        })
+        .catch((error) => {
+            console.error('Failed to load HR2 claims:', error);
+            hr2ClaimsCache = [];
+            renderClaimsTable();
+            showClaimAuthMessage('danger', 'Unable to load claims from HR2. Please try again later.');
+        });
+}
+
 
 function closeWorkingModal(modalId) {
     const modal = document.getElementById(modalId);
@@ -675,6 +828,15 @@ document.addEventListener('DOMContentLoaded', function() {
             return true;
         });
     }
+
+    const statusFilter = document.getElementById('claim-status-filter');
+    if (statusFilter) {
+        statusFilter.addEventListener('change', function() {
+            renderClaimsTable(this.value);
+        });
+    }
+
+    loadClaimsFromApi();
 });
 
 // View claim type details
@@ -696,7 +858,7 @@ function viewClaimDetails(claimId) {
         return;
     }
     
-    const claimRow = document.querySelector(`button[onclick="viewClaimDetails(${claimId})"]`)?.closest('tr');
+    const claimRow = document.querySelector(`tr[data-claim-id="${claimId}"]`);
     
     if (claimRow && claimRow.cells.length >= 7) {
         try {
@@ -730,6 +892,8 @@ function showClaimAuthModal(action, claimId) {
     const extraInput = document.getElementById('claim-auth-extra-data');
     const emailInput = document.getElementById('claim-auth-email');
     const passwordInput = document.getElementById('claim-auth-password');
+    const rejectionGroup = document.getElementById('claim-rejection-reason-group');
+    const rejectionInput = document.getElementById('claim-rejection-reason');
     const modalTitle = document.querySelector('#claim-hr-auth-modal .working-modal-title');
 
     if (actionInput) actionInput.value = action;
@@ -737,6 +901,10 @@ function showClaimAuthModal(action, claimId) {
     if (extraInput) extraInput.value = extraData ? JSON.stringify(extraData) : '';
     if (emailInput) emailInput.value = '';
     if (passwordInput) passwordInput.value = '';
+    if (rejectionInput) rejectionInput.value = '';
+    if (rejectionGroup) {
+        rejectionGroup.style.display = action === 'reject' ? 'block' : 'none';
+    }
     if (modalTitle) {
         modalTitle.textContent = `HR Authorization Required - ${actionLabels[action] || 'Action'}`;
     }
@@ -781,30 +949,62 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         const formData = new FormData(authForm);
+        const action = formData.get('action');
+        const claimId = formData.get('item_id');
+        const email = formData.get('email');
+        const password = formData.get('password');
+        const rejectionReason = document.getElementById('claim-rejection-reason')?.value.trim();
 
-        fetch('/claim/hr-auth', {
-            method: 'POST',
-            body: formData,
-            headers: {
-                'X-Requested-With': 'XMLHttpRequest',
-                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || ''
+        if (!action || !claimId) {
+            showClaimAuthMessage('danger', 'Invalid claim action. Please refresh and try again.');
+            return;
+        }
+
+        if (action === 'reject' && !rejectionReason) {
+            showClaimAuthMessage('danger', 'Rejection reason is required.');
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalText;
             }
+            return;
+        }
+
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+        const payload = {
+            email,
+            password,
+            rejection_reason: action === 'reject' ? rejectionReason : undefined
+        };
+
+        fetch(`/hr2/claims/${claimId}/${action}`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'X-CSRF-TOKEN': csrfToken
+            },
+            body: JSON.stringify(payload)
         })
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                return response.json().then(err => {
+                    throw new Error(err.message || 'Unable to update claim status.');
+                });
+            }
+            return response.json();
+        })
         .then(data => {
             if (data.success) {
                 closeWorkingModal('claim-hr-auth-modal');
                 showClaimAuthMessage('success', data.message || 'Claim updated successfully.');
-                const action = formData.get('action');
-                const claimId = formData.get('item_id');
                 updateClaimRowStatus(action, claimId);
             } else {
                 showClaimAuthMessage('danger', data.message || 'Authentication failed.');
             }
         })
         .catch(error => {
-            console.error('Claim auth error:', error);
-            showClaimAuthMessage('danger', 'An error occurred. Please try again.');
+            console.error('Claim update error:', error);
+            showClaimAuthMessage('danger', error.message || 'Unable to update claim status. Please try again.');
         })
         .finally(() => {
             if (submitBtn) {
@@ -820,12 +1020,19 @@ function updateClaimRowStatus(action, claimId) {
         return;
     }
 
+    const normalizedStatus = action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : action;
+    const targetClaim = hr2ClaimsCache.find((claim) => String(getClaimId(claim)) === String(claimId));
+    if (targetClaim) {
+        targetClaim.status = normalizedStatus;
+    }
+
+    const filterValue = document.getElementById('claim-status-filter')?.value || '';
+    renderClaimsTable(filterValue);
+
     const row = document.querySelector(`tr[data-claim-id="${claimId}"]`);
     if (!row || row.cells.length < 8) {
         return;
     }
-
-    const normalizedStatus = action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : action;
     const badgeClass = {
         approved: 'success',
         rejected: 'danger',

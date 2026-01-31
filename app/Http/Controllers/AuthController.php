@@ -5,6 +5,9 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 use App\Models\Employee;
 use App\Models\OtpVerification;
 use App\Models\BiometricCredential;
@@ -13,6 +16,7 @@ use App\Services\PHPMailerService;
 
 class AuthController extends Controller
 {
+    private ?string $systemAccountAuthError = null;
     /**
      * Show admin login form
      */
@@ -31,37 +35,389 @@ class AuthController extends Controller
             'password' => ['required'],
         ]);
 
-        // Use the 'employee' guard which uses 'employees' table
-        if (Auth::guard('employee')->attempt($credentials, $request->has('rememberMe'))) {
-            $employee = Auth::guard('employee')->user();
-            
-            // Check if employee can access dashboard
-            if (!$employee->canAccessDashboard()) {
-                Auth::guard('employee')->logout();
-                return back()->withErrors([
-                    'email' => 'Your account does not have permission to access this system.',
-                ]);
-            }
+        $systemAccount = $this->authenticateSystemAccount($credentials['email'], $credentials['password']);
 
-            // Store OTP session data before logging out
-            $request->session()->put('otp_email', $employee->email);
-            $request->session()->put('remember_me', $request->has('rememberMe'));
-            $request->session()->put('employee_name', $employee->first_name . ' ' . $employee->last_name);
-
-            // Log out until OTP verification is complete
-            Auth::guard('employee')->logout();
-
-            // Regenerate session and redirect to OTP verification
-            $request->session()->regenerate();
-            $request->session()->forget('url.intended');
-
-            return redirect()->route('admin.otp.form')
-                ->with('info', "Please click 'Send Verification Code' to receive your OTP.");
+        if (!$systemAccount) {
+            $errorMessage = match ($this->systemAccountAuthError) {
+                'api_unreachable' => 'Unable to reach the system account service. Please try again.',
+                'password_mismatch' => 'Incorrect password for the system account.',
+                'email_not_found' => 'No system account was found for this email.',
+                default => 'The provided credentials do not match our system accounts.'
+            };
+            return back()->withErrors([
+                'email' => $errorMessage,
+            ])->withInput($request->only('email'));
         }
 
-        return back()->withErrors([
-            'email' => 'The provided credentials do not match our records.',
-        ])->withInput($request->only('email'));
+        if (!empty($systemAccount['blocked'])) {
+            return back()->withErrors([
+                'email' => 'This system account is currently blocked.',
+            ]);
+        }
+
+        $employee = $this->syncSystemAccountEmployee($systemAccount, $credentials['password']);
+
+        if (!$employee) {
+            return back()->withErrors([
+                'email' => 'System account details are incomplete. Please contact support.',
+            ]);
+        }
+
+        if (!$employee->canAccessDashboard()) {
+            return back()->withErrors([
+                'email' => 'Your account does not have permission to access this system.',
+            ]);
+        }
+
+        // Store OTP session data before completing login
+        $request->session()->put('otp_email', $employee->email);
+        $request->session()->put('remember_me', $request->has('rememberMe'));
+        $request->session()->put('employee_name', $employee->first_name . ' ' . $employee->last_name);
+
+        // Regenerate session and redirect to OTP verification
+        $request->session()->regenerate();
+        $request->session()->forget('url.intended');
+
+        return redirect()->route('admin.otp.form')
+            ->with('info', "Please click 'Send Verification Code' to receive your OTP.");
+    }
+
+    /**
+     * Validate credentials against HR4 system accounts API.
+     */
+    private function authenticateSystemAccount(string $email, string $password): ?array
+    {
+        $this->systemAccountAuthError = null;
+        $normalizedEmail = strtolower(trim($email));
+        $apiUrls = [
+            'https://hr4.jetlougetravels-ph.com/api/accounts',
+            'http://hr4.jetlougetravels-ph.com/api/accounts'
+        ];
+        $apiErrors = [];
+        $emailMatched = false;
+        $apiReachable = false;
+
+        foreach ($apiUrls as $apiUrl) {
+            try {
+                $response = Http::timeout(15)
+                    ->acceptJson()
+                    ->withoutVerifying()
+                    ->get($apiUrl);
+
+                if (!$response->successful()) {
+                    $apiErrors[] = $apiUrl . ' responded with status ' . $response->status();
+                    continue;
+                }
+
+                $apiReachable = true;
+
+                $payload = $response->json();
+                $accounts = $this->extractSystemAccounts($payload);
+
+                $matchedAccount = $this->matchSystemAccount($accounts, $normalizedEmail, $password, $emailMatched);
+                if ($matchedAccount) {
+                    return $matchedAccount;
+                }
+            } catch (\Exception $e) {
+                $apiErrors[] = $apiUrl . ' error: ' . $e->getMessage();
+            }
+        }
+
+        $fallbackAccount = $this->authenticateSystemAccountViaStream(
+            $normalizedEmail,
+            $password,
+            $apiUrls,
+            $emailMatched,
+            $apiReachable,
+            $apiErrors
+        );
+        if ($fallbackAccount) {
+            return $fallbackAccount;
+        }
+
+        if (!empty($apiErrors)) {
+            \Log::warning('HR4 system account authentication failed: ' . implode(' | ', $apiErrors));
+        }
+
+        $this->systemAccountAuthError = match (true) {
+            !$apiReachable => 'api_unreachable',
+            $emailMatched => 'password_mismatch',
+            default => 'email_not_found',
+        };
+
+        \Log::info('System account auth failure', [
+            'email' => $normalizedEmail,
+            'reason' => $this->systemAccountAuthError,
+        ]);
+
+        return null;
+    }
+
+    /**
+     * Extract system accounts from the API payload.
+     */
+    private function extractSystemAccounts($payload): array
+    {
+        if (!is_array($payload)) {
+            return [];
+        }
+
+        if (isset($payload['system_accounts']) && is_array($payload['system_accounts'])) {
+            return $payload['system_accounts'];
+        }
+
+        if (isset($payload['data']) && is_array($payload['data'])) {
+            if (isset($payload['data']['system_accounts']) && is_array($payload['data']['system_accounts'])) {
+                return $payload['data']['system_accounts'];
+            }
+
+            if (isset($payload['data']['accounts']) && is_array($payload['data']['accounts'])) {
+                return $payload['data']['accounts'];
+            }
+        }
+
+        return [];
+    }
+
+    /**
+     * Match a system account from the API list.
+     */
+    private function matchSystemAccount(array $accounts, string $normalizedEmail, string $password, bool &$emailMatched): ?array
+    {
+        foreach ($accounts as $account) {
+            if (!is_array($account)) {
+                continue;
+            }
+
+            $accountType = isset($account['account_type']) ? strtolower(trim((string) $account['account_type'])) : null;
+            if ($accountType && $accountType !== 'system') {
+                continue;
+            }
+
+            $employee = $account['employee'] ?? [];
+            $accountEmail = $employee['email'] ?? $account['email'] ?? null;
+            $normalizedAccountEmail = $accountEmail ? strtolower(trim($accountEmail)) : null;
+
+            if (!$normalizedAccountEmail || $normalizedAccountEmail !== $normalizedEmail) {
+                continue;
+            }
+
+            $emailMatched = true;
+
+            $accountPassword = isset($account['password']) ? trim((string) $account['password']) : '';
+            if ($this->passwordMatches($password, $accountPassword)) {
+                return $account;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Fallback to file_get_contents if the HTTP client cannot reach the API.
+     */
+    private function authenticateSystemAccountViaStream(
+        string $normalizedEmail,
+        string $password,
+        array $apiUrls,
+        bool &$emailMatched,
+        bool &$apiReachable,
+        array &$apiErrors
+    ): ?array {
+        $allowUrlFopen = filter_var(ini_get('allow_url_fopen'), FILTER_VALIDATE_BOOLEAN);
+
+        $context = stream_context_create([
+            'ssl' => [
+                'verify_peer' => false,
+                'verify_peer_name' => false,
+            ],
+            'http' => [
+                'timeout' => 15,
+            ],
+        ]);
+
+        foreach ($apiUrls as $apiUrl) {
+            $response = null;
+            if ($allowUrlFopen) {
+                $response = @file_get_contents($apiUrl, false, $context);
+            }
+
+            if ($response === false || $response === null) {
+                $curlPayload = $this->fetchApiPayloadViaCurl($apiUrl, $apiErrors);
+                if ($curlPayload !== null) {
+                    $apiReachable = true;
+                    $accounts = $this->extractSystemAccounts($curlPayload);
+                    $matchedAccount = $this->matchSystemAccount($accounts, $normalizedEmail, $password, $emailMatched);
+                    if ($matchedAccount) {
+                        return $matchedAccount;
+                    }
+                } else {
+                    if ($allowUrlFopen) {
+                        $error = error_get_last();
+                        $apiErrors[] = $apiUrl . ' stream error: ' . ($error['message'] ?? 'unknown error');
+                    }
+                }
+                continue;
+            }
+
+            $apiReachable = true;
+
+            $payload = json_decode($response, true);
+            $accounts = $this->extractSystemAccounts($payload);
+            $matchedAccount = $this->matchSystemAccount($accounts, $normalizedEmail, $password, $emailMatched);
+            if ($matchedAccount) {
+                return $matchedAccount;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Fetch API payload using cURL for environments without allow_url_fopen.
+     */
+    private function fetchApiPayloadViaCurl(string $apiUrl, array &$apiErrors): ?array
+    {
+        if (!function_exists('curl_init')) {
+            return null;
+        }
+
+        $ch = curl_init($apiUrl);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
+        $response = curl_exec($ch);
+        $curlError = curl_error($ch);
+        $statusCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($response === false || $statusCode >= 400) {
+            $apiErrors[] = $apiUrl . ' curl error: ' . ($curlError ?: 'HTTP ' . $statusCode);
+            return null;
+        }
+
+        $payload = json_decode($response, true);
+        return is_array($payload) ? $payload : null;
+    }
+
+    /**
+     * Sync HR4 system account employee data into local employees table.
+     */
+    private function syncSystemAccountEmployee(array $systemAccount, string $password): ?Employee
+    {
+        $employeePayload = $systemAccount['employee'] ?? null;
+
+        if (!is_array($employeePayload)) {
+            return null;
+        }
+
+        $email = $employeePayload['email'] ?? null;
+        if (!$email) {
+            return null;
+        }
+
+        $departmentPayload = $employeePayload['department'] ?? null;
+        $departmentName = null;
+        if (is_array($departmentPayload)) {
+            $departmentName = $departmentPayload['name'] ?? null;
+        } elseif (is_string($departmentPayload)) {
+            $departmentName = $departmentPayload;
+        }
+
+        $position = $employeePayload['position'] ?? $employeePayload['role'] ?? 'System Account';
+        $role = $this->mapSystemRole($position);
+
+        $status = $this->mapEmployeeStatus($employeePayload['employee_status'] ?? null);
+
+        $updateData = [
+            'first_name' => $employeePayload['first_name'] ?? 'System',
+            'last_name' => $employeePayload['last_name'] ?? 'Account',
+            'position' => $position,
+            'department' => $departmentName,
+            'role' => $role,
+            'phone' => $employeePayload['phone'] ?? null,
+            'address' => $employeePayload['address'] ?? null,
+            'hire_date' => $employeePayload['date_hired'] ?? $employeePayload['start_date'] ?? null,
+            'status' => $status,
+            'password' => Hash::make($password)
+        ];
+
+        if (Schema::hasColumn('employees', 'profile_picture_url')) {
+            $updateData['profile_picture_url'] = $systemAccount['profile_picture'] ?? null;
+        } elseif (Schema::hasColumn('employees', 'profile_picture')) {
+            $updateData['profile_picture'] = $systemAccount['profile_picture'] ?? null;
+        }
+
+        return Employee::updateOrCreate(
+            ['email' => $email],
+            $updateData
+        );
+    }
+
+    /**
+     * Match system account password against plain or hashed API values.
+     */
+    private function passwordMatches(string $plain, ?string $stored): bool
+    {
+        if (!$stored) {
+            return false;
+        }
+
+        $stored = trim((string) $stored);
+        $isBcrypt = preg_match('/^\$2[aby]\$/', $stored) === 1;
+
+        if ($isBcrypt) {
+            return Hash::check($plain, $stored);
+        }
+
+        return hash_equals($stored, $plain);
+    }
+
+    /**
+     * Map HR4 employee_status values into local employees.status enum.
+     */
+    private function mapEmployeeStatus(?string $status): string
+    {
+        $normalized = strtolower(trim((string) $status));
+
+        $map = [
+            'regular' => 'active',
+            'new_hire' => 'active',
+            'active' => 'active',
+            'inactive' => 'inactive',
+            'terminated' => 'terminated',
+            'resigned' => 'terminated',
+            'separated' => 'terminated',
+        ];
+
+        return $map[$normalized] ?? 'active';
+    }
+
+    /**
+     * Map HR4 positions into local role values.
+     */
+    private function mapSystemRole(?string $position): string
+    {
+        $position = strtolower((string) $position);
+
+        if (str_contains($position, 'system administrator') || str_contains($position, 'super admin')) {
+            return 'super_admin';
+        }
+
+        if (str_contains($position, 'hr manager')) {
+            return 'hr_manager';
+        }
+
+        if (str_contains($position, 'hr scheduler')) {
+            return 'hr_scheduler';
+        }
+
+        if (str_contains($position, 'admin')) {
+            return 'admin';
+        }
+
+        return 'employee';
     }
 
     /**

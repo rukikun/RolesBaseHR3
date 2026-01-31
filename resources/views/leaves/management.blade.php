@@ -376,6 +376,212 @@
   </div>
 </div>
 
+<!-- HR2 Requests Employees (External API Data) -->
+<div class="card mb-4" id="hr2-requests-employees-section">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <h5 class="card-title mb-0">
+      <i class="fas fa-users me-2"></i>Requests Employees
+      <span class="badge bg-info ms-2">HR2 System</span>
+    </h5>
+    <div>
+      <button class="btn btn-outline-primary btn-sm me-2" onclick="refreshHr2LeaveApplications()" title="Refresh data from HR2">
+        <i class="fas fa-sync-alt me-1"></i>Refresh
+      </button>
+      <select id="hr2-status-filter" class="form-select form-select-sm d-inline-block w-auto">
+        <option value="">All Status</option>
+        <option value="pending">Pending</option>
+        <option value="approved">Approved</option>
+        <option value="rejected">Rejected</option>
+      </select>
+    </div>
+  </div>
+  <div class="card-body">
+    <div class="table-responsive">
+      <table class="table table-hover" id="hr2-requests-employees-table">
+        <thead class="table-light">
+          <tr>
+            <th>Employee ID</th>
+            <th>Leave ID</th>
+            <th>Leave Type</th>
+            <th>Start Date</th>
+            <th>End Date</th>
+            <th>Days</th>
+            <th>Reason</th>
+            <th>Status</th>
+            <th>Applied Date</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="hr2-requests-employees-tbody">
+          @forelse($hr2LeaveApplications ?? [] as $hr2Leave)
+            <tr data-status="{{ strtolower($hr2Leave->status ?? 'pending') }}" data-hr2-id="{{ $hr2Leave->id ?? '' }}">
+              <td>
+                <span class="fw-semibold">{{ $hr2Leave->employee_id ?? 'N/A' }}</span>
+              </td>
+              <td>
+                <span class="badge bg-secondary">{{ $hr2Leave->leave_id ?? 'N/A' }}</span>
+              </td>
+              <td>{{ $hr2Leave->leave_type ?? 'Unknown' }}</td>
+              <td>{{ isset($hr2Leave->start_date) ? date('M d, Y', strtotime($hr2Leave->start_date)) : 'N/A' }}</td>
+              <td>{{ isset($hr2Leave->end_date) ? date('M d, Y', strtotime($hr2Leave->end_date)) : 'N/A' }}</td>
+              <td>
+                <span class="badge bg-primary">{{ $hr2Leave->days_requested ?? $hr2Leave->leave_days ?? 0 }} days</span>
+              </td>
+              <td>{{ isset($hr2Leave->reason) ? Str::limit($hr2Leave->reason, 40) : 'N/A' }}</td>
+              <td>
+                <span class="badge bg-{{ $hr2Leave->status_badge_class ?? 'secondary' }}">
+                  {{ ucfirst($hr2Leave->status ?? 'Pending') }}
+                </span>
+              </td>
+              <td>{{ isset($hr2Leave->applied_date) ? date('M d, Y H:i', strtotime($hr2Leave->applied_date)) : 'N/A' }}</td>
+              <td>
+                <div class="btn-group" role="group">
+                  <button type="button" class="btn btn-sm btn-outline-info" title="View Details" 
+                    onclick="viewHr2LeaveDetails('{{ $hr2Leave->id ?? '' }}', '{{ $hr2Leave->employee_id ?? 'N/A' }}', '{{ $hr2Leave->leave_id ?? 'N/A' }}', '{{ $hr2Leave->leave_type ?? 'Unknown' }}', '{{ isset($hr2Leave->start_date) ? date('M d, Y', strtotime($hr2Leave->start_date)) : 'N/A' }}', '{{ isset($hr2Leave->end_date) ? date('M d, Y', strtotime($hr2Leave->end_date)) : 'N/A' }}', '{{ $hr2Leave->days_requested ?? $hr2Leave->leave_days ?? 0 }}', '{{ addslashes($hr2Leave->reason ?? 'N/A') }}', '{{ ucfirst($hr2Leave->status ?? 'Pending') }}', '{{ isset($hr2Leave->applied_date) ? date('M d, Y H:i', strtotime($hr2Leave->applied_date)) : 'N/A' }}', '{{ $hr2Leave->contact_info ?? 'N/A' }}', '{{ $hr2Leave->approved_by ?? 'N/A' }}', '{{ isset($hr2Leave->approved_date) ? date('M d, Y H:i', strtotime($hr2Leave->approved_date)) : 'N/A' }}', '{{ addslashes($hr2Leave->remarks ?? '') }}')">
+                    <i class="fas fa-eye"></i>
+                  </button>
+                  @if(strtolower($hr2Leave->status ?? 'pending') === 'pending')
+                    <button type="button" class="btn btn-sm btn-outline-success" title="Approve" 
+                      onclick="approveHr2Leave('{{ $hr2Leave->id ?? '' }}', '{{ $hr2Leave->employee_id ?? 'N/A' }}')">
+                      <i class="fas fa-check"></i>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-danger" title="Reject" 
+                      onclick="rejectHr2Leave('{{ $hr2Leave->id ?? '' }}', '{{ $hr2Leave->employee_id ?? 'N/A' }}')">
+                      <i class="fas fa-times"></i>
+                    </button>
+                  @endif
+                </div>
+              </td>
+            </tr>
+          @empty
+          <tr>
+            <td colspan="10" class="text-center text-muted py-4">
+              <i class="fas fa-inbox fa-2x mb-2 d-block"></i>
+              No leave applications found from HR2 system.
+              <a href="#" onclick="refreshHr2LeaveApplications()" class="text-primary">Click to refresh</a>
+            </td>
+          </tr>
+          @endforelse
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- HR2 Leave Details Modal -->
+<div class="working-modal" id="hr2-leave-details-modal" style="display: none;">
+    <div class="working-modal-backdrop" onclick="closeWorkingModal('hr2-leave-details-modal')"></div>
+    <div class="working-modal-dialog">
+        <div class="working-modal-content">
+            <div class="working-modal-header">
+                <h5 class="working-modal-title"><i class="fas fa-file-alt me-2"></i>HR2 Leave Request Details</h5>
+                <button type="button" class="working-modal-close" onclick="closeWorkingModal('hr2-leave-details-modal')">&times;</button>
+            </div>
+            <div class="working-modal-body">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label text-muted small">Employee ID</label>
+                        <p id="hr2-detail-employee-id" class="fw-semibold mb-0">-</p>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label text-muted small">Leave ID</label>
+                        <p id="hr2-detail-leave-id" class="fw-semibold mb-0">-</p>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label text-muted small">Leave Type</label>
+                        <p id="hr2-detail-leave-type" class="fw-semibold mb-0">-</p>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label text-muted small">Status</label>
+                        <p id="hr2-detail-status" class="mb-0">-</p>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label text-muted small">Start Date</label>
+                        <p id="hr2-detail-start-date" class="fw-semibold mb-0">-</p>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label text-muted small">End Date</label>
+                        <p id="hr2-detail-end-date" class="fw-semibold mb-0">-</p>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label text-muted small">Days Requested</label>
+                        <p id="hr2-detail-days" class="fw-semibold mb-0">-</p>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label text-muted small">Contact Info</label>
+                        <p id="hr2-detail-contact" class="fw-semibold mb-0">-</p>
+                    </div>
+                    <div class="col-md-12">
+                        <label class="form-label text-muted small">Reason</label>
+                        <p id="hr2-detail-reason" class="mb-0" style="white-space: pre-wrap;">-</p>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label text-muted small">Applied Date</label>
+                        <p id="hr2-detail-applied-date" class="fw-semibold mb-0">-</p>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label text-muted small">Approved By</label>
+                        <p id="hr2-detail-approved-by" class="fw-semibold mb-0">-</p>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label text-muted small">Approved Date</label>
+                        <p id="hr2-detail-approved-date" class="fw-semibold mb-0">-</p>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label text-muted small">Remarks</label>
+                        <p id="hr2-detail-remarks" class="mb-0">-</p>
+                    </div>
+                </div>
+            </div>
+            <div class="working-modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeWorkingModal('hr2-leave-details-modal')">Close</button>
+                <button type="button" class="btn btn-success" id="hr2-modal-approve-btn" style="display: none;" onclick="approveHr2LeaveFromModal()">
+                    <i class="fas fa-check me-1"></i>Approve
+                </button>
+                <button type="button" class="btn btn-danger" id="hr2-modal-reject-btn" style="display: none;" onclick="rejectHr2LeaveFromModal()">
+                    <i class="fas fa-times me-1"></i>Reject
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- HR2 Approve/Reject with Authorization Modal -->
+<div class="working-modal" id="hr2-action-modal" style="display: none;">
+    <div class="working-modal-backdrop" onclick="closeWorkingModal('hr2-action-modal')"></div>
+    <div class="working-modal-dialog">
+        <div class="working-modal-content">
+            <div class="working-modal-header">
+                <h5 class="working-modal-title" id="hr2-action-modal-title">HR Authorization Required</h5>
+                <button type="button" class="working-modal-close" onclick="closeWorkingModal('hr2-action-modal')">&times;</button>
+            </div>
+            <div class="working-modal-body">
+                <div class="alert alert-info mb-3">
+                    <i class="fas fa-info-circle me-2"></i>
+                    <strong>Authorization Required.</strong> Please authenticate to proceed with this action.
+                </div>
+                <p id="hr2-action-modal-message" class="mb-3 fw-semibold"></p>
+                <div class="mb-3">
+                    <label for="hr2-auth-email" class="form-label">Email Address</label>
+                    <input type="email" class="form-control" id="hr2-auth-email" required placeholder="Enter your email address">
+                </div>
+                <div class="mb-3">
+                    <label for="hr2-auth-password" class="form-label">Password</label>
+                    <input type="password" class="form-control" id="hr2-auth-password" required placeholder="Enter your password">
+                </div>
+                <input type="hidden" id="hr2-action-id">
+                <input type="hidden" id="hr2-action-type">
+            </div>
+            <div class="working-modal-footer">
+                <button type="button" class="btn btn-secondary" onclick="closeWorkingModal('hr2-action-modal')">Cancel</button>
+                <button type="button" class="btn btn-primary" id="hr2-action-confirm-btn" onclick="confirmHr2ActionWithAuth()">
+                    <i class="fas fa-lock me-1"></i>Authenticate & Proceed
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Create Leave Type Modal -->
 <div class="working-modal" id="create-leave-type-modal" style="display: none;">
     <div class="working-modal-backdrop" onclick="closeWorkingModal('create-leave-type-modal')"></div>
@@ -564,6 +770,44 @@ function closeWorkingModal(modalId) {
             }
         }
     }
+}
+
+// Show alert message helper function
+function showAlert(type, message) {
+    // Map type to Bootstrap alert class
+    const alertClass = {
+        'success': 'alert-success',
+        'error': 'alert-danger',
+        'warning': 'alert-warning',
+        'info': 'alert-info'
+    }[type] || 'alert-info';
+    
+    // Create alert element
+    const alertDiv = document.createElement('div');
+    alertDiv.className = `alert ${alertClass} alert-dismissible fade show`;
+    alertDiv.setAttribute('role', 'alert');
+    alertDiv.style.position = 'fixed';
+    alertDiv.style.top = '20px';
+    alertDiv.style.right = '20px';
+    alertDiv.style.zIndex = '9999';
+    alertDiv.style.minWidth = '300px';
+    alertDiv.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+    alertDiv.innerHTML = `
+        <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle'} me-2"></i>
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    `;
+    
+    // Add to document
+    document.body.appendChild(alertDiv);
+    
+    // Auto-remove after 5 seconds
+    setTimeout(() => {
+        if (alertDiv.parentNode) {
+            alertDiv.classList.remove('show');
+            setTimeout(() => alertDiv.remove(), 300);
+        }
+    }, 5000);
 }
 
 // Close modal when clicking backdrop
@@ -883,6 +1127,241 @@ document.addEventListener('DOMContentLoaded', function() {
         statusFilter.addEventListener('change', filterLeaveRequests);
     }
 });
+
+// HR2 Requests Employees Filter functionality
+function filterHr2LeaveApplications() {
+    const statusFilter = document.getElementById('hr2-status-filter').value;
+    const rows = document.querySelectorAll('#hr2-requests-employees-tbody tr');
+    
+    rows.forEach(row => {
+        if (row.querySelector('.text-center')) return; // Skip "no data" row
+        
+        const status = row.getAttribute('data-status') || '';
+        
+        if (!statusFilter || status.includes(statusFilter)) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+}
+
+// Add event listener for HR2 status filter
+document.addEventListener('DOMContentLoaded', function() {
+    const hr2StatusFilter = document.getElementById('hr2-status-filter');
+    if (hr2StatusFilter) {
+        hr2StatusFilter.addEventListener('change', filterHr2LeaveApplications);
+    }
+});
+
+// Refresh HR2 Leave Applications from API
+function refreshHr2LeaveApplications() {
+    const button = event.target.closest('button');
+    const originalContent = button.innerHTML;
+    // Show loading state
+    button.disabled = true;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Loading...';
+    
+    // Reload the page to fetch fresh data from the API
+    // For a more seamless experience, you could use AJAX here
+    setTimeout(() => {
+        window.location.reload();
+    }, 500);
+}
+
+// Store current HR2 leave details for modal actions
+let currentHr2LeaveId = null;
+let currentHr2EmployeeId = null;
+
+// View HR2 Leave Details
+function viewHr2LeaveDetails(id, employeeId, leaveId, leaveType, startDate, endDate, days, reason, status, appliedDate, contactInfo, approvedBy, approvedDate, remarks) {
+    // Store current leave ID for potential actions
+    currentHr2LeaveId = id;
+    currentHr2EmployeeId = employeeId;
+    
+    // Populate modal fields
+    document.getElementById('hr2-detail-employee-id').textContent = employeeId;
+    document.getElementById('hr2-detail-leave-id').textContent = leaveId;
+    document.getElementById('hr2-detail-leave-type').textContent = leaveType;
+    document.getElementById('hr2-detail-start-date').textContent = startDate;
+    document.getElementById('hr2-detail-end-date').textContent = endDate;
+    document.getElementById('hr2-detail-days').textContent = days + ' days';
+    document.getElementById('hr2-detail-reason').textContent = reason;
+    document.getElementById('hr2-detail-applied-date').textContent = appliedDate;
+    document.getElementById('hr2-detail-contact').textContent = contactInfo || 'N/A';
+    document.getElementById('hr2-detail-approved-by').textContent = approvedBy || 'N/A';
+    document.getElementById('hr2-detail-approved-date').textContent = approvedDate || 'N/A';
+    document.getElementById('hr2-detail-remarks').textContent = remarks || 'N/A';
+    
+    // Set status with badge
+    const statusBadgeClass = status.toLowerCase() === 'approved' ? 'success' : 
+                             status.toLowerCase() === 'pending' ? 'warning' : 
+                             status.toLowerCase() === 'rejected' ? 'danger' : 'secondary';
+    document.getElementById('hr2-detail-status').innerHTML = `<span class="badge bg-${statusBadgeClass}">${status}</span>`;
+    
+    // Show/hide approve/reject buttons based on status
+    const approveBtn = document.getElementById('hr2-modal-approve-btn');
+    const rejectBtn = document.getElementById('hr2-modal-reject-btn');
+    
+    if (status.toLowerCase() === 'pending') {
+        approveBtn.style.display = 'inline-block';
+        rejectBtn.style.display = 'inline-block';
+    } else {
+        approveBtn.style.display = 'none';
+        rejectBtn.style.display = 'none';
+    }
+    
+    // Open modal
+    openWorkingModal('hr2-leave-details-modal');
+}
+
+// Approve HR2 Leave from table
+function approveHr2Leave(id, employeeId) {
+    currentHr2LeaveId = id;
+    currentHr2EmployeeId = employeeId;
+    
+    document.getElementById('hr2-action-modal-title').innerHTML = '<i class="fas fa-check-circle me-2 text-success"></i>Approve Leave Request - HR Authorization Required';
+    document.getElementById('hr2-action-modal-message').textContent = `Approve leave request for Employee ${employeeId}`;
+    document.getElementById('hr2-action-id').value = id;
+    document.getElementById('hr2-action-type').value = 'approve';
+    document.getElementById('hr2-auth-email').value = '';
+    document.getElementById('hr2-auth-password').value = '';
+    document.getElementById('hr2-action-confirm-btn').className = 'btn btn-success';
+    document.getElementById('hr2-action-confirm-btn').innerHTML = '<i class="fas fa-lock me-1"></i>Authenticate & Approve';
+    
+    openWorkingModal('hr2-action-modal');
+}
+
+// Reject HR2 Leave from table
+function rejectHr2Leave(id, employeeId) {
+    currentHr2LeaveId = id;
+    currentHr2EmployeeId = employeeId;
+    
+    document.getElementById('hr2-action-modal-title').innerHTML = '<i class="fas fa-times-circle me-2 text-danger"></i>Reject Leave Request - HR Authorization Required';
+    document.getElementById('hr2-action-modal-message').textContent = `Reject leave request for Employee ${employeeId}`;
+    document.getElementById('hr2-action-id').value = id;
+    document.getElementById('hr2-action-type').value = 'reject';
+    document.getElementById('hr2-auth-email').value = '';
+    document.getElementById('hr2-auth-password').value = '';
+    document.getElementById('hr2-action-confirm-btn').className = 'btn btn-danger';
+    document.getElementById('hr2-action-confirm-btn').innerHTML = '<i class="fas fa-lock me-1"></i>Authenticate & Reject';
+    
+    openWorkingModal('hr2-action-modal');
+}
+
+// Approve from details modal
+function approveHr2LeaveFromModal() {
+    closeWorkingModal('hr2-leave-details-modal');
+    approveHr2Leave(currentHr2LeaveId, currentHr2EmployeeId);
+}
+
+// Reject from details modal
+function rejectHr2LeaveFromModal() {
+    closeWorkingModal('hr2-leave-details-modal');
+    rejectHr2Leave(currentHr2LeaveId, currentHr2EmployeeId);
+}
+
+// Confirm HR2 Action (Approve/Reject) with HR Authorization using PATCH method
+function confirmHr2ActionWithAuth() {
+    const id = document.getElementById('hr2-action-id').value;
+    const actionType = document.getElementById('hr2-action-type').value;
+    const email = document.getElementById('hr2-auth-email').value.trim();
+    const password = document.getElementById('hr2-auth-password').value;
+    const confirmBtn = document.getElementById('hr2-action-confirm-btn');
+    const originalBtnHtml = confirmBtn.innerHTML;
+    
+    // Validate email and password
+    if (!email) {
+        showAlert('error', 'Please enter your email address');
+        document.getElementById('hr2-auth-email').focus();
+        return;
+    }
+    
+    if (!password) {
+        showAlert('error', 'Please enter your password');
+        document.getElementById('hr2-auth-password').focus();
+        return;
+    }
+    
+    // Show loading state
+    confirmBtn.disabled = true;
+    confirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Authenticating...';
+    
+    // Send PATCH request to Laravel backend to update leave status via HR2 API
+    const apiUrl = actionType === 'approve' 
+        ? `/hr2/leave-applications/${id}/approve`
+        : `/hr2/leave-applications/${id}/reject`;
+    
+    // Get CSRF token
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') 
+        || document.querySelector('input[name="_token"]')?.value;
+    
+    fetch(apiUrl, {
+        method: 'PATCH',
+        headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'X-CSRF-TOKEN': csrfToken
+        },
+        body: JSON.stringify({
+            email: email,
+            password: password
+        })
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(err => {
+                throw new Error(err.message || 'Authentication failed or API request failed');
+            });
+        }
+        return response.json();
+    })
+    .then(data => {
+        // Close modal
+        closeWorkingModal('hr2-action-modal');
+        
+        if (data.success) {
+            // Show success message
+            const actionText = actionType === 'approve' ? 'approved' : 'rejected';
+            showAlert('success', `Leave request has been ${actionText} successfully!`);
+            
+            // Update the row status visually immediately
+            updateHr2RowStatus(id, actionType);
+            
+            // Reload page to refresh data after a delay
+            setTimeout(() => {
+                window.location.reload();
+            }, 1500);
+        } else {
+            showAlert('error', data.message || 'Failed to update leave status');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showAlert('error', `Error: ${error.message || 'Authentication failed or failed to update leave status'}`);
+    })
+    .finally(() => {
+        confirmBtn.disabled = false;
+        confirmBtn.innerHTML = originalBtnHtml;
+    });
+}
+
+// Update HR2 row status visually
+function updateHr2RowStatus(id, actionType) {
+    const row = document.querySelector(`tr[data-hr2-id="${id}"]`);
+    if (row) {
+        const statusCell = row.querySelector('td:nth-child(8) .badge');
+        if (statusCell) {
+            statusCell.className = `badge bg-${actionType === 'approve' ? 'success' : 'danger'}`;
+            statusCell.textContent = actionType === 'approve' ? 'Approved' : 'Rejected';
+        }
+        row.setAttribute('data-status', actionType === 'approve' ? 'approved' : 'rejected');
+        
+        // Hide approve/reject buttons
+        const actionBtns = row.querySelectorAll('.btn-outline-success, .btn-outline-danger');
+        actionBtns.forEach(btn => btn.style.display = 'none');
+    }
+}
 
 // Check for session-based modal opening
 

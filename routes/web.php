@@ -368,6 +368,10 @@ Route::middleware('web.or.employee')->get('/time-attendance', [AttendanceControl
 Route::middleware('web.or.employee')->group(function () {
 
     Route::get('/timesheet-management', [TimesheetController::class, 'index'])->name('timesheet-management');
+    Route::get('/timesheet-management/monthly-export/{monthlyTimesheet}', [TimesheetController::class, 'exportMonthlyTimesheet'])
+        ->name('timesheet.monthly.export');
+    Route::get('/timesheet-management/monthly-export-all', [TimesheetController::class, 'exportMonthlyTimesheetsAll'])
+        ->name('timesheet.monthly.export.all');
     
     // Payroll Management Routes
     Route::get('/payroll-management', [PayrollController::class, 'index'])->name('payroll-management');
@@ -621,6 +625,15 @@ Route::delete('/leave-requests/{id}', [LeaveController::class, 'destroyWeb'])->n
 
 Route::post('/leave-types/store', [LeaveController::class, 'storeLeaveTypeWeb'])->name('leave-types.store');
 Route::delete('/leave-types/{id}', [LeaveController::class, 'destroyLeaveTypeWeb'])->name('leave-types.destroy');
+
+// HR2 Leave Application Status Update Routes (PATCH to external API)
+Route::patch('/hr2/leave-applications/{id}/status', [LeaveController::class, 'updateHr2LeaveStatus'])->name('hr2.leave.status');
+Route::patch('/hr2/leave-applications/{id}/approve', [LeaveController::class, 'approveHr2Leave'])->name('hr2.leave.approve');
+Route::patch('/hr2/leave-applications/{id}/reject', [LeaveController::class, 'rejectHr2Leave'])->name('hr2.leave.reject');
+
+// HR2 Claims Status Update Routes (PATCH to external API)
+Route::patch('/hr2/claims/{id}/approve', [App\Http\Controllers\ClaimController::class, 'approveHr2Claim'])->name('hr2.claims.approve');
+Route::patch('/hr2/claims/{id}/reject', [App\Http\Controllers\ClaimController::class, 'rejectHr2Claim'])->name('hr2.claims.reject');
 
 // Shift Management Routes
 Route::post('/shift-types/store', [ShiftController::class, 'storeShiftTypeWeb'])->name('shift-types.store');

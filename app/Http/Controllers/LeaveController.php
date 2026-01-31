@@ -11,8 +11,10 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
 use Carbon\Carbon;
 use App\Traits\DatabaseConnectionTrait;
+use App\Services\Hr2LeaveApplicationService;
 
 class LeaveController extends Controller
 {
@@ -205,15 +207,26 @@ class LeaveController extends Controller
                 \Log::warning('Leave balance summary load failed: ' . $e->getMessage());
             }
 
-            return view('leaves.management', compact('leaveTypes', 'employees', 'leaves', 'totalLeaveTypes', 'assignedEmployees', 'pendingRequests', 'weeklyHours', 'leaveBalanceSummaries', 'currentLeaveYear'));
+            // Fetch HR2 Leave Applications from external API
+            $hr2LeaveApplications = collect([]);
+            try {
+                $hr2Service = new Hr2LeaveApplicationService();
+                $hr2LeaveApplications = $hr2Service->getFromApiDirect();
+                \Log::info('HR2 Leave Applications fetched: ' . $hr2LeaveApplications->count() . ' records');
+            } catch (\Exception $e) {
+                \Log::warning('HR2 Leave Applications fetch failed: ' . $e->getMessage());
+            }
+
+            return view('leaves.management', compact('leaveTypes', 'employees', 'leaves', 'totalLeaveTypes', 'assignedEmployees', 'pendingRequests', 'weeklyHours', 'leaveBalanceSummaries', 'currentLeaveYear', 'hr2LeaveApplications'));
             
         } catch (\Exception $e) {
             // Final fallback with empty collections
             $leaveTypes = collect([]);
             $employees = collect([]);
             $leaves = collect([]);
+            $hr2LeaveApplications = collect([]);
             
-            return view('leaves.management', compact('leaveTypes', 'employees', 'leaves', 'leaveBalanceSummaries', 'currentLeaveYear'))
+            return view('leaves.management', compact('leaveTypes', 'employees', 'leaves', 'leaveBalanceSummaries', 'currentLeaveYear', 'hr2LeaveApplications'))
                 ->with('error', 'Error loading leave data: ' . $e->getMessage());
         }
     }
@@ -1589,6 +1602,275 @@ class LeaveController extends Controller
             'success' => false,
             'message' => 'Unknown claim action'
         ];
+    }
+
+    /**
+     * Update HR2 leave application status via PATCH request.
+     *
+     * @param Request $request
+     * @param string $id The leave application ID from HR2
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function updateHr2LeaveStatus(Request $request, $id)
+    {
+        try {
+            $validator = Validator::make($request->all(), [
+                'status' => 'required|string|in:Approved,Rejected',
+                'remarks' => 'nullable|string|max:500',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            $hr2Service = new Hr2LeaveApplicationService();
+            $result = $hr2Service->updateLeaveStatus(
+                $id,
+                $request->status,
+                $request->remarks
+            );
+
+            if ($result['success']) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Leave application ' . strtolower($request->status) . ' successfully',
+                    'data' => $result['data']
+                ]);
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => $result['message']
+            ], 400);
+
+        } catch (\Exception $e) {
+            Log::error('HR2 Leave Status Update Error', [
+                'id' => $id,
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Error updating leave status: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Authenticate user against the local employees table.
+     *
+     * @param string $email
+     * @param string $password
+     * @return array ['success' => bool, 'message' => string, 'employee' => Employee|null]
+     */
+    private function authenticateWithEmployeeDb(string $email, string $password): array
+    {
+        try {
+            Log::info('Employee DB auth attempt', ['email' => $email]);
+
+            $employee = Employee::where('email', $email)->first();
+
+            if (!$employee) {
+                return [
+                    'success' => false,
+                    'message' => 'Invalid email or password',
+                    'employee' => null
+                ];
+            }
+
+            $passwordMatches = Hash::check($password, $employee->password)
+                || hash_equals((string) $employee->password, (string) $password);
+
+            if (!$passwordMatches) {
+                return [
+                    'success' => false,
+                    'message' => 'Invalid email or password',
+                    'employee' => null
+                ];
+            }
+
+            $authorizedPositions = [
+                'hr manager',
+                'system administrator',
+                'hr scheduler',
+                'admin',
+                'hr administrator',
+                'superadmin',
+                'super admin'
+            ];
+            $authorizedRoles = ['super_admin', 'superadmin', 'admin', 'hr_manager', 'hr_scheduler'];
+            $normalizedPosition = strtolower((string) $employee->position);
+            $normalizedRole = strtolower((string) $employee->role);
+
+            if (!in_array($normalizedPosition, $authorizedPositions, true)
+                && !in_array($normalizedRole, $authorizedRoles, true)) {
+                return [
+                    'success' => false,
+                    'message' => 'Access denied. Only HR Manager, SuperAdmin, Admin, HR Scheduler, or System Administrator can perform this action.',
+                    'employee' => null
+                ];
+            }
+
+            return [
+                'success' => true,
+                'message' => 'Authentication successful',
+                'employee' => $employee
+            ];
+        } catch (\Exception $e) {
+            Log::error('Employee DB auth error', [
+                'email' => $email,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return [
+                'success' => false,
+                'message' => 'Authentication service error: ' . $e->getMessage(),
+                'employee' => null
+            ];
+        }
+    }
+
+    /**
+     * Approve HR2 leave application via PATCH request with local HR authorization.
+     *
+     * @param Request $request
+     * @param string $id The leave application ID from HR2
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function approveHr2Leave(Request $request, $id)
+    {
+        try {
+            // Validate HR authentication
+            $validator = Validator::make($request->all(), [
+                'email' => 'required|email',
+                'password' => 'required|string',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Please provide valid email and password',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            // Authenticate against local employee database
+            $authResult = $this->authenticateWithEmployeeDb($request->email, $request->password);
+            
+            if (!$authResult['success']) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $authResult['message']
+                ], 401);
+            }
+
+            // Proceed with approval
+            $hr2Service = new Hr2LeaveApplicationService();
+            $result = $hr2Service->approveLeave($id);
+
+            if ($result['success']) {
+                Log::info('HR2 Leave approved by authorized user via local HR auth', [
+                    'leave_id' => $id,
+                    'approved_by' => $request->email
+                ]);
+                
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Leave application approved successfully',
+                    'data' => $result['data']
+                ]);
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => $result['message']
+            ], 400);
+
+        } catch (\Exception $e) {
+            Log::error('HR2 Leave Approve Error', [
+                'id' => $id,
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Error approving leave: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Reject HR2 leave application via PATCH request with local HR authorization.
+     *
+     * @param Request $request
+     * @param string $id The leave application ID from HR2
+     * @return \Illuminate\Http\JsonResponse
+     */
+    public function rejectHr2Leave(Request $request, $id)
+    {
+        try {
+            // Validate HR authentication
+            $validator = Validator::make($request->all(), [
+                'email' => 'required|email',
+                'password' => 'required|string',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Please provide valid email and password',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            // Authenticate against local employee database
+            $authResult = $this->authenticateWithEmployeeDb($request->email, $request->password);
+            
+            if (!$authResult['success']) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $authResult['message']
+                ], 401);
+            }
+
+            // Proceed with rejection
+            $hr2Service = new Hr2LeaveApplicationService();
+            $result = $hr2Service->rejectLeave($id);
+
+            if ($result['success']) {
+                Log::info('HR2 Leave rejected by authorized user via local HR auth', [
+                    'leave_id' => $id,
+                    'rejected_by' => $request->email
+                ]);
+                
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Leave application rejected successfully',
+                    'data' => $result['data']
+                ]);
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => $result['message']
+            ], 400);
+
+        } catch (\Exception $e) {
+            Log::error('HR2 Leave Reject Error', [
+                'id' => $id,
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Error rejecting leave: ' . $e->getMessage()
+            ], 500);
+        }
     }
 }
 

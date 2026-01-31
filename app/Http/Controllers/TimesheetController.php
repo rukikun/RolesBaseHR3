@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Carbon\Carbon;
 use App\Models\AIGeneratedTimesheet;
+use App\Models\MonthlyTimesheet;
 use App\Models\Employee;
 use App\Models\PayrollItem;
 
@@ -159,6 +160,9 @@ class TimesheetController extends Controller
                 $timesheetStats['total_overtime_hours'] += (float) ($timesheet->overtime_hours ?? 0);
             }
 
+            $monthlyTimesheets = $this->syncMonthlyTimesheets();
+            $currentMonthStart = Carbon::now()->startOfMonth()->format('Y-m-d');
+
             return view('timesheets.management', compact(
                 'employees',
                 'attendances', 
@@ -168,7 +172,9 @@ class TimesheetController extends Controller
                 'claimTypes',
                 'leaveTypes',
                 'shiftTypes',
-                'timesheetStats'
+                'timesheetStats',
+                'monthlyTimesheets',
+                'currentMonthStart'
             ))->with([
                 'accessLevel' => 'full',
                 'userRole' => $userRole,
@@ -196,9 +202,316 @@ class TimesheetController extends Controller
                     'rejected_timesheets' => 0,
                     'total_hours' => 0,
                     'total_overtime_hours' => 0
-                ]
+                ],
+                'monthlyTimesheets' => collect([]),
+                'currentMonthStart' => Carbon::now()->startOfMonth()->format('Y-m-d')
             ]);
         }
+    }
+
+    /**
+     * Sync monthly timesheets from AI-generated weekly data
+     */
+    protected function syncMonthlyTimesheets()
+    {
+        $aiTimesheets = AIGeneratedTimesheet::select(
+            'id',
+            'employee_id',
+            'employee_name',
+            'department',
+            'week_start_date',
+            'total_hours',
+            'overtime_hours'
+        )
+            ->where('status', 'approved')
+            ->orderBy('week_start_date', 'desc')
+            ->get();
+
+        if ($aiTimesheets->isEmpty()) {
+            return MonthlyTimesheet::orderBy('month_start_date', 'desc')->get();
+        }
+
+        $monthlyData = [];
+
+        foreach ($aiTimesheets as $timesheet) {
+            $monthStart = Carbon::parse($timesheet->week_start_date)->startOfMonth()->format('Y-m-d');
+            $key = $timesheet->employee_id . '_' . $monthStart;
+
+            if (!isset($monthlyData[$key])) {
+                $monthlyData[$key] = [
+                    'employee_id' => $timesheet->employee_id,
+                    'employee_name' => $timesheet->employee_name,
+                    'department' => $timesheet->department,
+                    'month_start_date' => $monthStart,
+                    'total_hours' => 0,
+                    'overtime_hours' => 0,
+                    'timesheet_count' => 0,
+                    'source_timesheet_ids' => []
+                ];
+            }
+
+            $monthlyData[$key]['total_hours'] += (float) ($timesheet->total_hours ?? 0);
+            $monthlyData[$key]['overtime_hours'] += (float) ($timesheet->overtime_hours ?? 0);
+            $monthlyData[$key]['timesheet_count']++;
+            $monthlyData[$key]['source_timesheet_ids'][] = $timesheet->id;
+        }
+
+        foreach ($monthlyData as $summary) {
+            $monthlyTimesheet = MonthlyTimesheet::firstOrNew([
+                'employee_id' => $summary['employee_id'],
+                'month_start_date' => $summary['month_start_date']
+            ]);
+
+            $monthlyTimesheet->employee_name = $summary['employee_name'];
+            $monthlyTimesheet->department = $summary['department'];
+            $monthlyTimesheet->total_hours = $summary['total_hours'];
+            $monthlyTimesheet->overtime_hours = $summary['overtime_hours'];
+            $monthlyTimesheet->timesheet_count = $summary['timesheet_count'];
+            $monthlyTimesheet->source_timesheet_ids = $summary['source_timesheet_ids'];
+
+            if (!$monthlyTimesheet->generated_at) {
+                $monthlyTimesheet->generated_at = now();
+            }
+
+            $monthlyTimesheet->save();
+        }
+
+        return MonthlyTimesheet::orderBy('month_start_date', 'desc')->get();
+    }
+
+    /**
+     * Export current month timesheet to CSV (Excel-friendly)
+     */
+    public function exportMonthlyTimesheet(MonthlyTimesheet $monthlyTimesheet)
+    {
+        $currentMonthStart = Carbon::now()->startOfMonth()->format('Y-m-d');
+        $requestedMonthStart = Carbon::parse($monthlyTimesheet->month_start_date)->startOfMonth()->format('Y-m-d');
+
+        if ($requestedMonthStart !== $currentMonthStart) {
+            return redirect()->back()->with('error', 'Export is only available for the current month.');
+        }
+
+        $monthStart = Carbon::parse($monthlyTimesheet->month_start_date)->startOfMonth();
+        $rows = $this->buildMonthlyExportRows(
+            $monthlyTimesheet->employee_id,
+            $monthlyTimesheet->employee_name ?? 'Unknown Employee',
+            $monthlyTimesheet->department ?? 'General',
+            $monthStart
+        );
+
+        return $this->respondWithCsv(
+            $rows,
+            'monthly-timesheet-' . $monthlyTimesheet->employee_id . '-' . $monthStart->format('Y-m') . '.csv'
+        );
+    }
+
+    /**
+     * Export all current month monthly timesheets to CSV
+     */
+    public function exportMonthlyTimesheetsAll()
+    {
+        $monthStart = Carbon::now()->startOfMonth();
+        $monthlyTimesheets = MonthlyTimesheet::where('month_start_date', $monthStart->format('Y-m-d'))
+            ->orderBy('employee_name')
+            ->get();
+
+        if ($monthlyTimesheets->isEmpty()) {
+            return redirect()->back()->with('error', 'No monthly timesheets available for the current month.');
+        }
+
+        $rows = [];
+
+        foreach ($monthlyTimesheets as $monthlyTimesheet) {
+            $employeeRows = $this->buildMonthlyExportRows(
+                $monthlyTimesheet->employee_id,
+                $monthlyTimesheet->employee_name ?? 'Unknown Employee',
+                $monthlyTimesheet->department ?? 'General',
+                $monthStart
+            );
+
+            foreach ($employeeRows as $row) {
+                $rows[] = $row;
+            }
+
+            $rows[] = [];
+        }
+
+        return $this->respondWithCsv(
+            $rows,
+            'monthly-timesheets-all-' . $monthStart->format('Y-m') . '.csv'
+        );
+    }
+
+    /**
+     * Build CSV rows for a single employee's monthly timesheet
+     */
+    protected function buildMonthlyExportRows($employeeId, $employeeName, $department, Carbon $monthStart)
+    {
+        $monthEnd = $monthStart->copy()->endOfMonth();
+        $rangeStart = $monthStart->copy()->startOfWeek(Carbon::MONDAY);
+        $rangeEnd = $monthEnd->copy()->endOfWeek(Carbon::SUNDAY);
+
+        $aiTimesheets = AIGeneratedTimesheet::where('employee_id', $employeeId)
+            ->whereBetween('week_start_date', [$rangeStart->format('Y-m-d'), $rangeEnd->format('Y-m-d')])
+            ->orderBy('week_start_date')
+            ->get();
+
+        $weeklyDataMap = [];
+        foreach ($aiTimesheets as $aiTimesheet) {
+            $weekStartKey = $aiTimesheet->week_start_date instanceof Carbon
+                ? $aiTimesheet->week_start_date->format('Y-m-d')
+                : Carbon::parse($aiTimesheet->week_start_date)->format('Y-m-d');
+            $weeklyDataMap[$weekStartKey] = $this->normalizeWeeklyData($aiTimesheet->weekly_data);
+        }
+
+        $rows = [];
+        $rows[] = ['Employee', $employeeName];
+        $rows[] = ['Department', $department];
+        $rows[] = ['Month', $monthStart->format('F Y')];
+        $rows[] = [];
+        $rows[] = ['Week', 'Day', 'Date', 'Time In', 'Break', 'Time Out', 'Total Hours', 'Overtime Hours'];
+
+        $weekIndex = 1;
+        $cursor = $rangeStart->copy();
+
+        while ($cursor->lte($rangeEnd)) {
+            $weekLabel = 'Week ' . $weekIndex;
+            $weekStartDate = $cursor->copy()->startOfWeek(Carbon::MONDAY)->format('Y-m-d');
+            $weekData = $weeklyDataMap[$weekStartDate] ?? [];
+
+            for ($dayIndex = 0; $dayIndex < 7; $dayIndex++) {
+                $date = $cursor->copy()->addDays($dayIndex);
+                $dayData = $this->extractDayData($weekData, $date);
+
+                $rows[] = [
+                    $weekLabel,
+                    $date->format('l'),
+                    $date->format('m/d/y'),
+                    $dayData['time_in'],
+                    $dayData['break'],
+                    $dayData['time_out'],
+                    $dayData['total_hours'],
+                    $dayData['overtime_hours']
+                ];
+
+                $weekLabel = '';
+            }
+
+            $cursor->addWeek();
+            $weekIndex++;
+        }
+
+        return $rows;
+    }
+
+    /**
+     * Normalize weekly data into a consistent array
+     */
+    protected function normalizeWeeklyData($weeklyData)
+    {
+        if (is_string($weeklyData)) {
+            $decoded = json_decode($weeklyData, true);
+            return is_array($decoded) ? $decoded : [];
+        }
+
+        return is_array($weeklyData) ? $weeklyData : [];
+    }
+
+    /**
+     * Extract day data from weekly payload with safe defaults
+     */
+    protected function extractDayData(array $weekData, Carbon $date)
+    {
+        $dayName = $date->format('l');
+        $dayData = $weekData[$dayName] ?? null;
+
+        if (!$dayData) {
+            foreach ($weekData as $candidate) {
+                if (!is_array($candidate)) {
+                    continue;
+                }
+
+                $candidateDay = $candidate['day'] ?? $candidate['day_name'] ?? null;
+                if ($candidateDay && $candidateDay === $dayName) {
+                    $dayData = $candidate;
+                    break;
+                }
+
+                if (isset($candidate['date'])) {
+                    try {
+                        $candidateDate = Carbon::parse($candidate['date']);
+                        if ($candidateDate->isSameDay($date)) {
+                            $dayData = $candidate;
+                            break;
+                        }
+                    } catch (\Exception $e) {
+                        // Ignore parse failures
+                    }
+                }
+            }
+        }
+
+        $timeIn = $dayData['time_in']
+            ?? $dayData['clock_in']
+            ?? $dayData['clock_in_time']
+            ?? '--';
+        $timeOut = $dayData['time_out']
+            ?? $dayData['clock_out']
+            ?? $dayData['clock_out_time']
+            ?? '--';
+        $break = $dayData['break']
+            ?? $dayData['break_time']
+            ?? '--';
+
+        $totalHours = $this->formatHoursValue($dayData['total_hours'] ?? $dayData['hours'] ?? '--');
+        $overtimeHours = $this->formatHoursValue($dayData['overtime'] ?? $dayData['overtime_hours'] ?? '--');
+
+        return [
+            'time_in' => $timeIn ?: '--',
+            'time_out' => $timeOut ?: '--',
+            'break' => $break ?: '--',
+            'total_hours' => $totalHours,
+            'overtime_hours' => $overtimeHours
+        ];
+    }
+
+    /**
+     * Format numeric hour values for export
+     */
+    protected function formatHoursValue($value)
+    {
+        if (is_numeric($value)) {
+            return number_format((float) $value, 2);
+        }
+
+        if (is_string($value)) {
+            $trimmed = trim($value);
+            if ($trimmed === '' || $trimmed === '--') {
+                return '--';
+            }
+            return $trimmed;
+        }
+
+        return '--';
+    }
+
+    /**
+     * Build CSV response from rows
+     */
+    protected function respondWithCsv(array $rows, string $fileName)
+    {
+        $handle = fopen('php://temp', 'r+');
+        foreach ($rows as $row) {
+            fputcsv($handle, $row);
+        }
+        rewind($handle);
+        $csv = stream_get_contents($handle);
+        fclose($handle);
+
+        return response($csv, 200, [
+            'Content-Type' => 'text/csv',
+            'Content-Disposition' => 'attachment; filename="' . $fileName . '"'
+        ]);
     }
 
 
@@ -909,6 +1222,7 @@ class TimesheetController extends Controller
                 ]);
             
             if ($updated) {
+                $this->syncMonthlyTimesheets();
                 return response()->json([
                     'success' => true,
                     'message' => 'Timesheet approved successfully',

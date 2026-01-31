@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\Validator;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Http;
 
 class ClaimController extends Controller
 {
@@ -184,6 +185,153 @@ class ClaimController extends Controller
                 'approvedClaims' => 0,
                 'totalAmount' => 0
             ]);
+        }
+    }
+
+    /**
+     * Approve HR2 claim via PATCH with local HR authentication.
+     */
+    public function approveHr2Claim(Request $request, $id)
+    {
+        return $this->updateHr2ClaimStatus($request, $id, 'approved');
+    }
+
+    /**
+     * Reject HR2 claim via PATCH with local HR authentication.
+     */
+    public function rejectHr2Claim(Request $request, $id)
+    {
+        return $this->updateHr2ClaimStatus($request, $id, 'rejected');
+    }
+
+    private function updateHr2ClaimStatus(Request $request, $id, string $status)
+    {
+        $validator = Validator::make($request->all(), [
+            'email' => 'required|email',
+            'password' => 'required|string',
+            'rejection_reason' => 'nullable|string|max:1000',
+            'notes' => 'nullable|string|max:1000'
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Please provide valid email and password',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        $employee = Employee::where('email', $request->email)->first();
+        if (!$employee || !Hash::check($request->password, $employee->password)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid email or password'
+            ], 401);
+        }
+
+        $authorizedPositions = [
+            'hr manager',
+            'system administrator',
+            'hr scheduler',
+            'admin',
+            'hr administrator',
+            'superadmin',
+            'super admin'
+        ];
+        $authorizedRoles = ['super_admin', 'superadmin', 'admin', 'hr_manager', 'hr_scheduler'];
+        $normalizedPosition = strtolower((string) $employee->position);
+        $normalizedRole = strtolower((string) $employee->role);
+        if (!in_array($normalizedPosition, $authorizedPositions, true) && !in_array($normalizedRole, $authorizedRoles, true)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Access denied. Only authorized HR personnel can perform this action.'
+            ], 403);
+        }
+
+        $action = $status === 'approved' ? 'approve' : 'reject';
+        $payload = array_filter([
+            'rejection_reason' => $request->input('rejection_reason'),
+            'notes' => $request->input('notes')
+        ], static fn($value) => $value !== null && $value !== '');
+
+        try {
+            $apiResponse = Http::asJson()->acceptJson()->timeout(10)
+                ->post("https://hr2.jetlougetravels-ph.com/api/claims/{$id}/{$action}", $payload);
+
+            $apiSuccess = false;
+            $apiMessage = null;
+
+            if ($apiResponse->successful()) {
+                $apiData = $apiResponse->json();
+                $statusValue = $apiData['status'] ?? $apiData['success'] ?? 'success';
+                $normalized = is_bool($statusValue)
+                    ? ($statusValue ? 'success' : 'error')
+                    : strtolower((string) $statusValue);
+                $apiSuccess = $normalized === 'success';
+                $apiMessage = $apiData['message'] ?? null;
+            } else {
+                $apiMessage = $apiResponse->json('message')
+                    ?? trim($apiResponse->body())
+                    ?? ('HR2 API update failed (HTTP ' . $apiResponse->status() . ').');
+            }
+
+            if (!$apiSuccess) {
+                $fallbackPayload = array_filter(array_merge(['status' => $status], $payload),
+                    static fn($value) => $value !== null && $value !== '');
+                $fallbackResponse = Http::asJson()->acceptJson()->timeout(10)
+                    ->patch("https://hr2.jetlougetravels-ph.com/api/claims/{$id}", $fallbackPayload);
+
+                if ($fallbackResponse->successful()) {
+                    $fallbackData = $fallbackResponse->json();
+                    $fallbackValue = $fallbackData['status'] ?? $fallbackData['success'] ?? 'success';
+                    $fallbackStatus = is_bool($fallbackValue)
+                        ? ($fallbackValue ? 'success' : 'error')
+                        : strtolower((string) $fallbackValue);
+                    $apiSuccess = $fallbackStatus === 'success';
+                    $apiMessage = $fallbackData['message'] ?? $apiMessage;
+                } else {
+                    $apiMessage = $fallbackResponse->json('message')
+                        ?? trim($fallbackResponse->body())
+                        ?? $apiMessage;
+                }
+            }
+
+            if (!$apiSuccess) {
+                return response()->json([
+                    'success' => false,
+                    'message' => $apiMessage ?: 'Failed to update claim status in HR2.'
+                ], 400);
+            }
+
+            $localClaim = Claim::find($id);
+            if ($localClaim) {
+                $localClaim->update([
+                    'status' => $status,
+                    'approved_by' => $employee->id,
+                    'approved_at' => now(),
+                    'notes' => $request->input('notes') ?? $localClaim->notes,
+                    'rejection_reason' => $status === 'rejected'
+                        ? $request->input('rejection_reason')
+                        : $localClaim->rejection_reason
+                ]);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => $apiMessage ?: 'Claim status updated successfully.',
+                'status' => $status
+            ]);
+        } catch (\Exception $e) {
+            Log::error('HR2 Claim Update Error', [
+                'id' => $id,
+                'status' => $status,
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Error updating claim status: ' . $e->getMessage()
+            ], 500);
         }
     }
 
