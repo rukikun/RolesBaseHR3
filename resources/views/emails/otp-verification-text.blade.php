@@ -1,4 +1,4 @@
-Jetlouge Travels - Admin Login Verification
+php artisan serve --host=localhost --port=8000Jetlouge Travels - Admin Login Verification
 
 Hello {{ $userName }},
 

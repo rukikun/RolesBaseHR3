@@ -36,9 +36,13 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 24px;
-            font-weight: bold;
-            color: #4285f4;
+        }
+        .logo img {
+            width: 100%;
+            height: 100%;
+            display: block;
+            object-fit: contain;
+            border-radius: 10px;
         }
         .content {
             padding: 40px 30px;
@@ -85,7 +89,9 @@
 <body>
     <div class="container">
         <div class="header">
-            <div class="logo">JT</div>
+            <div class="logo">
+                <img src="{{ $message->embed(public_path('assets/images/jetlouge_logo.png')) }}" alt="Jetlouge Travels" />
+            </div>
             <h1 style="margin: 0; font-size: 24px;">Jetlouge Travels</h1>
             <p style="margin: 5px 0 0; opacity: 0.9;">Admin Portal Security</p>
         </div>

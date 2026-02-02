@@ -239,7 +239,7 @@
               </thead>
               <tbody id="saved-timesheets-body">
                 <tr>
-                  <td colspan="8" class="text-center text-muted py-4">
+                  <td colspan="10" class="text-center text-muted py-4">
                     <i class="fas fa-inbox fa-2x mb-2"></i><br>
                     No saved timesheets pending approval
                   </td>
@@ -269,6 +269,8 @@
                   <th>Month</th>
                   <th>Total Hours</th>
                   <th>Overtime Hours</th>
+                  <th>Present Days (Mon-Sat)</th>
+                  <th>Absent Days (Mon-Sat)</th>
                   <th>Weeks Included</th>
                   <th>Generated Date</th>
                   <th>Action</th>
@@ -288,6 +290,8 @@
                   <td>{{ isset($monthly->month_start_date) ? \Carbon\Carbon::parse($monthly->month_start_date)->format('M Y') : 'N/A' }}</td>
                   <td>{{ number_format($monthly->total_hours ?? 0, 2) }}</td>
                   <td>{{ number_format($monthly->overtime_hours ?? 0, 2) }}</td>
+                  <td>{{ $monthly->present_days ?? 0 }}</td>
+                  <td>{{ $monthly->absent_days ?? 0 }}</td>
                   <td>{{ $monthly->timesheet_count ?? 0 }}</td>
                   <td>{{ isset($monthly->generated_at) ? \Carbon\Carbon::parse($monthly->generated_at)->format('M d, Y') : 'N/A' }}</td>
                   <td>

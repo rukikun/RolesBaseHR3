@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Hash;
 use Carbon\Carbon;
 use App\Models\AIGeneratedTimesheet;
 use App\Models\MonthlyTimesheet;
+use App\Models\Attendance;
 use App\Models\Employee;
 use App\Models\PayrollItem;
 
@@ -161,6 +162,7 @@ class TimesheetController extends Controller
             }
 
             $monthlyTimesheets = $this->syncMonthlyTimesheets();
+            $monthlyTimesheets = $this->attachMonthlyAttendanceCounts($monthlyTimesheets);
             $currentMonthStart = Carbon::now()->startOfMonth()->format('Y-m-d');
 
             return view('timesheets.management', compact(
@@ -277,6 +279,46 @@ class TimesheetController extends Controller
         }
 
         return MonthlyTimesheet::orderBy('month_start_date', 'desc')->get();
+    }
+
+    /**
+     * Attach present/absent day counts (Mon-Sat) to monthly summaries.
+     */
+    protected function attachMonthlyAttendanceCounts($monthlyTimesheets)
+    {
+        if (!$monthlyTimesheets || $monthlyTimesheets->isEmpty()) {
+            return $monthlyTimesheets;
+        }
+
+        $presentStatuses = ['present', 'late', 'on_break', 'clocked_out'];
+
+        foreach ($monthlyTimesheets as $monthlyTimesheet) {
+            if (!$monthlyTimesheet->employee_id || !$monthlyTimesheet->month_start_date) {
+                $monthlyTimesheet->present_days = 0;
+                $monthlyTimesheet->absent_days = 0;
+                continue;
+            }
+
+            $monthStart = Carbon::parse($monthlyTimesheet->month_start_date)->startOfMonth();
+            $monthEnd = $monthStart->copy()->endOfMonth();
+
+            $attendances = Attendance::where('employee_id', $monthlyTimesheet->employee_id)
+                ->whereBetween('date', [$monthStart->format('Y-m-d'), $monthEnd->format('Y-m-d')])
+                ->get();
+
+            $weekdayAttendances = $attendances->filter(function ($attendance) {
+                return !Carbon::parse($attendance->date)->isSunday();
+            });
+
+            $monthlyTimesheet->present_days = $weekdayAttendances
+                ->whereIn('status', $presentStatuses)
+                ->count();
+            $monthlyTimesheet->absent_days = $weekdayAttendances
+                ->where('status', 'absent')
+                ->count();
+        }
+
+        return $monthlyTimesheets;
     }
 
     /**

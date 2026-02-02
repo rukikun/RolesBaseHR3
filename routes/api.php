@@ -9,11 +9,14 @@ use App\Http\Controllers\ClaimController;
 use App\Http\Controllers\TimesheetController;
 use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\AttendanceController;
+use App\Http\Controllers\Api\MonthlyAttendanceController;
 use App\Http\Controllers\ClockifyController;
 use App\Http\Controllers\AIController;
 use App\Http\Controllers\UnifiedHRController;
 
 Route::get('/Logattendance', [App\Http\Controllers\Api\LogattendanceController::class, 'x']);
+
+Route::get('/monthly-attendance', [MonthlyAttendanceController::class, 'index']);
 
 Route::get('/user', function (Request $request) {
     return $request->user();
