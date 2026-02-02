@@ -37,10 +37,12 @@ class MonthlyAttendanceController extends Controller
             ], 200);
         } catch (\Exception $e) {
             Log::error('Monthly attendance API error: ' . $e->getMessage());
+            $includeError = config('app.debug') || $request->boolean('debug');
 
             return response()->json([
                 'status' => 'error',
-                'message' => 'Failed to retrieve monthly attendance summary'
+                'message' => 'Failed to retrieve monthly attendance summary',
+                'error' => $includeError ? $e->getMessage() : null
             ], 500);
         }
     }
