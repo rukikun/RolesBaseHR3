@@ -21,12 +21,12 @@ class PHPMailerService
         try {
             // Server settings
             $this->mail->isSMTP();
-            $this->mail->Host       = env('MAIL_HOST', 'smtp.gmail.com');
+            $this->mail->Host       = config('mail.mailers.smtp.host', 'smtp.gmail.com');
             $this->mail->SMTPAuth   = true;
-            $this->mail->Username   = env('MAIL_USERNAME');
-            $this->mail->Password   = env('MAIL_PASSWORD');
+            $this->mail->Username   = config('mail.mailers.smtp.username');
+            $this->mail->Password   = config('mail.mailers.smtp.password');
 
-            $encryption = strtolower((string) env('MAIL_ENCRYPTION', 'tls'));
+            $encryption = strtolower((string) config('mail.mailers.smtp.encryption', 'tls'));
             if ($encryption === 'ssl') {
                 $this->mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS;
                 $this->mail->SMTPAutoTLS = false;
@@ -37,16 +37,17 @@ class PHPMailerService
                 $this->mail->SMTPAutoTLS = false;
             }
 
-            $this->mail->Port       = env('MAIL_PORT', 587);
+            $this->mail->Port       = (int) config('mail.mailers.smtp.port', 587);
 
             // Set charset
             $this->mail->CharSet = 'UTF-8';
 
             // Default sender
-            $fromAddress = env('MAIL_FROM_ADDRESS') ?: env('MAIL_USERNAME', 'noreply@jetlouge.com');
+            $fromAddress = config('mail.from.address')
+                ?: config('mail.mailers.smtp.username', 'noreply@jetlouge.com');
             $this->mail->setFrom(
                 $fromAddress,
-                env('MAIL_FROM_NAME', 'Jetlouge Travels Admin')
+                config('mail.from.name', 'Jetlouge Travels Admin')
             );
 
         } catch (Exception $e) {
@@ -100,6 +101,21 @@ class PHPMailerService
 
     private function getOtpEmailTemplate($otpCode, $userName)
     {
+        if (function_exists('view')) {
+            try {
+                return view('emails.otp-verification', [
+                    'otpCode' => $otpCode,
+                    'userName' => $userName
+                ])->render();
+            } catch (\Throwable $e) {
+                if (class_exists('\Log')) {
+                    \Log::warning('OTP email Blade render failed. Falling back to inline template.', [
+                        'error' => $e->getMessage()
+                    ]);
+                }
+            }
+        }
+
         return '
 <!DOCTYPE html>
 <html lang="en">
@@ -225,6 +241,21 @@ class PHPMailerService
 
     private function getOtpEmailTextTemplate($otpCode, $userName)
     {
+        if (function_exists('view')) {
+            try {
+                return view('emails.otp-verification-text', [
+                    'otpCode' => $otpCode,
+                    'userName' => $userName
+                ])->render();
+            } catch (\Throwable $e) {
+                if (class_exists('\Log')) {
+                    \Log::warning('OTP text email Blade render failed. Falling back to inline template.', [
+                        'error' => $e->getMessage()
+                    ]);
+                }
+            }
+        }
+
         return "Jetlouge Travels - Admin Login Verification
 
 Hello {$userName},
