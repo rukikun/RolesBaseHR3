@@ -82,22 +82,6 @@ class AuthController extends Controller
             ->with('info', "Please click 'Send Verification Code' to receive your OTP.");
     }
 
-    private function sendOtpEmail(string $email, string $otpCode, string $userName): void
-    {
-        try {
-            Mail::to($email)->send(new OtpMail($otpCode, $userName));
-            return;
-        } catch (\Throwable $e) {
-            \Log::warning('Laravel mailer OTP failed, falling back to PHPMailer: ' . $e->getMessage());
-        }
-
-        $phpMailer = new PHPMailerService();
-        $result = $phpMailer->sendOtpEmail($email, $otpCode, $userName);
-        if (!$result['success']) {
-            throw new \RuntimeException($result['message']);
-        }
-    }
-
     /**
      * Validate credentials against HR4 system accounts API.
      */
@@ -588,7 +572,13 @@ class AuthController extends Controller
             // Get employee name for email
             $userName = $employee->first_name . ' ' . $employee->last_name;
             
-            $this->sendOtpEmail($email, $otpRecord->otp_code, $userName);
+            // Send OTP email using PHPMailer
+            $phpMailer = new PHPMailerService();
+            $result = $phpMailer->sendOtpEmail($email, $otpRecord->otp_code, $userName);
+            
+            if (!$result['success']) {
+                throw new \Exception($result['message']);
+            }
             
             return response()->json(['success' => true, 'message' => 'New verification code sent successfully.']);
             
