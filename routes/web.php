@@ -219,10 +219,14 @@ Route::get('/admin_dashboard', function() {
 
 
 // Landing page route
-Route::get('/', [LandingController::class, 'index'])->name('landing');
+Route::get('/', function () {
+    return redirect()->away('https://hr1.jetlougetravels-ph.com/');
+})->name('landing');
 
 // Portal selection route
-Route::get('/portal-selection', [SystemViewController::class, 'portalSelection'])->name('portal.selection');
+Route::get('/portal-selection', function () {
+    return redirect()->away('https://hr1.jetlougetravels-ph.com/');
+})->name('portal.selection');
 
 // Landing page API routes
 Route::post('/newsletter/subscribe', [LandingController::class, 'subscribeNewsletter'])->name('newsletter.subscribe');
