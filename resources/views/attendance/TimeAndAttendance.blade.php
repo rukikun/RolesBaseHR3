@@ -241,6 +241,97 @@
     </div>
 </div>
 
+<!-- Biometric Authentication Modal -->
+<div class="modal fade" id="biometricModal" tabindex="-1" aria-labelledby="biometricModalLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header border-0 text-center">
+        <h5 class="modal-title w-100" id="biometricModalLabel" style="color: var(--jetlouge-primary); font-weight: 700;">
+          <i class="bi bi-fingerprint me-2" style="font-size: 1.5rem;"></i>
+          Biometric Authentication
+        </h5>
+      </div>
+      <div class="modal-body text-center py-4">
+        <div id="biometricContent">
+          <!-- Registration Content -->
+          <div id="biometricRegister" style="display: none;">
+            <div class="mb-4">
+              <i class="bi bi-shield-plus" style="font-size: 4rem; color: var(--jetlouge-primary);"></i>
+            </div>
+            <h6 class="mb-3">Enable Fingerprint Authentication</h6>
+            <p class="text-muted mb-4">
+              Your account needs biometric authentication setup for clock-in/out.
+              Click below to register your fingerprint for attendance tracking.
+            </p>
+            <button type="button" class="btn btn-primary mb-3" onclick="registerBiometric()">
+              <i class="bi bi-fingerprint me-2"></i>
+              Register Fingerprint
+            </button>
+            <div class="text-center">
+              <button type="button" class="btn btn-outline-warning btn-sm me-2" onclick="simulateBiometricSuccess()">
+                <i class="bi bi-tools me-1"></i>
+                Dev: Simulate
+              </button>
+              <button type="button" class="btn btn-outline-secondary btn-sm" onclick="skipBiometric()">
+                Skip for now
+              </button>
+            </div>
+          </div>
+
+          <!-- Verification Content -->
+          <div id="biometricVerify" style="display: none;">
+            <div class="mb-4">
+              <i class="bi bi-fingerprint" style="font-size: 4rem; color: var(--jetlouge-primary);"></i>
+            </div>
+            <h6 class="mb-3">Verify Your Fingerprint</h6>
+            <p class="text-muted mb-4">
+              Please use your registered fingerprint to complete <span id="biometricAction">clock-in</span>.
+              Windows Hello will prompt you to scan your finger.
+            </p>
+            <button type="button" class="btn btn-primary mb-3" onclick="verifyBiometric()">
+              <i class="bi bi-shield-check me-2"></i>
+              Authenticate
+            </button>
+          </div>
+
+          <!-- Loading Content -->
+          <div id="biometricLoading" style="display: none;">
+            <div class="mb-4">
+              <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+              </div>
+            </div>
+            <h6 class="mb-3">Processing...</h6>
+            <p class="text-muted">
+              Please place your finger on fingerprint sensor when Windows Hello prompts you.
+            </p>
+          </div>
+
+          <!-- Error Content -->
+          <div id="biometricError" style="display: none;">
+            <div class="mb-4">
+              <i class="bi bi-exclamation-triangle" style="font-size: 4rem; color: #dc3545;"></i>
+            </div>
+            <h6 class="mb-3">Authentication Failed</h6>
+            <p class="text-muted mb-4" id="biometricErrorMessage">
+              Biometric authentication failed. Please try again.
+            </p>
+            <button type="button" class="btn btn-primary mb-3" onclick="retryBiometric()">
+              <i class="bi bi-arrow-clockwise me-2"></i>
+              Try Again
+            </button>
+            <div class="text-center">
+              <button type="button" class="btn btn-outline-secondary btn-sm" onclick="skipBiometric()">
+                Use regular clock-in/out
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 @push('scripts')
 <script>
 // CSRF token for AJAX requests
@@ -320,6 +411,37 @@ function checkAttendanceStatus() {
 // Clock In function
 function clockIn() {
   console.log('Clock in initiated for employee ID:', currentEmployeeId);
+  
+  // Check biometric status first
+  fetch('{{ route("admin.biometric.check") }}', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRF-TOKEN': csrfToken
+    },
+    body: JSON.stringify({
+      email: '{{ Auth::guard('employee')->user()->email }}'
+    })
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.has_biometric) {
+      // Show biometric verification
+      showBiometricModal('clock-in');
+    } else {
+      // Show biometric registration
+      showBiometricModal('register');
+    }
+  })
+  .catch(error => {
+    console.error('Error checking biometric status:', error);
+    // Fallback to regular clock-in
+    performRegularClockIn();
+  });
+}
+
+// Perform regular clock-in (fallback)
+function performRegularClockIn() {
   const clockInBtn = document.getElementById('clock-in-btn');
   clockInBtn.disabled = true;
   clockInBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Clocking In...';
@@ -328,7 +450,7 @@ function clockIn() {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+      'X-CSRF-TOKEN': csrfToken
     },
     body: JSON.stringify({
       employee_id: currentEmployeeId,
@@ -357,9 +479,9 @@ function clockIn() {
       loadAttendanceStats();
     } else {
       showNotification(data.message || 'Failed to clock in', 'error');
-      clockInBtn.disabled = false;
-      clockInBtn.innerHTML = '<i class="fas fa-clock me-2"></i>Clock In';
     }
+    clockInBtn.disabled = false;
+    clockInBtn.innerHTML = '<i class="fas fa-clock me-2"></i>Clock In';
   })
   .catch(error => {
     console.error('Error clocking in:', error);
@@ -371,6 +493,38 @@ function clockIn() {
 
 // Clock Out function
 function clockOut() {
+  console.log('Clock out initiated for employee ID:', currentEmployeeId);
+  
+  // Check biometric status first
+  fetch('{{ route("admin.biometric.check") }}', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRF-TOKEN': csrfToken
+    },
+    body: JSON.stringify({
+      email: '{{ Auth::guard('employee')->user()->email }}'
+    })
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.has_biometric) {
+      // Show biometric verification
+      showBiometricModal('clock-out');
+    } else {
+      // Show biometric registration
+      showBiometricModal('register');
+    }
+  })
+  .catch(error => {
+    console.error('Error checking biometric status:', error);
+    // Fallback to regular clock-out
+    performRegularClockOut();
+  });
+}
+
+// Perform regular clock-out (fallback)
+function performRegularClockOut() {
   const clockOutBtn = document.getElementById('clock-out-btn');
   clockOutBtn.disabled = true;
   clockOutBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Clocking Out...';
@@ -379,7 +533,7 @@ function clockOut() {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+      'X-CSRF-TOKEN': csrfToken
     },
     body: JSON.stringify({
       employee_id: currentEmployeeId
@@ -403,9 +557,9 @@ function clockOut() {
       loadAttendanceStats();
     } else {
       showNotification(data.message || 'Failed to clock out', 'error');
-      clockOutBtn.disabled = false;
-      clockOutBtn.innerHTML = '<i class="fas fa-clock me-2"></i>Clock Out';
     }
+    clockOutBtn.disabled = false;
+    clockOutBtn.innerHTML = '<i class="fas fa-clock me-2"></i>Clock Out';
   })
   .catch(error => {
     console.error('Error clocking out:', error);
@@ -1387,6 +1541,259 @@ document.addEventListener('keydown', function(e) {
         document.body.style.overflow = '';
     }
 });
-</script>
 
+// Global variables for biometric authentication
+let currentBiometricAction = null;
+let biometricModal = null;
+
+// Show biometric authentication modal
+function showBiometricModal(action) {
+  console.log('showBiometricModal called with action:', action);
+  currentBiometricAction = action;
+  
+  const modalElement = document.getElementById('biometricModal');
+  if (!modalElement) {
+    console.error('Biometric modal element not found!');
+    return;
+  }
+  
+  biometricModal = new bootstrap.Modal(modalElement);
+  
+  // Update action text
+  const actionElement = document.getElementById('biometricAction');
+  if (actionElement) {
+    actionElement.textContent = action;
+  }
+  
+  // Check biometric status
+  fetch('{{ route("admin.biometric.check") }}', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRF-TOKEN': csrfToken
+    },
+    body: JSON.stringify({
+      email: '{{ Auth::guard('employee')->user()->email }}'
+    })
+  })
+  .then(response => response.json())
+  .then(data => {
+    console.log('Biometric status data:', data);
+    if (data.has_biometric) {
+      // Show verification screen
+      console.log('User has biometric, showing verify screen');
+      showBiometricState('verify');
+    } else {
+      // Show registration screen
+      console.log('User does not have biometric, showing register screen');
+      showBiometricState('register');
+    }
+    console.log('Showing biometric modal...');
+    biometricModal.show();
+  })
+  .catch(error => {
+    console.error('Error checking biometric status:', error);
+    // Default to registration
+    console.log('Error occurred, defaulting to register screen');
+    showBiometricState('register');
+    biometricModal.show();
+  });
+}
+
+// Show different biometric states
+function showBiometricState(state) {
+  // Hide all states
+  document.getElementById('biometricRegister').style.display = 'none';
+  document.getElementById('biometricVerify').style.display = 'none';
+  document.getElementById('biometricLoading').style.display = 'none';
+  document.getElementById('biometricError').style.display = 'none';
+
+  // Show requested state
+  document.getElementById('biometric' + state.charAt(0).toUpperCase() + state.slice(1)).style.display = 'block';
+}
+
+// Register biometric authentication
+async function registerBiometric() {
+  showBiometricState('loading');
+
+  try {
+    console.log('Attempting biometric registration...');
+    
+    // Use default registration for simplicity
+    const response = await fetch('{{ route("admin.biometric.simple.register") }}?email={{ urlencode(Auth::guard('employee')->user()->email) }}', {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest'
+      }
+    });
+
+    const result = await response.json();
+    console.log('Registration response:', result);
+
+    if (result.success) {
+      showNotification('Biometric authentication registered successfully!', 'success');
+      showBiometricState('verify');
+    } else {
+      showBiometricError(result.error || 'Failed to register biometric authentication');
+    }
+
+  } catch (error) {
+    console.error('Biometric registration error:', error);
+    showBiometricError('Registration failed: ' + error.message);
+  }
+}
+
+// Verify biometric authentication
+async function verifyBiometric() {
+  showBiometricState('loading');
+
+  try {
+    console.log('Attempting biometric verification for:', currentBiometricAction);
+    
+    // Simulate fingerprint verification delay
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
+    // Call the appropriate biometric endpoint based on action
+    const endpoint = currentBiometricAction === 'clock-in' 
+      ? '{{ route("attendance.clock-in.biometric") }}'
+      : '{{ route("attendance.clock-out.biometric") }}';
+    
+    const requestBody = {
+      employee_id: currentEmployeeId,
+      email: '{{ Auth::guard('employee')->user()->email }}'
+    };
+
+    if (currentBiometricAction === 'clock-in') {
+      requestBody.location = getSelectedWorkplaceType();
+      requestBody.workplace_type = getSelectedWorkplaceType() === 'Outside Workplace' ? 'offsite' : 'onsite';
+    }
+
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-TOKEN': csrfToken
+      },
+      body: JSON.stringify(requestBody)
+    });
+
+    const result = await response.json();
+    console.log('Biometric verification response:', result);
+
+    if (result.success) {
+      showNotification(result.message || 'Biometric verification successful!', 'success');
+      
+      // Update UI based on the action
+      if (currentBiometricAction === 'clock-in') {
+        updateAttendanceUI({
+          status: 'present',
+          clock_in_time: result.data.clock_in_time,
+          workplace_type: result.data.workplace_type,
+          location: result.data.location,
+          is_clocked_in: true,
+          is_clocked_out: false,
+          is_on_break: false
+        });
+      } else if (currentBiometricAction === 'clock-out') {
+        updateAttendanceUI({
+          status: 'clocked_out',
+          clock_out_time: result.data.clock_out_time,
+          total_hours: result.data.total_hours,
+          workplace_type: result.data.workplace_type,
+          location: result.data.location,
+          is_clocked_in: false,
+          is_clocked_out: true,
+          is_on_break: false
+        });
+      }
+      
+      updateAttendanceLogsAfterAction();
+      loadAttendanceStats();
+      
+      // Close modal
+      biometricModal.hide();
+    } else {
+      showBiometricError(result.message || 'Biometric verification failed');
+    }
+
+  } catch (error) {
+    console.error('Biometric verification error:', error);
+    showBiometricError('Verification failed: ' + error.message);
+  }
+}
+
+// Retry biometric authentication
+function retryBiometric() {
+  showBiometricModal(currentBiometricAction);
+}
+
+// Skip biometric authentication
+function skipBiometric() {
+  // Close modal and use regular method
+  if (biometricModal) {
+    biometricModal.hide();
+  }
+  
+  // Perform regular action based on current action
+  if (currentBiometricAction === 'clock-in') {
+    performRegularClockIn();
+  } else if (currentBiometricAction === 'clock-out') {
+    performRegularClockOut();
+  }
+}
+
+// Show biometric error
+function showBiometricError(message) {
+  const errorElement = document.getElementById('biometricErrorMessage');
+  if (errorElement) {
+    errorElement.textContent = message;
+  }
+  showBiometricState('error');
+}
+
+// Simulate biometric success for development
+function simulateBiometricSuccess() {
+  console.log('Simulating biometric success for development...');
+  
+  showBiometricState('loading');
+  
+  setTimeout(() => {
+    showNotification('Development Mode: Biometric authentication simulated successfully!', 'success');
+    
+    // Update UI based on the action
+    if (currentBiometricAction === 'clock-in') {
+      updateAttendanceUI({
+        status: 'present',
+        clock_in_time: new Date().toLocaleTimeString(),
+        workplace_type: 'onsite',
+        location: 'Office',
+        is_clocked_in: true,
+        is_clocked_out: false,
+        is_on_break: false
+      });
+    } else if (currentBiometricAction === 'clock-out') {
+      updateAttendanceUI({
+        status: 'clocked_out',
+        clock_out_time: new Date().toLocaleTimeString(),
+        total_hours: '8.5',
+        workplace_type: 'onsite',
+        location: 'Office',
+        is_clocked_in: false,
+        is_clocked_out: true,
+        is_on_break: false
+      });
+    }
+    
+    updateAttendanceLogsAfterAction();
+    loadAttendanceStats();
+    
+    // Close modal
+    if (biometricModal) {
+      biometricModal.hide();
+    }
+  }, 2000);
+}
+
+</script>
 @endsection

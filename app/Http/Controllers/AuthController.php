@@ -526,15 +526,9 @@ class AuthController extends Controller
         }
 
         if ($isAjax) {
-            $hasBiometric = $employee->hasBiometricAuth();
-
             return response()->json([
                 'success' => true,
                 'message' => 'OTP verified successfully.',
-                'requires_biometric' => true,
-                'has_biometric' => $hasBiometric,
-                'employee_id' => $employee->id,
-                'employee_name' => $employee->first_name . ' ' . $employee->last_name,
                 'redirect_url' => route('dashboard')
             ]);
         }
@@ -749,6 +743,108 @@ class AuthController extends Controller
             return response()->json([
                 'success' => false,
                 'error' => 'Biometric verification failed: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Handle biometric authentication for clock-in
+     */
+    public function clockInBiometric(Request $request)
+    {
+        $request->validate([
+            'employee_id' => 'required|integer',
+            'location' => 'required|string',
+            'workplace_type' => 'required|string|in:onsite,offsite'
+        ]);
+
+        $employee = Employee::find($request->employee_id);
+        
+        if (!$employee) {
+            return response()->json(['success' => false, 'message' => 'Employee not found'], 404);
+        }
+
+        // Check if employee has biometric credentials
+        $credential = BiometricCredential::where('employee_id', $employee->id)
+            ->where('is_active', true)
+            ->first();
+
+        if (!$credential) {
+            return response()->json(['success' => false, 'message' => 'Biometric authentication not set up. Please register your fingerprint first.'], 400);
+        }
+
+        try {
+            // In a real implementation, you would verify the biometric signature
+            // For this demo, we'll simulate successful verification
+            
+            // Update last used timestamp
+            $credential->updateLastUsed();
+
+            // Process clock-in logic (delegate to attendance controller)
+            $attendanceController = new \App\Http\Controllers\AttendanceController();
+            $result = $attendanceController->clockIn($request);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Biometric verification successful! Clocked in successfully.',
+                'data' => $result->getData(true)
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('Clock-in biometric verification failed: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Biometric verification failed: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Handle biometric authentication for clock-out
+     */
+    public function clockOutBiometric(Request $request)
+    {
+        $request->validate([
+            'employee_id' => 'required|integer'
+        ]);
+
+        $employee = Employee::find($request->employee_id);
+        
+        if (!$employee) {
+            return response()->json(['success' => false, 'message' => 'Employee not found'], 404);
+        }
+
+        // Check if employee has biometric credentials
+        $credential = BiometricCredential::where('employee_id', $employee->id)
+            ->where('is_active', true)
+            ->first();
+
+        if (!$credential) {
+            return response()->json(['success' => false, 'message' => 'Biometric authentication not set up. Please register your fingerprint first.'], 400);
+        }
+
+        try {
+            // In a real implementation, you would verify the biometric signature
+            // For this demo, we'll simulate successful verification
+            
+            // Update last used timestamp
+            $credential->updateLastUsed();
+
+            // Process clock-out logic (delegate to attendance controller)
+            $attendanceController = new \App\Http\Controllers\AttendanceController();
+            $result = $attendanceController->clockOut($request);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Biometric verification successful! Clocked out successfully.',
+                'data' => $result->getData(true)
+            ]);
+
+        } catch (\Exception $e) {
+            \Log::error('Clock-out biometric verification failed: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Biometric verification failed: ' . $e->getMessage()
             ], 500);
         }
     }

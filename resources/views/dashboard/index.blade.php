@@ -242,17 +242,13 @@
                 @forelse($shift['employees'] as $employee)
                   <div class="employee-item-hr d-flex align-items-center mb-2 p-2 bg-light rounded">
                     <div class="employee-avatar-hr me-2">
-                      @if($employee['avatar'] ?? false)
-                        <img src="{{ asset('storage/' . $employee['avatar']) }}" alt="{{ $employee['name'] }}" class="rounded-circle" style="width: 28px; height: 28px; object-fit: cover;">
-                      @else
-                        @php
-                          $initial = strtoupper(substr(trim($employee['name'] ?? ''), 0, 1));
-                        @endphp
-                        <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center" style="width: 28px; height: 28px; font-size: 11px; font-weight: 600;">
-                          {{ $initial }}
-                        </div>
-                      @endif
-                    </div>
+  @php
+    $initial = strtoupper(substr(trim($employee['name'] ?? ''), 0, 1));
+  @endphp
+  <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center" style="width: 28px; height: 28px; font-size: 11px; font-weight: 600;">
+    {{ $initial }}
+  </div>
+</div>
                     <div class="employee-info-hr flex-grow-1">
                       <div class="employee-name-hr small fw-bold text-truncate">{{ $employee['name'] }}</div>
                       @if(!empty($employee['position']))
@@ -325,13 +321,12 @@
           <tr>
             <td>
               <div class="d-flex align-items-center">
-                @if($entry->profile_picture)
-                  <img src="{{ asset('storage/' . $entry->profile_picture) }}" alt="{{ $entry->employee_name }}" class="rounded-circle me-2" style="width: 32px; height: 32px; object-fit: cover;">
-                @else
-                  <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center me-2" style="width: 32px; height: 32px; font-size: 12px; font-weight: 600;">
-                    {{ substr($entry->employee_name, 0, 1) }}
-                  </div>
-                @endif
+                @php
+                  $initial = strtoupper(substr(trim($entry->employee_name ?? ''), 0, 1));
+                @endphp
+                <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center me-2" style="width: 32px; height: 32px; font-size: 12px; font-weight: 600;">
+                  {{ $initial }}
+                </div>
                 <span class="fw-medium">{{ $entry->employee_name }}</span>
               </div>
             </td>
@@ -740,10 +735,8 @@ function updateRecentTimeEntriesTable(entries) {
         statusBadge = '<span class="badge bg-warning text-dark">Clocked In</span>';
       }
 
-      const profileImage = entry.profile_picture ?
-        `<img src="/storage/${entry.profile_picture}" alt="${entry.employee_name}" class="rounded-circle me-2" style="width: 32px; height: 32px; object-fit: cover;">` :
-        `<div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center me-2" style="width: 32px; height: 32px; font-size: 12px; font-weight: 600;">
-          ${entry.employee_name.charAt(0)}
+      const profileImage = `<div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center me-2" style="width: 32px; height: 32px; font-size: 12px; font-weight: 600;">
+          ${entry.employee_name.charAt(0).toUpperCase()}
         </div>`;
 
       tableHtml += `

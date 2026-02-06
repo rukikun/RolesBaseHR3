@@ -69,6 +69,10 @@ Route::post('/admin/biometric/check-status', [AuthController::class, 'checkBiome
 Route::post('/admin/biometric/register', [AuthController::class, 'registerBiometric'])->name('admin.biometric.register');
 Route::post('/admin/biometric/verify', [AuthController::class, 'verifyBiometric'])->name('admin.biometric.verify');
 
+// Clock-in/out biometric authentication routes
+Route::post('/attendance/clock-in-biometric', [AuthController::class, 'clockInBiometric'])->name('attendance.clock-in.biometric');
+Route::post('/attendance/clock-out-biometric', [AuthController::class, 'clockOutBiometric'])->name('attendance.clock-out.biometric');
+
 // Simple biometric test routes (handle both real and default credentials)
 Route::match(['GET', 'POST'], '/admin/biometric/simple-register', function() {
     $email = request('email', 'johnkaizer19.jh@gmail.com');
