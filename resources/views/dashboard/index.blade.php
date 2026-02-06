@@ -245,8 +245,11 @@
                       @if($employee['avatar'] ?? false)
                         <img src="{{ asset('storage/' . $employee['avatar']) }}" alt="{{ $employee['name'] }}" class="rounded-circle" style="width: 28px; height: 28px; object-fit: cover;">
                       @else
+                        @php
+                          $initial = strtoupper(substr(trim($employee['name'] ?? ''), 0, 1));
+                        @endphp
                         <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center" style="width: 28px; height: 28px; font-size: 11px; font-weight: 600;">
-                          {{ substr($employee['name'], 0, 1) }}
+                          {{ $initial }}
                         </div>
                       @endif
                     </div>
@@ -918,6 +921,28 @@ function updateRecentTimeEntriesTable(entries) {
   font-weight: 600;
   text-transform: uppercase;
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.employee-avatar-hr {
+  flex-shrink: 0;
+  min-width: 28px;
+  max-width: 28px;
+  height: 28px;
+}
+
+.employee-info-hr {
+  min-width: 0;
+  flex: 1;
+}
+
+.employee-name-hr {
+  line-height: 1.2;
+  word-break: break-word;
 }
 
 /* Employee list container with vertical scrolling - Limited to 2 visible employees */
