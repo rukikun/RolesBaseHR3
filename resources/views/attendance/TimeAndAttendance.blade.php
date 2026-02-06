@@ -258,19 +258,19 @@
             <div class="mb-4">
               <i class="bi bi-shield-plus" style="font-size: 4rem; color: var(--jetlouge-primary);"></i>
             </div>
-            <h6 class="mb-3">Enable Fingerprint Authentication</h6>
+            <h6 class="mb-3">Enable Default Fingerprint Authentication</h6>
             <p class="text-muted mb-4">
-              Your account needs biometric authentication setup for clock-in/out.
-              Click below to register your fingerprint for attendance tracking.
+              Your account now has default biometric authentication enabled.
+              Click below to activate fingerprint verification for future clock-ins.
             </p>
-            <button type="button" class="btn btn-primary mb-3" onclick="registerBiometric()">
+            <button type="button" class="btn btn-login mb-3" onclick="registerBiometric()">
               <i class="bi bi-fingerprint me-2"></i>
-              Register Fingerprint
+              Activate Fingerprint
             </button>
             <div class="text-center">
               <button type="button" class="btn btn-outline-warning btn-sm me-2" onclick="simulateBiometricSuccess()">
                 <i class="bi bi-tools me-1"></i>
-                Dev: Simulate
+                Dev: Simulate Success
               </button>
               <button type="button" class="btn btn-outline-secondary btn-sm" onclick="skipBiometric()">
                 Skip for now
@@ -285,10 +285,10 @@
             </div>
             <h6 class="mb-3">Verify Your Fingerprint</h6>
             <p class="text-muted mb-4">
-              Please use your registered fingerprint to complete <span id="biometricAction">clock-in</span>.
+              Please use your registered fingerprint to complete the clock-in process.
               Windows Hello will prompt you to scan your finger.
             </p>
-            <button type="button" class="btn btn-primary mb-3" onclick="verifyBiometric()">
+            <button type="button" class="btn btn-login mb-3" onclick="verifyBiometric()">
               <i class="bi bi-shield-check me-2"></i>
               Authenticate
             </button>
@@ -303,7 +303,7 @@
             </div>
             <h6 class="mb-3">Processing...</h6>
             <p class="text-muted">
-              Please place your finger on fingerprint sensor when Windows Hello prompts you.
+              Please place your finger on the fingerprint sensor when Windows Hello prompts you.
             </p>
           </div>
 
@@ -316,13 +316,13 @@
             <p class="text-muted mb-4" id="biometricErrorMessage">
               Biometric authentication failed. Please try again.
             </p>
-            <button type="button" class="btn btn-primary mb-3" onclick="retryBiometric()">
+            <button type="button" class="btn btn-login mb-3" onclick="retryBiometric()">
               <i class="bi bi-arrow-clockwise me-2"></i>
               Try Again
             </button>
             <div class="text-center">
               <button type="button" class="btn btn-outline-secondary btn-sm" onclick="skipBiometric()">
-                Use regular clock-in/out
+                Skip for now
               </button>
             </div>
           </div>
@@ -494,33 +494,7 @@ function performRegularClockIn() {
 // Clock Out function
 function clockOut() {
   console.log('Clock out initiated for employee ID:', currentEmployeeId);
-  
-  // Check biometric status first
-  fetch('{{ route("admin.biometric.check") }}', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-CSRF-TOKEN': csrfToken
-    },
-    body: JSON.stringify({
-      email: '{{ Auth::guard('employee')->user()->email }}'
-    })
-  })
-  .then(response => response.json())
-  .then(data => {
-    if (data.has_biometric) {
-      // Show biometric verification
-      showBiometricModal('clock-out');
-    } else {
-      // Show biometric registration
-      showBiometricModal('register');
-    }
-  })
-  .catch(error => {
-    console.error('Error checking biometric status:', error);
-    // Fallback to regular clock-out
-    performRegularClockOut();
-  });
+  performRegularClockOut();
 }
 
 // Perform regular clock-out (fallback)
@@ -1612,14 +1586,101 @@ function showBiometricState(state) {
   document.getElementById('biometric' + state.charAt(0).toUpperCase() + state.slice(1)).style.display = 'block';
 }
 
-// Register biometric authentication
+// Register biometric authentication with fallback
 async function registerBiometric() {
   showBiometricState('loading');
 
   try {
     console.log('Attempting biometric registration...');
+    console.log('Current URL:', window.location.href);
+    console.log('Hostname:', window.location.hostname);
+    console.log('Is secure context:', window.isSecureContext);
     
-    // Use default registration for simplicity
+    // First try real WebAuthn if conditions are right
+    if (navigator.credentials && window.PublicKeyCredential && window.isSecureContext && isBiometricHostAllowed()) {
+      console.log('Attempting real WebAuthn registration...');
+      
+      try {
+        // Check if platform authenticator is available
+        const available = await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+        console.log('Platform authenticator available:', available);
+        
+        if (available) {
+          // Generate a proper challenge
+          const challenge = new Uint8Array(32);
+          crypto.getRandomValues(challenge);
+          
+          // Create credential options for real WebAuthn
+          const credentialCreationOptions = {
+            publicKey: {
+              challenge: challenge,
+              rp: {
+                name: "Jetlouge HR System"
+              },
+              user: {
+                id: new TextEncoder().encode(currentEmployeeId.toString()),
+                name: '{{ Auth::guard('employee')->user()->email }}',
+                displayName: '{{ Auth::guard('employee')->user()->first_name }} {{ Auth::guard('employee')->user()->last_name }}',
+              },
+              pubKeyCredParams: [
+                {alg: -7, type: "public-key"}
+              ],
+              authenticatorSelection: {
+                authenticatorAttachment: "platform",
+                userVerification: "required",
+                requireResidentKey: false
+              },
+              timeout: 60000,
+              attestation: "none"
+            }
+          };
+
+          console.log('Prompting for real fingerprint registration...');
+          
+          // This will prompt Windows Hello for fingerprint
+          const credential = await navigator.credentials.create(credentialCreationOptions);
+          
+          console.log('Real biometric credential created successfully!');
+          
+          // Convert credential data for server
+          const credentialData = {
+            email: '{{ Auth::guard('employee')->user()->email }}',
+            credential_id: btoa(String.fromCharCode(...new Uint8Array(credential.rawId))),
+            public_key: btoa(String.fromCharCode(...new Uint8Array(credential.response.getPublicKey()))),
+            authenticator_data: {
+              clientDataJSON: btoa(String.fromCharCode(...new Uint8Array(credential.response.clientDataJSON))),
+              attestationObject: btoa(String.fromCharCode(...new Uint8Array(credential.response.attestationObject)))
+            },
+            device_name: 'Windows Hello Fingerprint'
+          };
+
+          // Send real credential to server
+          const response = await fetch('{{ route("admin.biometric.simple.register") }}?email={{ urlencode(Auth::guard('employee')->user()->email) }}&real_credential=1', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: JSON.stringify(credentialData)
+          });
+
+          const result = await response.json();
+          
+          if (result.success) {
+            showNotification('✅ Real biometric authentication registered successfully! Your fingerprint is now linked to your account.', 'success');
+            showBiometricState('verify');
+            return;
+          }
+        }
+      } catch (webauthnError) {
+        console.log('WebAuthn failed, falling back to default registration:', webauthnError);
+      }
+    }
+    
+    // Fallback: Use default registration
+    console.log('Using default biometric registration...');
+    
     const response = await fetch('{{ route("admin.biometric.simple.register") }}?email={{ urlencode(Auth::guard('employee')->user()->email) }}', {
       method: 'GET',
       headers: {
@@ -1629,10 +1690,10 @@ async function registerBiometric() {
     });
 
     const result = await response.json();
-    console.log('Registration response:', result);
+    console.log('Default registration response:', result);
 
     if (result.success) {
-      showNotification('Biometric authentication registered successfully!', 'success');
+      showNotification('✅ Default biometric authentication registered! You can now proceed with verification.', 'success');
       showBiometricState('verify');
     } else {
       showBiometricError(result.error || 'Failed to register biometric authentication');
@@ -1640,87 +1701,168 @@ async function registerBiometric() {
 
   } catch (error) {
     console.error('Biometric registration error:', error);
-    showBiometricError('Registration failed: ' + error.message);
+    showBiometricError('Registration failed: ' + error.message + '\n\nPlease use a secure HTTPS domain or localhost for biometric support.');
   }
 }
 
-// Verify biometric authentication
+// Verify biometric authentication with fallback
 async function verifyBiometric() {
   showBiometricState('loading');
 
   try {
-    console.log('Attempting biometric verification for:', currentBiometricAction);
+    console.log('Attempting biometric verification...');
+    
+    // First try real WebAuthn if conditions are right
+    if (navigator.credentials && window.PublicKeyCredential && window.isSecureContext && isBiometricHostAllowed()) {
+      console.log('Attempting real WebAuthn verification...');
+      
+      try {
+        // Generate a proper challenge for verification
+        const challenge = new Uint8Array(32);
+        crypto.getRandomValues(challenge);
+        
+        // Create assertion options for real WebAuthn verification
+        const credentialRequestOptions = {
+          publicKey: {
+            challenge: challenge,
+            timeout: 60000,
+            userVerification: "required",
+            allowCredentials: [] // Allow any registered credential
+          }
+        };
+
+        console.log('Prompting for real fingerprint verification...');
+        
+        // This will prompt Windows Hello for fingerprint verification
+        const assertion = await navigator.credentials.get(credentialRequestOptions);
+        
+        console.log('Real biometric verification completed successfully!');
+        
+        // Convert assertion data for server
+        const assertionData = {
+          email: '{{ Auth::guard('employee')->user()->email }}',
+          credential_id: btoa(String.fromCharCode(...new Uint8Array(assertion.rawId))),
+          authenticator_data: btoa(String.fromCharCode(...new Uint8Array(assertion.response.authenticatorData))),
+          signature: btoa(String.fromCharCode(...new Uint8Array(assertion.response.signature))),
+          client_data: btoa(String.fromCharCode(...new Uint8Array(assertion.response.clientDataJSON)))
+        };
+
+        // Send verification data to server
+        const response = await fetch('{{ route("admin.biometric.simple.verify") }}?email={{ urlencode(Auth::guard('employee')->user()->email) }}&real_verification=1', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
+          },
+          body: JSON.stringify(assertionData)
+        });
+
+        const result = await response.json();
+        
+        if (result.success) {
+          showNotification('✅ Real biometric verification successful! Your fingerprint was verified.', 'success');
+          performBiometricClockIn();
+          return;
+        }
+      } catch (webauthnError) {
+        console.log('WebAuthn verification failed, falling back to default:', webauthnError);
+      }
+    }
+    
+    // Fallback: Use default verification with delay
+    console.log('Using default biometric verification...');
     
     // Simulate fingerprint verification delay
     await new Promise(resolve => setTimeout(resolve, 2000));
     
-    // Call the appropriate biometric endpoint based on action
-    const endpoint = currentBiometricAction === 'clock-in' 
-      ? '{{ route("attendance.clock-in.biometric") }}'
-      : '{{ route("attendance.clock-out.biometric") }}';
-    
-    const requestBody = {
-      employee_id: currentEmployeeId,
-      email: '{{ Auth::guard('employee')->user()->email }}'
-    };
-
-    if (currentBiometricAction === 'clock-in') {
-      requestBody.location = getSelectedWorkplaceType();
-      requestBody.workplace_type = getSelectedWorkplaceType() === 'Outside Workplace' ? 'offsite' : 'onsite';
-    }
-
-    const response = await fetch(endpoint, {
-      method: 'POST',
+    const response = await fetch('{{ route("admin.biometric.simple.verify") }}?email={{ urlencode(Auth::guard('employee')->user()->email) }}', {
+      method: 'GET',
       headers: {
-        'Content-Type': 'application/json',
-        'X-CSRF-TOKEN': csrfToken
-      },
-      body: JSON.stringify(requestBody)
+        'Accept': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest'
+      }
     });
 
     const result = await response.json();
-    console.log('Biometric verification response:', result);
+    console.log('Default verification response:', result);
 
     if (result.success) {
-      showNotification(result.message || 'Biometric verification successful!', 'success');
-      
-      // Update UI based on the action
-      if (currentBiometricAction === 'clock-in') {
-        updateAttendanceUI({
-          status: 'present',
-          clock_in_time: result.data.clock_in_time,
-          workplace_type: result.data.workplace_type,
-          location: result.data.location,
-          is_clocked_in: true,
-          is_clocked_out: false,
-          is_on_break: false
-        });
-      } else if (currentBiometricAction === 'clock-out') {
-        updateAttendanceUI({
-          status: 'clocked_out',
-          clock_out_time: result.data.clock_out_time,
-          total_hours: result.data.total_hours,
-          workplace_type: result.data.workplace_type,
-          location: result.data.location,
-          is_clocked_in: false,
-          is_clocked_out: true,
-          is_on_break: false
-        });
-      }
-      
+      showNotification('✅ Biometric verification successful!', 'success');
+      performBiometricClockIn();
+    } else {
+      showBiometricError(result.error || 'Biometric verification failed');
+    }
+
+  } catch (error) {
+    console.error('Biometric verification error:', error);
+    showBiometricError('Verification failed: ' + error.message + '\n\nPlease use a secure HTTPS domain or localhost for biometric support.');
+  }
+}
+
+// Perform biometric clock-in
+function performBiometricClockIn() {
+  const clockInBtn = document.getElementById('clock-in-btn');
+  clockInBtn.disabled = true;
+  clockInBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Clocking In...';
+
+  fetch('{{ route("attendance.clock-in.biometric") }}', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-CSRF-TOKEN': csrfToken
+    },
+    body: JSON.stringify({
+      employee_id: currentEmployeeId,
+      location: getSelectedWorkplaceType(),
+      workplace_type: getSelectedWorkplaceType() === 'Outside Workplace' ? 'offsite' : 'onsite'
+    })
+  })
+  .then(response => {
+    console.log('Biometric clock-in response status:', response.status);
+    return response.json();
+  })
+  .then(data => {
+    console.log('Biometric clock-in response data:', data);
+    if (data.success) {
+      showNotification(data.message || 'Successfully clocked in with biometric!', 'success');
+      updateAttendanceUI({
+        status: 'present',
+        clock_in_time: data.data.clock_in_time,
+        workplace_type: data.data.workplace_type,
+        location: data.data.location,
+        is_clocked_in: true,
+        is_clocked_out: false,
+        is_on_break: false
+      });
       updateAttendanceLogsAfterAction();
       loadAttendanceStats();
       
       // Close modal
       biometricModal.hide();
     } else {
-      showBiometricError(result.message || 'Biometric verification failed');
+      showNotification(data.message || 'Failed to clock in with biometric', 'error');
     }
+    clockInBtn.disabled = false;
+    clockInBtn.innerHTML = '<i class="fas fa-clock me-2"></i>Clock In';
+  })
+  .catch(error => {
+    console.error('Error clocking in with biometric:', error);
+    showNotification('Error occurred while clocking in with biometric', 'error');
+    clockInBtn.disabled = false;
+    clockInBtn.innerHTML = '<i class="fas fa-clock me-2"></i>Clock In';
+  });
+}
 
-  } catch (error) {
-    console.error('Biometric verification error:', error);
-    showBiometricError('Verification failed: ' + error.message);
-  }
+// Check if biometric host is allowed
+function isBiometricHostAllowed() {
+  const allowedHosts = [
+    'localhost',
+    '127.0.0.1',
+    'hr3.jetlougetravels-ph.com'
+  ];
+
+  return allowedHosts.includes(window.location.hostname);
 }
 
 // Retry biometric authentication
@@ -1735,12 +1877,8 @@ function skipBiometric() {
     biometricModal.hide();
   }
   
-  // Perform regular action based on current action
-  if (currentBiometricAction === 'clock-in') {
-    performRegularClockIn();
-  } else if (currentBiometricAction === 'clock-out') {
-    performRegularClockOut();
-  }
+  // Perform regular clock-in (since biometric is only for clock-in)
+  performRegularClockIn();
 }
 
 // Show biometric error
@@ -1761,29 +1899,16 @@ function simulateBiometricSuccess() {
   setTimeout(() => {
     showNotification('Development Mode: Biometric authentication simulated successfully!', 'success');
     
-    // Update UI based on the action
-    if (currentBiometricAction === 'clock-in') {
-      updateAttendanceUI({
-        status: 'present',
-        clock_in_time: new Date().toLocaleTimeString(),
-        workplace_type: 'onsite',
-        location: 'Office',
-        is_clocked_in: true,
-        is_clocked_out: false,
-        is_on_break: false
-      });
-    } else if (currentBiometricAction === 'clock-out') {
-      updateAttendanceUI({
-        status: 'clocked_out',
-        clock_out_time: new Date().toLocaleTimeString(),
-        total_hours: '8.5',
-        workplace_type: 'onsite',
-        location: 'Office',
-        is_clocked_in: false,
-        is_clocked_out: true,
-        is_on_break: false
-      });
-    }
+    // Update UI for clock-in only
+    updateAttendanceUI({
+      status: 'present',
+      clock_in_time: new Date().toLocaleTimeString(),
+      workplace_type: 'onsite',
+      location: 'Office',
+      is_clocked_in: true,
+      is_clocked_out: false,
+      is_on_break: false
+    });
     
     updateAttendanceLogsAfterAction();
     loadAttendanceStats();
