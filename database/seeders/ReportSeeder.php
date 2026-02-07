@@ -32,18 +32,6 @@ class ReportSeeder extends Seeder
         ]);
 
         Report::create([
-            'title' => 'Payroll Cost Breakdown',
-            'category' => 'Payroll',
-            'period_start' => $now->copy()->subMonths(2)->startOfMonth(),
-            'period_end' => $now->copy()->subMonths(1)->endOfMonth(),
-            'status' => 'generated',
-            'generated_by' => 'Finance Lead',
-            'generated_at' => $now->copy()->subDays(5),
-            'summary' => 'Monthly payroll totals, overtime distribution, and department cost analysis.',
-            'total_records' => 96
-        ]);
-
-        Report::create([
             'title' => 'Leave Utilization Snapshot',
             'category' => 'Leave',
             'period_start' => $now->copy()->startOfMonth(),

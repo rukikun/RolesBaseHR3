@@ -126,15 +126,7 @@
                                                     </label>
                                                 </div>
                                             </div>
-                                            <div class="form-group">
-                                                <div class="form-check">
-                                                    <input class="form-check-input" type="checkbox" name="email_payroll" id="emailPayroll">
-                                                    <label class="form-check-label" for="emailPayroll">
-                                                        Payroll Notifications
-                                                    </label>
-                                                </div>
-                                            </div>
-                                        </div>
+                                                                                    </div>
                                         <div class="col-md-6">
                                             <h6 class="form-subsection-title">System Notifications</h6>
                                             <div class="form-group">

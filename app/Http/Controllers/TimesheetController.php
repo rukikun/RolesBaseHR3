@@ -9,8 +9,6 @@ use Carbon\Carbon;
 use App\Models\AIGeneratedTimesheet;
 use App\Models\MonthlyTimesheet;
 use App\Models\Attendance;
-use App\Models\Employee;
-use App\Models\PayrollItem;
 
 class TimesheetController extends Controller
 {
@@ -1399,76 +1397,6 @@ class TimesheetController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Error rejecting timesheet: ' . $e->getMessage()
-            ], 500);
-        }
-    }
-
-    public function sendToPayroll($id)
-    {
-        try {
-            // Find the AI generated timesheet
-            $aiTimesheet = AIGeneratedTimesheet::findOrFail($id);
-            
-            // Check if timesheet is approved
-            if ($aiTimesheet->status !== 'approved') {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Only approved timesheets can be sent to payroll'
-                ], 400);
-            }
-            
-            // Check if payroll item already exists for this timesheet
-            $existingPayroll = PayrollItem::where('timesheet_id', $id)->first();
-            if ($existingPayroll) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Payroll item already exists for this timesheet'
-                ], 400);
-            }
-            
-            // Calculate payroll amounts
-            $regularRate = 500.00; // PHP 500 per hour (from migration default)
-            $overtimeRate = 750.00; // PHP 750 per hour (1.5x rate)
-            
-            $regularAmount = $aiTimesheet->total_hours * $regularRate;
-            $overtimeAmount = $aiTimesheet->overtime_hours * $overtimeRate;
-            $totalAmount = $regularAmount + $overtimeAmount;
-            
-            // Create payroll item
-            $payrollItem = PayrollItem::create([
-                'timesheet_id' => $aiTimesheet->id,
-                'employee_id' => $aiTimesheet->employee_id,
-                'employee_name' => $aiTimesheet->employee_name,
-                'department' => $aiTimesheet->department,
-                'week_period' => Carbon::parse($aiTimesheet->week_start_date)->format('M d') . ' - ' . 
-                               Carbon::parse($aiTimesheet->week_start_date)->endOfWeek()->format('M d, Y'),
-                'week_start_date' => $aiTimesheet->week_start_date,
-                'total_hours' => $aiTimesheet->total_hours,
-                'overtime_hours' => $aiTimesheet->overtime_hours,
-                'regular_rate' => $regularRate,
-                'overtime_rate' => $overtimeRate,
-                'regular_amount' => $regularAmount,
-                'overtime_amount' => $overtimeAmount,
-                'total_amount' => $totalAmount,
-                'status' => 'pending',
-                'timesheet_data' => $aiTimesheet->weekly_data
-            ]);
-            
-            // Update AI timesheet status
-            $aiTimesheet->update(['status' => 'sent_to_payroll']);
-            
-            return response()->json([
-                'success' => true,
-                'message' => 'Timesheet sent to payroll successfully',
-                'payroll_item_id' => $payrollItem->id,
-                'total_amount' => $payrollItem->formatted_total_amount
-            ]);
-            
-        } catch (\Exception $e) {
-            \Log::error('Send to Payroll Error: ' . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to send timesheet to payroll: ' . $e->getMessage()
             ], 500);
         }
     }

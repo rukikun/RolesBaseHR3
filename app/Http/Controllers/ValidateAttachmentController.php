@@ -97,7 +97,7 @@ class ValidateAttachmentController extends Controller
     }
 
     /**
-     * Validate attachment for a specific claim and send to payroll
+     * Validate attachment for a specific claim
      */
     public function validateAttachment($id)
     {
@@ -145,8 +145,8 @@ class ValidateAttachmentController extends Controller
                     'validated_by' => 1
                 ]);
 
-                return redirect()->route('payroll-management')
-                    ->with('success', 'Attachment validated successfully and sent to payroll management!');
+                return redirect()->route('validate-attachment')
+                    ->with('success', 'Attachment validated successfully!');
                     
             } catch (\Exception $e) {
                 // Fallback to raw PDO
@@ -195,8 +195,8 @@ class ValidateAttachmentController extends Controller
                 ");
                 $stmt->execute([$id]);
                 
-                return redirect()->route('payroll-management')
-                    ->with('success', 'Attachment validated successfully and sent to payroll management!');
+                return redirect()->route('validate-attachment')
+                    ->with('success', 'Attachment validated successfully!');
             }
             
         } catch (\Exception $e) {
@@ -207,27 +207,27 @@ class ValidateAttachmentController extends Controller
     }
 
     /**
-     * Mark claim as ready for payroll
+     * Mark claim as approved
      */
-    public function markForPayroll($id)
+    public function markAsApproved($id)
     {
         try {
             // Try Eloquent first
             try {
                 $claim = Claim::findOrFail($id);
                 
-                if ($claim->status !== 'approved') {
+                if ($claim->status !== 'validated') {
                     return redirect()->route('validate-attachment')
-                        ->with('error', 'Only approved claims can be marked for payroll.');
+                        ->with('error', 'Only validated claims can be marked as approved.');
                 }
 
                 $claim->update([
-                    'status' => 'ready_for_payroll',
+                    'status' => 'approved',
                     'updated_at' => now()
                 ]);
 
                 return redirect()->route('validate-attachment')
-                    ->with('success', 'Claim marked for payroll successfully!');
+                    ->with('success', 'Claim approved successfully!');
                     
             } catch (\Exception $e) {
                 // Fallback to raw PDO
@@ -236,19 +236,19 @@ class ValidateAttachmentController extends Controller
                 
                 $stmt = $pdo->prepare("
                     UPDATE claims 
-                    SET status = 'ready_for_payroll', updated_at = NOW() 
-                    WHERE id = ? AND status = 'approved'
+                    SET status = 'approved', updated_at = NOW() 
+                    WHERE id = ? AND status = 'validated'
                 ");
                 $stmt->execute([$id]);
                 
                 return redirect()->route('validate-attachment')
-                    ->with('success', 'Claim marked for payroll successfully!');
+                    ->with('success', 'Claim approved successfully!');
             }
             
         } catch (\Exception $e) {
-            Log::error('Mark for payroll error: ' . $e->getMessage());
+            Log::error('Mark as approved error: ' . $e->getMessage());
             return redirect()->route('validate-attachment')
-                ->with('error', 'Error marking claim for payroll: ' . $e->getMessage());
+                ->with('error', 'Error marking claim as approved: ' . $e->getMessage());
         }
     }
 

@@ -209,12 +209,7 @@
           </a>
         </div>
       </li>
-      <li class="nav-item">
-        <a href="{{ route('payroll-management') }}" class="nav-link text-dark {{ request()->routeIs('payroll-management') ? 'active' : '' }}">
-          <i class="fas fa-money-bill-wave me-2"></i> Payroll
-        </a>
-      </li>
-      <li class="nav-item">
+            <li class="nav-item">
         <a href="{{ route('reports.index') }}" class="nav-link text-dark {{ request()->routeIs('reports.*') ? 'active' : '' }}">
           <i class="fas fa-chart-line me-2"></i> Reports
         </a>

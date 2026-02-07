@@ -5956,8 +5956,6 @@ function getStatusBadge(status) {
             return '<span class="badge bg-success"><i class="fas fa-check me-1"></i>Approved</span>';
         case 'rejected':
             return '<span class="badge bg-danger"><i class="fas fa-times me-1"></i>Rejected</span>';
-        case 'sent_to_payroll':
-            return '<span class="badge bg-primary"><i class="fas fa-money-bill-wave me-1"></i>Sent to Payroll</span>';
         default:
             return '<span class="badge bg-secondary"><i class="fas fa-question me-1"></i>Unknown</span>';
     }
@@ -5981,30 +5979,15 @@ function getActionButtons(timesheetId, status) {
             </div>
         `;
     } else if (status === 'approved') {
-        // Show send to payroll and delete buttons for approved items
+        // Show delete button only for approved items
         return `
             <div class="btn-group" role="group">
-                <button class="btn btn-sm btn-outline-primary" data-timesheet-action="send_to_payroll" data-timesheet-id="${timesheetId}" onclick="sendToPayroll('${timesheetId}')" title="Send to Payroll">
-                    <i class="fas fa-money-bill-wave"></i>
-                </button>
                 <button class="btn btn-sm btn-outline-danger" data-timesheet-action="delete" data-timesheet-id="${timesheetId}" onclick="deleteTimesheet('${timesheetId}')" title="Delete">
                     <i class="fas fa-trash"></i>
                 </button>
             </div>
         `;
-    } else if (status === 'sent_to_payroll') {
-        // Show status indicator and delete button for items sent to payroll
-        return `
-            <div class="btn-group" role="group">
-                <span class="btn btn-sm btn-outline-secondary disabled" title="Already sent to payroll">
-                    <i class="fas fa-check-circle"></i>
-                </span>
-                <button class="btn btn-sm btn-outline-danger" data-timesheet-action="delete" data-timesheet-id="${timesheetId}" onclick="deleteTimesheet('${timesheetId}')" title="Delete">
-                    <i class="fas fa-trash"></i>
-                </button>
-            </div>
-        `;
-    } else {
+} else {
         // Show delete button for rejected items
         return `
             <div class="btn-group" role="group">
@@ -6024,8 +6007,7 @@ function showTimesheetAuthModal(action, timesheetId, extraData = {}) {
     const actionLabels = {
         approve: 'Approve Timesheet',
         reject: 'Reject Timesheet',
-        delete: 'Delete Timesheet',
-        send_to_payroll: 'Send to Payroll'
+        delete: 'Delete Timesheet'
     };
     const contextLabels = {
         shift: {
@@ -6101,9 +6083,6 @@ function executeTimesheetAuthAction(action, timesheetId, extraData = {}) {
             break;
         case 'delete':
             deleteTimesheet(timesheetId, { skipConfirm: true });
-            break;
-        case 'send_to_payroll':
-            sendToPayroll(timesheetId, { skipConfirm: true });
             break;
         default:
             console.warn('Unknown timesheet action:', action);
@@ -6325,72 +6304,6 @@ function populateSavedTimesheetModal(timesheet) {
     if (saveButton) {
         saveButton.style.display = 'none';
     }
-}
-
-// Send timesheet to payroll
-function sendToPayroll(timesheetId, options = {}) {
-    if (!options.skipConfirm && !confirm('Are you sure you want to send this timesheet to payroll? This will create a payroll entry for processing.')) {
-        return;
-    }
-    
-    const button = document.querySelector(`[data-timesheet-action="send_to_payroll"][data-timesheet-id="${timesheetId}"]`);
-    const originalText = button ? button.innerHTML : '';
-    if (button) {
-        button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-        button.disabled = true;
-    }
-    
-    // Get timesheet data from the saved timesheets
-    const timesheetData = getSavedTimesheetData(timesheetId);
-    
-    if (!timesheetData) {
-        if (button) {
-            button.innerHTML = originalText;
-            button.disabled = false;
-        }
-        showAlert('error', 'Unable to find timesheet data. Please try again.');
-        return;
-    }
-    
-    fetch('/payroll/send-to-payroll', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
-            'Accept': 'application/json'
-        },
-        body: JSON.stringify({
-            timesheet_id: timesheetId
-        })
-    })
-    .then(response => {
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-        return response.json();
-    })
-    .then(data => {
-        if (button) {
-            button.innerHTML = originalText;
-            button.disabled = false;
-        }
-        
-        if (data.success) {
-            showAlert('success', `Timesheet sent to payroll successfully! Payroll ID: ${data.payroll_item_id}`);
-            refreshSavedTimesheets();
-            refreshStatisticsAfterAction();
-        } else {
-            showAlert('error', 'Failed to send to payroll: ' + data.message);
-        }
-    })
-    .catch(error => {
-        console.error('Error sending to payroll:', error);
-        if (button) {
-            button.innerHTML = originalText;
-            button.disabled = false;
-        }
-        showAlert('error', 'Failed to send to payroll: ' + error.message);
-    });
 }
 
 // Helper function to get saved timesheet data

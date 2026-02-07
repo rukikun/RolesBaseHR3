@@ -226,18 +226,9 @@ class SettingsController extends Controller
             'auto_clock_out' => false,
             'weekend_overtime' => false,
 
-            // Payroll Settings
-            'pay_period' => 'monthly',
-            'currency' => 'PHP',
-            'overtime_rate' => 1.5,
-            'holiday_rate' => 2.0,
-            'night_differential' => 10,
-            'auto_payroll' => false,
-
             // Notification Settings
             'email_attendance' => true,
             'email_leave' => true,
-            'email_payroll' => false,
             'system_alerts' => true,
             'maintenance_notices' => true,
             'notification_frequency' => 'immediate',

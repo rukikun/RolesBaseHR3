@@ -48,7 +48,7 @@ use Illuminate\Support\Str;
               <label class="form-label">Category</label>
               <select name="category" class="form-select" required>
                 <option value="" disabled {{ old('category') ? '' : 'selected' }}>Select category</option>
-                @foreach(['Attendance', 'Payroll', 'Leave', 'Performance', 'Compliance', 'Operations'] as $category)
+                @foreach(['Attendance', 'Leave', 'Performance', 'Compliance', 'Operations'] as $category)
                   <option value="{{ $category }}" {{ old('category') === $category ? 'selected' : '' }}>{{ $category }}</option>
                 @endforeach
               </select>
@@ -97,7 +97,7 @@ use Illuminate\Support\Str;
               <label class="form-label">Category</label>
               <select name="category" class="form-select" required>
                 <option value="" disabled>Select category</option>
-                @foreach(['Attendance', 'Payroll', 'Leave', 'Performance', 'Compliance', 'Operations'] as $category)
+                @foreach(['Attendance', 'Leave', 'Performance', 'Compliance', 'Operations'] as $category)
                   <option value="{{ $category }}">{{ $category }}</option>
                 @endforeach
               </select>

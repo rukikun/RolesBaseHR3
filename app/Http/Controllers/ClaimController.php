@@ -891,34 +891,6 @@ class ClaimController extends Controller
         }
     }
 
-    // Forward to payroll (mark as paid)
-    public function forwardToPayroll(Request $request)
-    {
-        try {
-            $approvedClaims = Claim::where('status', 'approved')->get();
-            $forwarded = 0;
-
-            foreach ($approvedClaims as $claim) {
-                $claim->update([
-                    'status' => 'paid',
-                    'paid_at' => now()
-                ]);
-                $forwarded++;
-            }
-
-            return response()->json([
-                'success' => true,
-                'message' => "{$forwarded} approved claims forwarded to payroll",
-                'data' => ['forwarded_count' => $forwarded]
-            ]);
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Error forwarding to payroll: ' . $e->getMessage()
-            ], 500);
-        }
-    }
-
     // Web-based methods for server-side handling
     public function storeWeb(Request $request)
     {

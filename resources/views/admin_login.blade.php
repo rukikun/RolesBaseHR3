@@ -38,7 +38,7 @@
               <h2 class="welcome-text">Welcome Back!</h2>
               <p class="welcome-subtitle">
                 Access your HR management dashboard to monitor employee attendance,
-                process payroll, and streamline your HR operations.
+                and streamline your HR operations.
               </p>
 
               <ul class="feature-list">
@@ -48,7 +48,7 @@
                 </li>
                 <li>
                   <i class="bi bi-check"></i>
-                  <span>Payroll processing</span>
+                  <span>Leave management</span>
                 </li>
                 <li>
                   <i class="bi bi-check"></i>

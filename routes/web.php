@@ -11,7 +11,6 @@ use App\Http\Controllers\ClaimControllerFixed;
 use App\Http\Controllers\ClaimControllerSimple;
 use App\Http\Controllers\ClaimsReimbursementController;
 use App\Http\Controllers\ValidateAttachmentController;
-use App\Http\Controllers\PayrollController;
 use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\EmployeesController;
 use App\Http\Controllers\LeaveController;
@@ -381,17 +380,6 @@ Route::middleware('web.or.employee')->group(function () {
     Route::get('/timesheet-management/monthly-export-all', [TimesheetController::class, 'exportMonthlyTimesheetsAll'])
         ->name('timesheet.monthly.export.all');
     
-    // Payroll Management Routes
-    Route::get('/payroll-management', [PayrollController::class, 'index'])->name('payroll-management');
-    Route::get('/payroll-management/export', [PayrollController::class, 'exportPayroll'])->name('payroll.export');
-    Route::post('/payroll/send-to-payroll', [PayrollController::class, 'sendToPayroll'])->name('payroll.send');
-    Route::patch('/payroll/{id}/process', [PayrollController::class, 'process'])->name('payroll.process');
-    Route::patch('/payroll/{id}/mark-paid', [PayrollController::class, 'markPaid'])->name('payroll.mark-paid');
-    Route::delete('/payroll/{id}', [PayrollController::class, 'destroy'])->name('payroll.destroy');
-    Route::patch('/payroll/attachment/{id}/process', [PayrollController::class, 'processAttachment'])->name('payroll.process-attachment');
-    Route::patch('/payroll/attachment/{id}/mark-paid', [PayrollController::class, 'markAttachmentPaid'])->name('payroll.mark-attachment-paid');
-    Route::delete('/payroll/attachment/{id}', [PayrollController::class, 'deleteAttachment'])->name('payroll.delete-attachment');
-    
     Route::get('/attendance-management', [AttendanceController::class, 'index'])->name('attendance-management');
     
     Route::get('/leave-management', [LeaveController::class, 'index'])->name('leave-management');
@@ -403,7 +391,7 @@ Route::middleware('web.or.employee')->group(function () {
     // Validate Attachment Routes
     Route::get('/validate-attachment', [ValidateAttachmentController::class, 'index'])->name('validate-attachment');
     Route::patch('/validate-attachment/{id}/validate', [ValidateAttachmentController::class, 'validateAttachment'])->name('validate-attachment.validate');
-    Route::patch('/validate-attachment/{id}/payroll', [ValidateAttachmentController::class, 'markForPayroll'])->name('validate-attachment.payroll');
+    Route::patch('/validate-attachment/{id}/approve', [ValidateAttachmentController::class, 'markAsApproved'])->name('validate-attachment.approve');
     Route::delete('/validate-attachment/{id}', [ValidateAttachmentController::class, 'destroy'])->name('validate-attachment.delete');
     
     // Settings Routes
@@ -950,36 +938,6 @@ Route::get('/test-final-attachment', function() {
     }
 })->name('test.final.attachment');
 
-// Test route to create sample payroll data
-Route::get('/create-sample-payroll', function() {
-    try {
-        // Create sample payroll entries directly in database
-        $pdo = new \PDO('mysql:host=localhost;dbname=hr3systemdb', 'root', '');
-        $pdo->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
-        
-        // Ensure we have employees
-        $stmt = $pdo->query("SELECT COUNT(*) FROM employees");
-        if ($stmt->fetchColumn() == 0) {
-            $pdo->exec("INSERT IGNORE INTO employees (id, first_name, last_name, email, status, created_at, updated_at) VALUES
-                (1, 'Super', 'Admin', 'admin@example.com', 'active', NOW(), NOW()),
-                (2, 'Jane', 'Smith', 'jane@example.com', 'active', NOW(), NOW())");
-        }
-        
-        // Create sample payroll entries
-        $pdo->exec("DELETE FROM payroll WHERE id IN (1, 2, 3)"); // Clear existing test data
-        $pdo->exec("INSERT INTO payroll (id, employee_id, department, week_period, total_hours, overtime_hours, hourly_rate, overtime_rate, regular_amount, overtime_amount, total_amount, status, created_at, updated_at) VALUES
-            (1, 1, 'IT', 'Oct 06 - Oct 12, 2025', 40.00, 8.00, 25.00, 37.50, 1000.00, 300.00, 1300.00, 'pending', NOW(), NOW()),
-            (2, 2, 'Human Resources', 'Oct 06 - Oct 12, 2025', 40.00, 0.00, 25.00, 37.50, 1000.00, 0.00, 1000.00, 'processed', NOW(), NOW()),
-            (3, 1, 'IT', 'Sep 29 - Oct 05, 2025', 35.00, 5.00, 25.00, 37.50, 875.00, 187.50, 1062.50, 'paid', NOW(), NOW())");
-            
-        return "✅ Sample payroll data created successfully!<br>" .
-               "<a href='/payroll-management'>Go to Payroll Management</a><br>" .
-               "<a href='/timesheet-management'>Go to Timesheet Management</a>";
-               
-    } catch (\Exception $e) {
-        return "❌ Error creating sample payroll data: " . $e->getMessage();
-    }
-})->name('create.sample.payroll');
 
 // Test route to create sample validated attachments
 Route::get('/create-sample-validated-attachments', function() {
@@ -1004,7 +962,6 @@ Route::get('/create-sample-validated-attachments', function() {
             (3, 3, 1, 'Super Admin', 'Travel Expense', 75.50, '2025-10-05', 'Transportation cost for client visit', 'receipts/sample_receipt.svg', 'processed', NOW(), 1, NOW(), NOW())");
             
         return "✅ Sample validated attachments created successfully!<br>" .
-               "<a href='/payroll-management'>Go to Payroll Management</a><br>" .
                "<a href='/validate-attachment'>Go to Validate Attachment</a>";
                
     } catch (\Exception $e) {
@@ -1012,71 +969,6 @@ Route::get('/create-sample-validated-attachments', function() {
     }
 })->name('create.sample.validated.attachments');
 
-// Test complete payroll functionality
-Route::get('/test-payroll-system', function() {
-    try {
-        $output = "<h2>🧪 Testing Complete Payroll System</h2>";
-        
-        // Check payroll entries
-        $payrollCount = 0;
-        $pendingCount = 0;
-        $processedCount = 0;
-        
-        try {
-            $payrollCount = \App\Models\Payroll::count();
-            $pendingCount = \App\Models\Payroll::where('status', 'pending')->count();
-            $processedCount = \App\Models\Payroll::where('status', 'processed')->count();
-        } catch (\Exception $e) {
-            // Fallback to raw query
-            $pdo = new \PDO('mysql:host=localhost;dbname=hr3systemdb', 'root', '');
-            $stmt = $pdo->query("SELECT COUNT(*) FROM payroll");
-            $payrollCount = $stmt->fetchColumn();
-            
-            $stmt = $pdo->query("SELECT COUNT(*) FROM payroll WHERE status = 'pending'");
-            $pendingCount = $stmt->fetchColumn();
-            
-            $stmt = $pdo->query("SELECT COUNT(*) FROM payroll WHERE status = 'processed'");
-            $processedCount = $stmt->fetchColumn();
-        }
-        
-        $output .= "<h3>📊 Current Payroll Status:</h3>";
-        $output .= "<p>Total Payroll Entries: {$payrollCount}</p>";
-        $output .= "<p>Pending: {$pendingCount}</p>";
-        $output .= "<p>Processed: {$processedCount}</p>";
-        
-        $output .= "<h3>🔗 Test Links:</h3>";
-        $output .= "<p><a href='/payroll-management' target='_blank' style='background: #28a745; color: white; padding: 10px 15px; text-decoration: none; border-radius: 5px; margin-right: 10px;'>💰 Payroll Management</a></p>";
-        $output .= "<p><a href='/timesheet-management' target='_blank' style='background: #007bff; color: white; padding: 10px 15px; text-decoration: none; border-radius: 5px; margin-right: 10px;'>⏰ Timesheet Management</a></p>";
-        
-        $output .= "<h3>📝 Testing Instructions:</h3>";
-        $output .= "<ol>";
-        $output .= "<li>Go to <strong>Timesheet Management</strong> and look for approved timesheets</li>";
-        $output .= "<li>Click the <strong>Send to Payroll</strong> button (💰 icon) in the Actions column</li>";
-        $output .= "<li>Go to <strong>Payroll Management</strong> to see the new payroll entry</li>";
-        $output .= "<li>In Payroll Management, you can:</li>";
-        $output .= "<ul>";
-        $output .= "<li>View payroll details</li>";
-        $output .= "<li>Process pending payroll items</li>";
-        $output .= "<li>Mark processed items as paid</li>";
-        $output .= "<li>Filter by status</li>";
-        $output .= "</ul>";
-        $output .= "</ol>";
-        
-        $output .= "<h3>✨ Features Available:</h3>";
-        $output .= "<ul>";
-        $output .= "<li><strong>Sidebar Navigation:</strong> Payroll Management added to sidebar</li>";
-        $output .= "<li><strong>Send to Payroll:</strong> Button in timesheet actions</li>";
-        $output .= "<li><strong>Payroll Dashboard:</strong> Statistics and overview</li>";
-        $output .= "<li><strong>Process Workflow:</strong> Pending → Processed → Paid</li>";
-        $output .= "<li><strong>Data Integration:</strong> Links timesheets to payroll</li>";
-        $output .= "</ul>";
-        
-        return $output;
-        
-    } catch (\Exception $e) {
-        return "❌ Error: " . $e->getMessage();
-    }
-})->name('test.payroll.system');
 
 // Direct database test route
 Route::get('/test-db', [SystemTestController::class, 'testDb']);
@@ -1088,37 +980,6 @@ Route::get('/populate-dashboard', [DataSeederController::class, 'populateDashboa
 Route::get('/debug-shifts', [SystemDebugController::class, 'debugShifts'])->name('debug.shifts');
 
 
-// Quick test route to verify send to payroll functionality
-Route::get('/test-send-to-payroll', function() {
-    try {
-        // Get an approved timesheet
-        $approvedTimesheet = \App\Models\AIGeneratedTimesheet::where('status', 'approved')->first();
-        
-        if (!$approvedTimesheet) {
-            return "❌ No approved timesheets found. Please create and approve a timesheet first.<br>" .
-                   "<a href='/timesheet-management'>Go to Timesheet Management</a>";
-        }
-        
-        // Test the send to payroll functionality
-        $controller = new \App\Http\Controllers\TimesheetController();
-        $response = $controller->sendToPayroll($approvedTimesheet->id);
-        $data = json_decode($response->getContent(), true);
-        
-        if ($data['success']) {
-            return "✅ Send to Payroll Test Successful!<br>" .
-                   "Timesheet ID: {$approvedTimesheet->id}<br>" .
-                   "Payroll Item ID: {$data['payroll_item_id']}<br>" .
-                   "Total Amount: {$data['total_amount']}<br><br>" .
-                   "<a href='/payroll-management'>Check Payroll Management</a><br>" .
-                   "<a href='/timesheet-management'>Back to Timesheet Management</a>";
-        } else {
-            return "❌ Send to Payroll Failed: " . $data['message'];
-        }
-        
-    } catch (\Exception $e) {
-        return "❌ Error: " . $e->getMessage();
-    }
-})->name('test.send.to.payroll');
 
 // Test route to create sample shift data
 Route::get('/create-sample-shifts', [DataSeederController::class, 'createSampleShifts'])->name('create.sample.shifts');

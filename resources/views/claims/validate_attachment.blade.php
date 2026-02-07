@@ -179,7 +179,7 @@ $pendingValidation = $pendingValidation ?? 0;
                   $status = $claim->status ?? 'approved';
                   $badgeClass = match($status) {
                     'approved' => 'success',
-                    'ready_for_payroll' => 'info',
+                    'validated' => 'info',
                     'paid' => 'primary',
                     default => 'secondary'
                   };
@@ -208,7 +208,7 @@ $pendingValidation = $pendingValidation ?? 0;
                     @endphp
                     
                     @if(!$isValidated)
-                      <form method="POST" action="{{ route('validate-attachment.validate', $claim->id) }}" style="display: inline;" onsubmit="return confirm('Are you sure you want to validate this attachment and send to payroll?')">
+                      <form method="POST" action="{{ route('validate-attachment.validate', $claim->id) }}" style="display: inline;" onsubmit="return confirm('Are you sure you want to validate this attachment?')">
                         @csrf
                         @method('PATCH')
                         <button type="submit" class="btn btn-sm btn-outline-success" title="Validate Attachment">
