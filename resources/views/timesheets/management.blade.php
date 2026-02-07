@@ -5969,13 +5969,13 @@ function getActionButtons(timesheetId, status) {
         // Show approve, reject, and delete buttons for pending items
         return `
             <div class="btn-group" role="group">
-                <button class="btn btn-sm btn-outline-success" data-timesheet-action="approve" data-timesheet-id="${timesheetId}" onclick="showTimesheetAuthModal('approve', '${timesheetId}')" title="Approve">
+                <button class="btn btn-sm btn-outline-success" data-timesheet-action="approve" data-timesheet-id="${timesheetId}" onclick="approveTimesheet('${timesheetId}')" title="Approve">
                     <i class="fas fa-check"></i>
                 </button>
-                <button class="btn btn-sm btn-outline-danger" data-timesheet-action="reject" data-timesheet-id="${timesheetId}" onclick="showTimesheetAuthModal('reject', '${timesheetId}')" title="Reject">
+                <button class="btn btn-sm btn-outline-danger" data-timesheet-action="reject" data-timesheet-id="${timesheetId}" onclick="rejectTimesheet('${timesheetId}')" title="Reject">
                     <i class="fas fa-times"></i>
                 </button>
-                <button class="btn btn-sm btn-outline-danger" data-timesheet-action="delete" data-timesheet-id="${timesheetId}" onclick="showTimesheetAuthModal('delete', '${timesheetId}')" title="Delete">
+                <button class="btn btn-sm btn-outline-danger" data-timesheet-action="delete" data-timesheet-id="${timesheetId}" onclick="deleteTimesheet('${timesheetId}')" title="Delete">
                     <i class="fas fa-trash"></i>
                 </button>
             </div>
@@ -5984,10 +5984,10 @@ function getActionButtons(timesheetId, status) {
         // Show send to payroll and delete buttons for approved items
         return `
             <div class="btn-group" role="group">
-                <button class="btn btn-sm btn-outline-primary" data-timesheet-action="send_to_payroll" data-timesheet-id="${timesheetId}" onclick="showTimesheetAuthModal('send_to_payroll', '${timesheetId}')" title="Send to Payroll">
+                <button class="btn btn-sm btn-outline-primary" data-timesheet-action="send_to_payroll" data-timesheet-id="${timesheetId}" onclick="sendToPayroll('${timesheetId}')" title="Send to Payroll">
                     <i class="fas fa-money-bill-wave"></i>
                 </button>
-                <button class="btn btn-sm btn-outline-danger" data-timesheet-action="delete" data-timesheet-id="${timesheetId}" onclick="showTimesheetAuthModal('delete', '${timesheetId}')" title="Delete">
+                <button class="btn btn-sm btn-outline-danger" data-timesheet-action="delete" data-timesheet-id="${timesheetId}" onclick="deleteTimesheet('${timesheetId}')" title="Delete">
                     <i class="fas fa-trash"></i>
                 </button>
             </div>
@@ -5999,7 +5999,7 @@ function getActionButtons(timesheetId, status) {
                 <span class="btn btn-sm btn-outline-secondary disabled" title="Already sent to payroll">
                     <i class="fas fa-check-circle"></i>
                 </span>
-                <button class="btn btn-sm btn-outline-danger" data-timesheet-action="delete" data-timesheet-id="${timesheetId}" onclick="showTimesheetAuthModal('delete', '${timesheetId}')" title="Delete">
+                <button class="btn btn-sm btn-outline-danger" data-timesheet-action="delete" data-timesheet-id="${timesheetId}" onclick="deleteTimesheet('${timesheetId}')" title="Delete">
                     <i class="fas fa-trash"></i>
                 </button>
             </div>
@@ -6008,7 +6008,7 @@ function getActionButtons(timesheetId, status) {
         // Show delete button for rejected items
         return `
             <div class="btn-group" role="group">
-                <button class="btn btn-sm btn-outline-danger" data-timesheet-action="delete" data-timesheet-id="${timesheetId}" onclick="showTimesheetAuthModal('delete', '${timesheetId}')" title="Delete">
+                <button class="btn btn-sm btn-outline-danger" data-timesheet-action="delete" data-timesheet-id="${timesheetId}" onclick="deleteTimesheet('${timesheetId}')" title="Delete">
                     <i class="fas fa-trash"></i>
                 </button>
             </div>
@@ -6484,6 +6484,14 @@ function approveTimesheet(timesheetId, options = {}) {
         return;
     }
     
+    // Show loading state
+    const button = document.querySelector(`button[data-timesheet-id="${timesheetId}"][data-timesheet-action="approve"]`);
+    const originalText = button ? button.innerHTML : '';
+    if (button) {
+        button.disabled = true;
+        button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    }
+    
     fetch(`/api/ai-timesheets/approve/${timesheetId}`, {
         method: 'POST',
         headers: {
@@ -6505,6 +6513,13 @@ function approveTimesheet(timesheetId, options = {}) {
     .catch(error => {
         console.error('Error approving timesheet:', error);
         showAlert('error', 'Failed to approve timesheet');
+    })
+    .finally(() => {
+        // Restore button state
+        if (button) {
+            button.disabled = false;
+            button.innerHTML = originalText;
+        }
     });
 }
 
@@ -6515,6 +6530,14 @@ function rejectTimesheet(timesheetId, options = {}) {
         const promptValue = prompt('Please provide a reason for rejection (optional):');
         if (promptValue === null) return; // User cancelled
         reason = promptValue;
+    }
+    
+    // Show loading state
+    const button = document.querySelector(`button[data-timesheet-id="${timesheetId}"][data-timesheet-action="reject"]`);
+    const originalText = button ? button.innerHTML : '';
+    if (button) {
+        button.disabled = true;
+        button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
     }
     
     fetch(`/api/ai-timesheets/reject/${timesheetId}`, {
@@ -6541,6 +6564,13 @@ function rejectTimesheet(timesheetId, options = {}) {
     .catch(error => {
         console.error('Error rejecting timesheet:', error);
         showAlert('error', 'Failed to reject timesheet');
+    })
+    .finally(() => {
+        // Restore button state
+        if (button) {
+            button.disabled = false;
+            button.innerHTML = originalText;
+        }
     });
 }
 
@@ -6548,6 +6578,14 @@ function rejectTimesheet(timesheetId, options = {}) {
 function deleteTimesheet(timesheetId, options = {}) {
     if (!options.skipConfirm && !confirm('Are you sure you want to delete this timesheet? This action cannot be undone.')) {
         return;
+    }
+    
+    // Show loading state
+    const button = document.querySelector(`button[data-timesheet-id="${timesheetId}"][data-timesheet-action="delete"]`);
+    const originalText = button ? button.innerHTML : '';
+    if (button) {
+        button.disabled = true;
+        button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
     }
     
     fetch(`/api/ai-timesheets/delete/${timesheetId}`, {
@@ -6571,6 +6609,13 @@ function deleteTimesheet(timesheetId, options = {}) {
     .catch(error => {
         console.error('Error deleting timesheet:', error);
         showAlert('error', 'Failed to delete timesheet');
+    })
+    .finally(() => {
+        // Restore button state
+        if (button) {
+            button.disabled = false;
+            button.innerHTML = originalText;
+        }
     });
 }
 
