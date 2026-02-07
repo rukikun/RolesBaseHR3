@@ -1775,7 +1775,7 @@ Route::get('/api/ai-timesheets/view/{employeeId}', function($employeeId) {
 Route::post('/api/ai-timesheets/save', function(\Illuminate\Http\Request $request) {
     try {
         $controller = new \App\Http\Controllers\TimesheetController();
-        return $controller->saveTimesheet($request);
+        return $controller->saveAITimesheet($request);
     } catch (\Exception $e) {
         return response()->json([
             'success' => false,

@@ -1253,6 +1253,35 @@ class TimesheetController extends Controller
                     'message' => 'Timesheet not found'
                 ], 404);
             }
+
+            // Check if user is authenticated and authorized
+            $user = null;
+            if (auth()->guard('web')->check()) {
+                $user = auth()->guard('web')->user();
+            } elseif (auth()->guard('employee')->check()) {
+                $user = auth()->guard('employee')->user();
+            }
+
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Authentication required to approve timesheets'
+                ], 401);
+            }
+
+            // Check authorization (only HR positions can approve)
+            $authorizedPositions = [
+                'HR Manager', 'System Administrator', 'HR Scheduler', 'Admin', 
+                'HR Administrator', 'SuperAdmin', 'Administrator', 'Manager'
+            ];
+            
+            $userPosition = $user->position ?? $user->role ?? '';
+            if (!in_array($userPosition, $authorizedPositions)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You are not authorized to approve timesheets. Contact your HR Manager.'
+                ], 403);
+            }
             
             // Update status to approved
             $updated = DB::table('ai_generated_timesheets')
@@ -1300,6 +1329,35 @@ class TimesheetController extends Controller
                     'success' => false,
                     'message' => 'Timesheet not found'
                 ], 404);
+            }
+
+            // Check if user is authenticated and authorized
+            $user = null;
+            if (auth()->guard('web')->check()) {
+                $user = auth()->guard('web')->user();
+            } elseif (auth()->guard('employee')->check()) {
+                $user = auth()->guard('employee')->user();
+            }
+
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Authentication required to reject timesheets'
+                ], 401);
+            }
+
+            // Check authorization (only HR positions can reject)
+            $authorizedPositions = [
+                'HR Manager', 'System Administrator', 'HR Scheduler', 'Admin', 
+                'HR Administrator', 'SuperAdmin', 'Administrator', 'Manager'
+            ];
+            
+            $userPosition = $user->position ?? $user->role ?? '';
+            if (!in_array($userPosition, $authorizedPositions)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You are not authorized to reject timesheets. Contact your HR Manager.'
+                ], 403);
             }
             
             $reason = $request->input('reason', 'No reason provided');
@@ -1421,6 +1479,35 @@ class TimesheetController extends Controller
                     'success' => false,
                     'message' => 'Timesheet not found'
                 ], 404);
+            }
+
+            // Check if user is authenticated and authorized
+            $user = null;
+            if (auth()->guard('web')->check()) {
+                $user = auth()->guard('web')->user();
+            } elseif (auth()->guard('employee')->check()) {
+                $user = auth()->guard('employee')->user();
+            }
+
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Authentication required to delete timesheets'
+                ], 401);
+            }
+
+            // Check authorization (only HR positions can delete)
+            $authorizedPositions = [
+                'HR Manager', 'System Administrator', 'HR Scheduler', 'Admin', 
+                'HR Administrator', 'SuperAdmin', 'Administrator', 'Manager'
+            ];
+            
+            $userPosition = $user->position ?? $user->role ?? '';
+            if (!in_array($userPosition, $authorizedPositions)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'You are not authorized to delete timesheets. Contact your HR Manager.'
+                ], 403);
             }
             
             // Delete the timesheet

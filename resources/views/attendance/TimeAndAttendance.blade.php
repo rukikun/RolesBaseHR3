@@ -443,6 +443,8 @@ function clockIn() {
 // Perform regular clock-in (fallback)
 function performRegularClockIn() {
   const clockInBtn = document.getElementById('clock-in-btn');
+  const selectedWorkplace = getSelectedWorkplaceType();
+  
   clockInBtn.disabled = true;
   clockInBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Clocking In...';
 
@@ -454,8 +456,8 @@ function performRegularClockIn() {
     },
     body: JSON.stringify({
       employee_id: currentEmployeeId,
-      location: getSelectedWorkplaceType(),
-      workplace_type: getSelectedWorkplaceType() === 'Outside Workplace' ? 'offsite' : 'onsite'
+      location: selectedWorkplace,
+      workplace_type: selectedWorkplace === 'Outside Workplace' ? 'offsite' : 'onsite'
     })
   })
   .then(response => {
@@ -466,6 +468,8 @@ function performRegularClockIn() {
     console.log('Clock-in response data:', data);
     if (data.success) {
       showNotification('Successfully clocked in!', 'success');
+      
+      // Update UI with actual database data
       updateAttendanceUI({
         status: 'present',
         clock_in_time: data.data.clock_in_time,
@@ -475,8 +479,21 @@ function performRegularClockIn() {
         is_clocked_out: false,
         is_on_break: false
       });
+      
+      // Update attendance logs and stats
       updateAttendanceLogsAfterAction();
       loadAttendanceStats();
+      
+      // Preserve workplace selection
+      setTimeout(() => {
+        const workplaceRadios = document.querySelectorAll('input[name="workplace_type"]');
+        workplaceRadios.forEach(radio => {
+          if (radio.value === selectedWorkplace) {
+            radio.checked = true;
+          }
+        });
+      }, 100);
+      
     } else {
       showNotification(data.message || 'Failed to clock in', 'error');
     }
@@ -1803,6 +1820,8 @@ async function verifyBiometric() {
 // Perform biometric clock-in
 function performBiometricClockIn() {
   const clockInBtn = document.getElementById('clock-in-btn');
+  const selectedWorkplace = getSelectedWorkplaceType();
+  
   clockInBtn.disabled = true;
   clockInBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Clocking In...';
 
@@ -1814,8 +1833,8 @@ function performBiometricClockIn() {
     },
     body: JSON.stringify({
       employee_id: currentEmployeeId,
-      location: getSelectedWorkplaceType(),
-      workplace_type: getSelectedWorkplaceType() === 'Outside Workplace' ? 'offsite' : 'onsite'
+      location: selectedWorkplace,
+      workplace_type: selectedWorkplace === 'Outside Workplace' ? 'offsite' : 'onsite'
     })
   })
   .then(response => {
@@ -1826,6 +1845,8 @@ function performBiometricClockIn() {
     console.log('Biometric clock-in response data:', data);
     if (data.success) {
       showNotification(data.message || 'Successfully clocked in with biometric!', 'success');
+      
+      // Update UI with actual database data
       updateAttendanceUI({
         status: 'present',
         clock_in_time: data.data.clock_in_time,
@@ -1835,11 +1856,24 @@ function performBiometricClockIn() {
         is_clocked_out: false,
         is_on_break: false
       });
+      
+      // Update attendance logs and stats
       updateAttendanceLogsAfterAction();
       loadAttendanceStats();
       
       // Close modal
       biometricModal.hide();
+      
+      // Preserve workplace selection
+      setTimeout(() => {
+        const workplaceRadios = document.querySelectorAll('input[name="workplace_type"]');
+        workplaceRadios.forEach(radio => {
+          if (radio.value === selectedWorkplace) {
+            radio.checked = true;
+          }
+        });
+      }, 100);
+      
     } else {
       showNotification(data.message || 'Failed to clock in with biometric', 'error');
     }
@@ -1899,12 +1933,15 @@ function simulateBiometricSuccess() {
   setTimeout(() => {
     showNotification('Development Mode: Biometric authentication simulated successfully!', 'success');
     
+    // Get current workplace selection
+    const selectedWorkplace = getSelectedWorkplaceType();
+    
     // Update UI for clock-in only
     updateAttendanceUI({
       status: 'present',
       clock_in_time: new Date().toLocaleTimeString(),
-      workplace_type: 'onsite',
-      location: 'Office',
+      workplace_type: selectedWorkplace === 'Outside Workplace' ? 'offsite' : 'onsite',
+      location: selectedWorkplace,
       is_clocked_in: true,
       is_clocked_out: false,
       is_on_break: false
@@ -1917,6 +1954,16 @@ function simulateBiometricSuccess() {
     if (biometricModal) {
       biometricModal.hide();
     }
+    
+    // Preserve workplace selection
+    setTimeout(() => {
+      const workplaceRadios = document.querySelectorAll('input[name="workplace_type"]');
+      workplaceRadios.forEach(radio => {
+        if (radio.value === selectedWorkplace) {
+          radio.checked = true;
+        }
+      });
+    }, 100);
   }, 2000);
 }
 
